@@ -45,11 +45,7 @@ public class WebhookController {
         String mensagem = root.path("data").path("message").path("conversation").asText();
 
         // Mapeamento temporário do LID para telefone
-        Map<String, String> lidParaNumero = Map.of(
-                "139440878043302@lid", "5511922047123"
-        );
-
-        String numero = lidParaNumero.getOrDefault(remoteJid, "5511922047123");
+        String numero = remoteJid;
 
         System.out.println("remoteJid: " + remoteJid);
         System.out.println("sender: " + sender);

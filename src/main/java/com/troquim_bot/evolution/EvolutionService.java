@@ -11,9 +11,10 @@ public class EvolutionService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private final String evolutionUrl = "http://localhost:8081";
-    private final String instanceName = "troquim";
-    private final String apiKey = "87F36A639F1C-4C18-8B5B-E283BC8CAF92";
+    private final String evolutionUrl = "http://localhost:8082";
+    private final String instanceName = "troquim-dev";
+    private final String apiKey = "troquim237";
+  
 
     public void enviarMensagem(String numero, String texto) {
         String url = evolutionUrl + "/message/sendText/" + instanceName;
