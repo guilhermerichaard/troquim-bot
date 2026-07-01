@@ -10,10 +10,10 @@ public class QuickResponseService {
 
     public Optional<String> buscarResposta(IntentType intentType) {
         return switch (intentType) {
-            case SAUDACAO -> Optional.of("Olá! Como posso ajudar?");
-            case AGRADECIMENTO -> Optional.of("Disponha! 😊");
+            case SAUDACAO -> Optional.of("Boa tarde! Como posso ajudar?");
+            case AGRADECIMENTO -> Optional.of("Disponha!");
             case DESPEDIDA -> Optional.of("Até mais! Sempre que precisar estou por aqui.");
-            case HUMANO -> Optional.of("Perfeito. Vou encaminhar sua mensagem para Guilherme.");
+            case HUMANO -> Optional.of("Perfeito. Vou encaminhar sua mensagem para confirmação.");
             default -> Optional.empty();
         };
     }
