@@ -1,5 +1,6 @@
-package com.troquim_bot.ai;
+package com.troquim_bot.ai.llm;
 
+import com.troquim_bot.ai.config.AiConfiguration;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -11,13 +12,22 @@ import java.util.Map;
 public class OllamaService {
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final AiConfiguration aiConfiguration;
+
+    public OllamaService(AiConfiguration aiConfiguration) {
+        this.aiConfiguration = aiConfiguration;
+    }
 
     public String responder(String mensagem) {
         String url = "http://localhost:11434/api/chat";
 
         Map<String, Object> body = Map.of(
-                "model", "llama3.1:8b",
+                "model", aiConfiguration.getModel(),
                 "stream", false,
+                "options", Map.of(
+                        "temperature", aiConfiguration.getTemperature(),
+                        "num_predict", aiConfiguration.getMaxTokens()
+                ),
                 "messages", List.of(
                         Map.of(
                                 "role", "system",
