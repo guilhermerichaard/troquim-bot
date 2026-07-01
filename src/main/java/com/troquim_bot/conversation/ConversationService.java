@@ -10,15 +10,18 @@ import org.springframework.stereotype.Service;
 public class ConversationService {
 
     private final IntentService intentService;
+    private final QuickResponseService quickResponseService;
     private final ContextService contextService;
     private final OllamaService ollamaService;
     private final PromptService promptService;
 
     public ConversationService(IntentService intentService,
+                               QuickResponseService quickResponseService,
                                ContextService contextService,
                                OllamaService ollamaService,
                                PromptService promptService) {
         this.intentService = intentService;
+        this.quickResponseService = quickResponseService;
         this.contextService = contextService;
         this.ollamaService = ollamaService;
         this.promptService = promptService;
@@ -31,6 +34,12 @@ public class ConversationService {
         }
 
         IntentType intentType = intentService.classificar(mensagem);
+
+        return quickResponseService.buscarResposta(intentType)
+                .orElseGet(() -> gerarRespostaComOllama(numero, mensagem, intentType));
+    }
+
+    private String gerarRespostaComOllama(String numero, String mensagem, IntentType intentType) {
         String contexto = contextService.montarContexto(numero, mensagem, intentType);
         String prompt = promptService.montarPrompt(mensagem, contexto);
 
