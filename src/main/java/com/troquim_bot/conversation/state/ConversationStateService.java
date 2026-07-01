@@ -1,8 +1,11 @@
 package com.troquim_bot.conversation.state;
 
+import com.troquim_bot.ai.intent.IntentType;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,7 +17,7 @@ import java.util.regex.Pattern;
 public class ConversationStateService {
 
     private static final Pattern HORARIO_PATTERN = Pattern.compile(
-            "(?iu)(?:\\b(?:as|às)\\s*(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})(?:(?::(\\d{2}))|h(?:(\\d{2}))?)\\b)"
+            "(?iu)(?:\\b(?:as|às)\\s*(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})\\s*(?:h(?:oras?)?\\b)?)"
     );
 
     private final ConcurrentMap<String, ConversationState> states = new ConcurrentHashMap<>();
@@ -26,6 +29,17 @@ public class ConversationStateService {
     public ConversationState processarMensagem(String numero, String mensagem) {
         ConversationState state = buscarPorNumero(numero);
 
+        // Se estado está FINALIZADO, verifica se deve reiniciar
+        if (state.getStep() == ConversationStep.FINALIZADO) {
+            if (deveReiniciarConversa(mensagem)) {
+                limparEstado(numero);
+                state = buscarPorNumero(numero);
+            } else {
+                atualizarStep(state);
+                return state;
+            }
+        }
+
         if (mensagem == null || mensagem.isBlank()) {
             atualizarStep(state);
             return state;
@@ -34,13 +48,36 @@ public class ConversationStateService {
         ConversationStep stepAntes = state.getStep();
         String texto = normalizar(mensagem);
 
-        if (!mensagemNeutra(texto)) {
-            detectarServico(texto, state);
-            detectarDia(texto, state);
-            detectarHorario(mensagem, state);
+        // Se for mensagem de lembrete ("já falei", "esqueceu?", etc.), não processar novamente
+        if (isMensagemLembranca(texto)) {
+            atualizarStep(state);
+            return state;
+        }
 
-            if (stepAntes == ConversationStep.AGUARDANDO_NOME) {
-                detectarNome(mensagem, state);
+        // Se for pergunta sobre agendamentos, não processar como novo agendamento
+        if (isPerguntaSobreAgendamentos(texto)) {
+            atualizarStep(state);
+            return state;
+        }
+
+        if (!mensagemNeutra(texto)) {
+            // Se está em FINALIZADO e recebeu mensagem de novo agendamento, cria novo draft
+            if (state.getStep() == ConversationStep.FINALIZADO && deveCriarNovoAgendamento(texto)) {
+                state.criarNovoDraft();
+            }
+            
+            AppointmentDraft draftAtual = state.getDraftAtual();
+            if (draftAtual == null) {
+                draftAtual = state.criarNovoDraft();
+            }
+
+            detectarServico(texto, draftAtual);
+            detectarDia(texto, draftAtual);
+            detectarHorario(mensagem, draftAtual);
+
+            // Só detecta nome se não tiver nome ainda E se estiver no step correto
+            if (estaVazio(draftAtual.getNome()) && stepAntes == ConversationStep.AGUARDANDO_NOME) {
+                detectarNome(mensagem, draftAtual);
             }
         }
 
@@ -51,25 +88,41 @@ public class ConversationStateService {
 
     public void atualizarServico(String numero, String servico) {
         ConversationState state = buscarPorNumero(numero);
-        state.setServico(servico);
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft == null) {
+            draft = state.criarNovoDraft();
+        }
+        draft.setServico(servico);
         atualizarStep(state);
     }
 
     public void atualizarDia(String numero, String dia) {
         ConversationState state = buscarPorNumero(numero);
-        state.setDia(dia);
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft == null) {
+            draft = state.criarNovoDraft();
+        }
+        draft.setDia(dia);
         atualizarStep(state);
     }
 
     public void atualizarHorario(String numero, String horario) {
         ConversationState state = buscarPorNumero(numero);
-        state.setHorario(horario);
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft == null) {
+            draft = state.criarNovoDraft();
+        }
+        draft.setHorario(horario);
         atualizarStep(state);
     }
 
     public void atualizarNome(String numero, String nome) {
         ConversationState state = buscarPorNumero(numero);
-        state.setNome(nome);
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft == null) {
+            draft = state.criarNovoDraft();
+        }
+        draft.setNome(nome);
         atualizarStep(state);
     }
 
@@ -85,106 +138,158 @@ public class ConversationStateService {
             case AGUARDANDO_DIA -> Optional.of("Perfeito. Para qual dia você gostaria?");
             case AGUARDANDO_HORARIO -> Optional.of(montarPerguntaHorario(state));
             case AGUARDANDO_NOME -> Optional.of("Perfeito. Como você prefere que eu te chame?");
-            case AGUARDANDO_CONFIRMACAO -> Optional.of(montarConfirmacao(state));
+            case AGUARDANDO_CONFIRMACAO, FINALIZADO -> Optional.of(montarRespostaPosAgendamento(state, mensagem));
             default -> Optional.empty();
         };
     }
+    
+    public Optional<String> montarRespostaPorIntencao(ConversationState state, String mensagem, IntentType intentType) {
+        if (intentType == IntentType.CONSULTAR_AGENDAMENTO) {
+            AppointmentDraft draft = state.getDraftAtual();
+            if (draft != null && draft.isCompleto()) {
+                return Optional.of("Você solicitou um agendamento de " + draft.getServico()
+                        + " para " + draft.getDia()
+                        + " às " + draft.getHorario()
+                        + ". Ainda estou aguardando a confirmação do salão.");
+            }
+            return Optional.of("Você ainda não tem um agendamento ativo. Qual serviço você gostaria de agendar?");
+        }
+        
+        if (intentType == IntentType.NOVO_AGENDAMENTO) {
+            return Optional.of("Sem problemas! Vamos registrar outro agendamento.\n\nQual serviço você gostaria de agendar?");
+        }
+        
+        if (intentType == IntentType.CONSULTAR_NOME) {
+            AppointmentDraft draft = state.getDraftAtual();
+            if (draft != null && draft.getNome() != null) {
+                return Optional.of("Seu nome está salvo como " + draft.getNome() + ".");
+            }
+            return Optional.of("Você ainda não informou seu nome. Como prefere que eu te chame?");
+        }
+        
+        if (intentType == IntentType.CONSULTAR_SERVICOS) {
+            return Optional.of("Por enquanto consigo registrar solicitações de serviços de beleza, como unha, sobrancelha, cabelo e cílios. Qual deles você gostaria de agendar?");
+        }
+        
+        return Optional.empty();
+    }
 
     public String montarResumo(ConversationState state) {
+        AppointmentDraft draft = state.getDraftAtual();
+        
         return String.join(System.lineSeparator(),
-                "Estado atual do agendamento:",
-                "Step: " + state.getStep(),
-                "Conversa em andamento: " + (conversaEmAndamento(state) ? "sim" : "não"),
-                "Próxima informação necessária: " + proximaInformacao(state),
-                "Última pergunta feita: " + valorOuNaoInformado(state.getUltimaPergunta()),
-                "Informações já coletadas:",
-                "Serviço: " + valorOuNaoInformado(state.getServico()),
-                "Dia: " + valorOuNaoInformado(state.getDia()),
-                "Horário: " + valorOuNaoInformado(state.getHorario()),
-                "Nome: " + valorOuNaoInformado(state.getNome())
+                "Serviço: " + valorOuNaoInformado(draft != null ? draft.getServico() : null),
+                "Dia: " + valorOuNaoInformado(draft != null ? draft.getDia() : null),
+                "Horário: " + valorOuNaoInformado(draft != null ? draft.getHorario() : null),
+                "Nome: " + valorOuNaoInformado(draft != null ? draft.getNome() : null),
+                "Próxima etapa: " + proximaEtapa(state)
         );
     }
 
     public boolean conversaEmAndamento(ConversationState state) {
-        return !estaVazio(state.getServico())
-                || !estaVazio(state.getDia())
-                || !estaVazio(state.getHorario())
-                || !estaVazio(state.getNome());
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft == null) {
+            return false;
+        }
+        
+        return !estaVazio(draft.getServico())
+                || !estaVazio(draft.getDia())
+                || !estaVazio(draft.getHorario())
+                || !estaVazio(draft.getNome());
     }
 
     public void limparEstado(String numero) {
         states.remove(chave(numero));
     }
 
-    private void detectarServico(String texto, ConversationState state) {
+    public String listarAgendamentosPendentes(ConversationState state) {
+        List<AppointmentDraft> pendentes = state.getDraftsPendentes();
+        
+        if (pendentes.isEmpty()) {
+            return "Você não tem agendamentos pendentes no momento.";
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("Você tem ").append(pendentes.size()).append(" agendamento(s) pendente(s):\n\n");
+        
+        for (int i = 0; i < pendentes.size(); i++) {
+            AppointmentDraft draft = pendentes.get(i);
+            sb.append(i + 1).append(". ").append(draft.getResumo()).append("\n");
+        }
+        
+        sb.append("\nTodos estão aguardando confirmação de disponibilidade.");
+        return sb.toString();
+    }
+
+    private void detectarServico(String texto, AppointmentDraft draft) {
         if (contem(texto, "pe e mao", "pé e mão")) {
-            state.setServico("pé e mão");
+            draft.setServico("pé e mão");
             return;
         }
 
         if (contem(texto, "manicure")) {
-            state.setServico("manicure");
+            draft.setServico("manicure");
             return;
         }
 
         if (contem(texto, "pedicure")) {
-            state.setServico("pedicure");
+            draft.setServico("pedicure");
             return;
         }
 
         if (contem(texto, "unha", "mao", "mão")) {
-            state.setServico("unha");
+            draft.setServico("unha");
             return;
         }
 
         if (contemPalavra(texto, "pe")) {
-            state.setServico("pé");
+            draft.setServico("pé");
             return;
         }
 
         if (contem(texto, "cabelo", "corte", "escova", "progressiva")) {
-            state.setServico("cabelo");
+            draft.setServico("cabelo");
             return;
         }
 
         if (contem(texto, "sobrancelha")) {
-            state.setServico("sobrancelha");
+            draft.setServico("sobrancelha");
             return;
         }
 
         if (contem(texto, "cilios", "cílios")) {
-            state.setServico("cílios");
+            draft.setServico("cílios");
             return;
         }
 
         if (contem(texto, "maquiagem")) {
-            state.setServico("maquiagem");
+            draft.setServico("maquiagem");
         }
     }
 
-    private void detectarDia(String texto, ConversationState state) {
+    private void detectarDia(String texto, AppointmentDraft draft) {
         if (contem(texto, "segunda")) {
-            state.setDia("segunda");
+            draft.setDia("segunda");
         } else if (contem(texto, "terca", "terça")) {
-            state.setDia("terça");
+            draft.setDia("terça");
         } else if (contem(texto, "quarta")) {
-            state.setDia("quarta");
+            draft.setDia("quarta");
         } else if (contem(texto, "quinta")) {
-            state.setDia("quinta");
+            draft.setDia("quinta");
         } else if (contem(texto, "sexta")) {
-            state.setDia("sexta");
+            draft.setDia("sexta");
         } else if (contem(texto, "sabado", "sábado")) {
-            state.setDia("sábado");
+            draft.setDia("sábado");
         } else if (contem(texto, "domingo")) {
-            state.setDia("domingo");
+            draft.setDia("domingo");
         } else if (contem(texto, "hoje")) {
-            state.setDia("hoje");
+            draft.setDia("hoje");
         } else if (contem(texto, "amanha", "amanhã")) {
-            state.setDia("amanhã");
+            draft.setDia("amanhã");
         }
     }
 
-    private void detectarHorario(String mensagem, ConversationState state) {
+    private void detectarHorario(String mensagem, AppointmentDraft draft) {
         Matcher matcher = HORARIO_PATTERN.matcher(mensagem);
 
         if (matcher.find()) {
@@ -192,16 +297,16 @@ public class ConversationStateService {
             String minuto = primeiroValor(matcher.group(2), matcher.group(4), matcher.group(5));
 
             if (hora != null) {
-                state.setHorario(formatarHorario(hora, minuto));
+                draft.setHorario(formatarHorario(hora, minuto));
             }
         }
     }
 
-    private void detectarNome(String mensagem, ConversationState state) {
+    private void detectarNome(String mensagem, AppointmentDraft draft) {
         String nome = extrairNome(mensagem);
 
         if (nome != null) {
-            state.setNome(nome);
+            draft.setNome(nome);
         }
     }
 
@@ -235,13 +340,23 @@ public class ConversationStateService {
     }
 
     private void atualizarStep(ConversationState state) {
-        if (estaVazio(state.getServico())) {
+        AppointmentDraft draftAtual = state.getDraftAtual();
+        
+        // Se não tem draft, cria um
+        if (draftAtual == null) {
+            draftAtual = state.criarNovoDraft();
+        }
+        
+        // Se o draft atual está completo, vai para AGUARDANDO_CONFIRMACAO
+        if (draftAtual.isCompleto()) {
+            state.setStep(ConversationStep.AGUARDANDO_CONFIRMACAO);
+        } else if (estaVazio(draftAtual.getServico())) {
             state.setStep(ConversationStep.AGUARDANDO_SERVICO);
-        } else if (estaVazio(state.getDia())) {
+        } else if (estaVazio(draftAtual.getDia())) {
             state.setStep(ConversationStep.AGUARDANDO_DIA);
-        } else if (estaVazio(state.getHorario())) {
+        } else if (estaVazio(draftAtual.getHorario())) {
             state.setStep(ConversationStep.AGUARDANDO_HORARIO);
-        } else if (estaVazio(state.getNome())) {
+        } else if (estaVazio(draftAtual.getNome())) {
             state.setStep(ConversationStep.AGUARDANDO_NOME);
         } else {
             state.setStep(ConversationStep.AGUARDANDO_CONFIRMACAO);
@@ -256,7 +371,7 @@ public class ConversationStateService {
             case AGUARDANDO_DIA -> "Para qual dia você gostaria?";
             case AGUARDANDO_HORARIO -> montarPerguntaHorario(state);
             case AGUARDANDO_NOME -> "Como você prefere que eu te chame?";
-            case AGUARDANDO_CONFIRMACAO -> "Confirmar que a solicitação foi recebida e será validada.";
+            case AGUARDANDO_CONFIRMACAO, FINALIZADO -> "Confirmar que a solicitação foi recebida e será validada.";
             default -> "";
         };
     }
@@ -267,36 +382,115 @@ public class ConversationStateService {
             case AGUARDANDO_DIA -> "Me fala para qual dia você gostaria.";
             case AGUARDANDO_HORARIO -> "Me fala o horário que você prefere.";
             case AGUARDANDO_NOME -> "Me fala como você prefere que eu te chame.";
-            case AGUARDANDO_CONFIRMACAO -> montarConfirmacao(state);
+            case AGUARDANDO_CONFIRMACAO, FINALIZADO -> montarConfirmacao(state);
             default -> "Me fala como posso ajudar.";
         };
     }
 
     private String montarPerguntaHorario(ConversationState state) {
-        if (estaVazio(state.getDia())) {
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft == null || estaVazio(draft.getDia())) {
             return "Certo. Qual horário você prefere?";
         }
 
-        return "Certo. Qual horário você prefere na " + state.getDia() + "?";
+        return "Certo. Qual horário você prefere na " + draft.getDia() + "?";
     }
 
     private String montarConfirmacao(ConversationState state) {
-        return "Perfeito, " + state.getNome()
-                + ". Recebi sua solicitação para " + state.getServico()
-                + " na " + state.getDia()
-                + " às " + state.getHorario()
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft == null) {
+            return "Perfeito. Recebi sua solicitação e vou verificar a disponibilidade.";
+        }
+        
+        return "Perfeito, " + valorOuNaoInformado(draft.getNome())
+                + ". Recebi sua solicitação para " + valorOuNaoInformado(draft.getServico())
+                + " na " + valorOuNaoInformado(draft.getDia())
+                + " às " + valorOuNaoInformado(draft.getHorario())
                 + ". Vou verificar a disponibilidade e retorno com a confirmação.";
     }
 
-    private String proximaInformacao(ConversationState state) {
+    private String montarRespostaPosAgendamento(ConversationState state, String mensagem) {
+        String texto = normalizar(mensagem);
+        AppointmentDraft draft = state.getDraftAtual();
+
+        // Se perguntou sobre o dia/horário do agendamento
+        if (contem(texto, "qual dia", "que dia", "quando agendei", "qual data", "que data", 
+                   "que horario", "qual horario", "que horas")) {
+            if (draft != null) {
+                return "Você agendou " + valorOuNaoInformado(draft.getServico())
+                        + " na " + valorOuNaoInformado(draft.getDia())
+                        + " às " + valorOuNaoInformado(draft.getHorario())
+                        + ". Vou verificar a disponibilidade e retorno com a confirmação.";
+            }
+            return "Você ainda não tem um agendamento ativo. Qual serviço você gostaria de agendar?";
+        }
+
+        // Se perguntou sobre serviços disponíveis
+        if (contem(texto, "servicos", "servico", "procedimentos", "o que voces fazem", "o que fazem")) {
+            return "Por enquanto consigo registrar solicitações de serviços de beleza, como unha, sobrancelha, cabelo e cílios. Qual deles você gostaria de agendar?";
+        }
+
+        // Se perguntou sobre disponibilidade/agenda (sem ser sobre o próprio agendamento)
+        if (contem(texto, "disponivel", "disponibilidade", "tem vaga", "tem horario", "quais dias")) {
+            return "Ainda não consigo consultar a agenda automaticamente. Posso registrar o dia e horário que você prefere e confirmar com o salão.";
+        }
+
+        // Se quer novo agendamento
+        if (contem(texto, "outro", "novo", "remarcar", "mudar")) {
+            return "Claro! Qual serviço você gostaria de agendar agora?";
+        }
+
+        // Se agradeceu (verifica se é uma mensagem curta, apenas agradecimento)
+        if (contem(texto, "obrigado", "obrigada", "valeu", "agradeco")) {
+            // Verifica se a mensagem é curta (até 20 caracteres) ou se não tem outras perguntas
+            if (mensagem.length() <= 20 || !temOutraPergunta(texto)) {
+                return "Disponha!";
+            }
+        }
+
+        // Se perguntou se agendou/confirmou
+        if (contem(texto, "agendou", "confirmou", "foi agendado", "confirmado", "enviou", "marcou")) {
+            if (draft != null) {
+                return "Ainda não foi confirmado. Recebi sua solicitação para " + valorOuNaoInformado(draft.getServico())
+                        + " na " + valorOuNaoInformado(draft.getDia())
+                        + " às " + valorOuNaoInformado(draft.getHorario())
+                        + " e vou verificar a disponibilidade.";
+            }
+            return "Você ainda não tem um agendamento ativo. Qual serviço você gostaria de agendar?";
+        }
+
+        // Se perguntou o próprio nome
+        if (contem(texto, "meu nome", "qual meu nome", "meu nome e", "voce sabe meu nome")) {
+            if (draft != null && draft.getNome() != null) {
+                return "Seu nome está salvo como " + draft.getNome() + ".";
+            }
+            return "Você ainda não informou seu nome. Como prefere que eu te chame?";
+        }
+
+        // Default: resposta genérica pós-agendamento
+        if (draft != null) {
+            return "Perfeito, " + valorOuNaoInformado(draft.getNome())
+                    + ". Recebi sua solicitação para " + valorOuNaoInformado(draft.getServico())
+                    + " na " + valorOuNaoInformado(draft.getDia())
+                    + " às " + valorOuNaoInformado(draft.getHorario())
+                    + ". Vou verificar a disponibilidade e retorno com a confirmação.";
+        }
+        
+        return "Perfeito. Recebi sua solicitação e vou verificar a disponibilidade.";
+    }
+
+    private boolean temOutraPergunta(String texto) {
+        return contem(texto, "?", "como", "qual", "quando", "onde", "quem", "quanto", "por que");
+    }
+
+    private String proximaEtapa(ConversationState state) {
         return switch (state.getStep()) {
+            case INICIO -> "iniciar atendimento";
             case AGUARDANDO_SERVICO -> "serviço desejado";
             case AGUARDANDO_DIA -> "dia desejado";
             case AGUARDANDO_HORARIO -> "horário desejado";
             case AGUARDANDO_NOME -> "nome da cliente";
-            case AGUARDANDO_CONFIRMACAO -> "confirmar solicitação";
-            case FINALIZADO -> "nenhuma";
-            default -> "iniciar atendimento";
+            case AGUARDANDO_CONFIRMACAO, FINALIZADO -> "confirmar solicitação";
         };
     }
 
@@ -305,6 +499,54 @@ public class ConversationStateService {
             case "sim", "isso", "pode ser", "ok", "ta", "ta bom", "tá", "tá bom", "certo", "beleza", "perfeito" -> true;
             default -> false;
         };
+    }
+
+    private boolean deveReiniciarConversa(String mensagem) {
+        String texto = normalizar(mensagem);
+        
+        // Verifica se é uma saudacao
+        boolean ehSaudacao = contem(texto, "oi", "ola", "olá", "bom dia", "boa tarde", "boa noite", "hey");
+        
+        // Verifica se é uma intencao de novo agendamento
+        boolean ehNovoAgendamento = contem(texto, "quero agendar", "quero marcar", "gostaria de agendar", 
+                                           "gostaria de marcar", "novo agendamento", "nova marcação",
+                                           "outro horario", "outra marcação", "remarcar", "mudar");
+        
+        return ehSaudacao || ehNovoAgendamento;
+    }
+
+    private boolean isMensagemLembranca(String texto) {
+        return contem(texto, "esqueceu", "já falei", "ja falei", "acabei de falar", "acabei de dizer", 
+                      "eu já disse", "eu ja disse", "repete", "repita", "lembra", "lembre");
+    }
+
+    public boolean isPerguntaSobreAgendamentos(String texto) {
+        return contem(texto, "o que agendei", "quais agendamentos", "meus agendamentos", 
+                      "agendamentos pendentes", "lista de agendamentos");
+    }
+
+    private boolean deveCriarNovoAgendamento(String texto) {
+        return contem(texto, "quero agendar", "quero marcar", "gostaria de agendar", 
+                      "gostaria de marcar", "novo agendamento", "nova marcação",
+                      "outro horario", "outra marcação", "remarcar", "mudar");
+    }
+
+    public boolean isApenasAgradecimentoCurto(String mensagem) {
+        String texto = normalizar(mensagem);
+        
+        // Verifica se contém palavras de pergunta ou outras intenções
+        if (contem(texto, "qual", "quais", "que", "quando", "onde", "como", "servico", "servicos", 
+                   "dia", "horario", "nome", "agendou", "confirmou", "disponivel")) {
+            return false;
+        }
+        
+        // Verifica se é uma mensagem curta (até 20 caracteres)
+        if (mensagem.length() > 20) {
+            return false;
+        }
+        
+        // Verifica se é apenas agradecimento
+        return contem(texto, "obrigado", "obrigada", "valeu", "vlw", "agradeco");
     }
 
     private boolean nomeBloqueado(String nomeNormalizado) {

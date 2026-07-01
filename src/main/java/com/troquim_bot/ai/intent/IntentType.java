@@ -2,10 +2,14 @@ package com.troquim_bot.ai.intent;
 
 public enum IntentType {
     SAUDACAO,
-    ORCAMENTO,
-    AGENDAMENTO,
     AGRADECIMENTO,
     DESPEDIDA,
     HUMANO,
+    ORCAMENTO,
+    AGENDAMENTO,
+    CONSULTAR_AGENDAMENTO,
+    NOVO_AGENDAMENTO,
+    CONSULTAR_NOME,
+    CONSULTAR_SERVICOS,
     DESCONHECIDO
 }

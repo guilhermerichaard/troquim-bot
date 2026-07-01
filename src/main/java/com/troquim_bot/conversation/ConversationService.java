@@ -51,7 +51,7 @@ public class ConversationService {
 
         Optional<String> respostaRapida = quickResponseService.buscarResposta(intentType);
 
-        if (respostaRapida.isPresent() && deveUsarRespostaRapida(intentType, conversationState)) {
+        if (respostaRapida.isPresent() && deveUsarRespostaRapida(intentType, conversationState, mensagem)) {
             return responderComMemoria(numero, mensagem, respostaRapida.get());
         }
 
@@ -61,12 +61,30 @@ public class ConversationService {
             return responderComMemoria(numero, mensagem, respostaEstado.get());
         }
 
+        // Verifica se há resposta específica para a intenção detectada
+        Optional<String> respostaPorIntencao = conversationStateService.montarRespostaPorIntencao(conversationState, mensagem, intentType);
+
+        if (respostaPorIntencao.isPresent()) {
+            return responderComMemoria(numero, mensagem, respostaPorIntencao.get());
+        }
+
+        // Se perguntou sobre agendamentos, retorna a lista
+        if (conversationStateService.isPerguntaSobreAgendamentos(mensagem)) {
+            String lista = conversationStateService.listarAgendamentosPendentes(conversationState);
+            return responderComMemoria(numero, mensagem, lista);
+        }
+
         return gerarRespostaComOllama(numero, mensagem, intentType, conversationState);
     }
 
-    private boolean deveUsarRespostaRapida(IntentType intentType, ConversationState conversationState) {
+    private boolean deveUsarRespostaRapida(IntentType intentType, ConversationState conversationState, String mensagem) {
         if (intentType == IntentType.SAUDACAO) {
             return !conversationStateService.conversaEmAndamento(conversationState);
+        }
+
+        // Se for AGRADECIMENTO, só usar resposta rápida se for APENAS agradecimento curto
+        if (intentType == IntentType.AGRADECIMENTO) {
+            return conversationStateService.isApenasAgradecimentoCurto(mensagem);
         }
 
         return true;

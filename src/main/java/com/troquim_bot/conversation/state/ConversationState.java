@@ -1,18 +1,19 @@
 package com.troquim_bot.conversation.state;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ConversationState {
 
     private final String numero;
     private ConversationStep step;
-    private String servico;
-    private String dia;
-    private String horario;
-    private String nome;
+    private List<AppointmentDraft> drafts;
     private String ultimaPergunta;
 
     public ConversationState(String numero) {
         this.numero = numero;
         this.step = ConversationStep.INICIO;
+        this.drafts = new ArrayList<>();
     }
 
     public String getNumero() {
@@ -27,36 +28,35 @@ public class ConversationState {
         this.step = step;
     }
 
-    public String getServico() {
-        return servico;
+    public List<AppointmentDraft> getDrafts() {
+        return drafts;
     }
 
-    public void setServico(String servico) {
-        this.servico = servico;
+    public void setDrafts(List<AppointmentDraft> drafts) {
+        this.drafts = drafts;
     }
 
-    public String getDia() {
-        return dia;
+    public AppointmentDraft getDraftAtual() {
+        if (drafts.isEmpty()) {
+            return null;
+        }
+        return drafts.get(drafts.size() - 1);
     }
 
-    public void setDia(String dia) {
-        this.dia = dia;
+    public AppointmentDraft criarNovoDraft() {
+        AppointmentDraft novoDraft = new AppointmentDraft();
+        drafts.add(novoDraft);
+        return novoDraft;
     }
 
-    public String getHorario() {
-        return horario;
-    }
-
-    public void setHorario(String horario) {
-        this.horario = horario;
-    }
-
-    public String getNome() {
-        return nome;
-    }
-
-    public void setNome(String nome) {
-        this.nome = nome;
+    public List<AppointmentDraft> getDraftsPendentes() {
+        List<AppointmentDraft> pendentes = new ArrayList<>();
+        for (AppointmentDraft draft : drafts) {
+            if (draft.isCompleto() && !draft.isConfirmado()) {
+                pendentes.add(draft);
+            }
+        }
+        return pendentes;
     }
 
     public String getUltimaPergunta() {
