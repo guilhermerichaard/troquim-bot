@@ -15,7 +15,7 @@ public class IntentService {
 
         String texto = normalizar(mensagem);
 
-        if (contem(texto, "atendente", "humano", "pessoa", "guilherme", "falar com alguem")) {
+        if (contem(texto, "atendente", "humano", "pessoa", "falar com alguem", "falar com guilherme")) {
             return IntentType.HUMANO;
         }
 

@@ -9,6 +9,7 @@ public class ConversationState {
     private ConversationStep step;
     private List<AppointmentDraft> drafts;
     private String ultimaPergunta;
+    private String nome;
 
     public ConversationState(String numero) {
         this.numero = numero;
@@ -65,5 +66,13 @@ public class ConversationState {
 
     public void setUltimaPergunta(String ultimaPergunta) {
         this.ultimaPergunta = ultimaPergunta;
+    }
+
+    public String getNome() {
+        return nome;
+    }
+
+    public void setNome(String nome) {
+        this.nome = nome;
     }
 }

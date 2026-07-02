@@ -8,6 +8,8 @@ import com.troquim_bot.ai.memory.ConversationMessage;
 import com.troquim_bot.ai.prompt.PromptService;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
+import com.troquim_bot.customer.CustomerProfile;
+import com.troquim_bot.customer.CustomerProfileService;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -23,6 +25,7 @@ public class ConversationService {
     private final ConversationMemory conversationMemory;
     private final OllamaService ollamaService;
     private final PromptService promptService;
+    private final CustomerProfileService customerProfileService;
 
     public ConversationService(IntentService intentService,
                                QuickResponseService quickResponseService,
@@ -30,7 +33,8 @@ public class ConversationService {
                                ConversationStateService conversationStateService,
                                ConversationMemory conversationMemory,
                                OllamaService ollamaService,
-                               PromptService promptService) {
+                               PromptService promptService,
+                               CustomerProfileService customerProfileService) {
         this.intentService = intentService;
         this.quickResponseService = quickResponseService;
         this.contextService = contextService;
@@ -38,6 +42,7 @@ public class ConversationService {
         this.conversationMemory = conversationMemory;
         this.ollamaService = ollamaService;
         this.promptService = promptService;
+        this.customerProfileService = customerProfileService;
     }
 
     public String gerarResposta(String numero, String mensagem) {
@@ -47,12 +52,31 @@ public class ConversationService {
         }
 
         IntentType intentType = intentService.classificar(mensagem);
-        ConversationState conversationState = conversationStateService.processarMensagem(numero, mensagem);
+        boolean novoAtendimento = deveIniciarNovoAtendimento(numero, intentType);
+        if (novoAtendimento && conversationStateService.possuiEstado(numero)) {
+            conversationStateService.limparEstado(numero);
+        }
+
+        CustomerProfile customerProfile = novoAtendimento
+                ? customerProfileService.iniciarAtendimento(numero)
+                : customerProfileService.buscarOuCriar(numero);
+
+        String nomePreferido = customerProfileService.nomePreferido(customerProfile).orElse(null);
+        Optional<String> nomeInformado = conversationStateService.extrairNomeInformado(mensagem);
+        ConversationState conversationState = conversationStateService.processarMensagem(numero, mensagem, nomePreferido);
+        customerProfile = sincronizarNome(numero, nomeInformado, conversationState, customerProfile);
 
         Optional<String> respostaRapida = quickResponseService.buscarResposta(intentType);
 
         if (respostaRapida.isPresent() && deveUsarRespostaRapida(intentType, conversationState, mensagem)) {
-            return responderComMemoria(numero, mensagem, respostaRapida.get());
+            String resposta = intentType == IntentType.SAUDACAO
+                    ? montarSaudacao(customerProfile)
+                    : respostaRapida.get();
+            return responderComMemoria(numero, mensagem, resposta);
+        }
+
+        if (intentType == IntentType.CONSULTAR_NOME && nomeInformado.isEmpty()) {
+            return responderComMemoria(numero, mensagem, montarRespostaNome(customerProfile));
         }
 
         Optional<String> respostaEstado = conversationStateService.montarRespostaAutomatica(conversationState, mensagem);
@@ -74,7 +98,49 @@ public class ConversationService {
             return responderComMemoria(numero, mensagem, lista);
         }
 
-        return gerarRespostaComOllama(numero, mensagem, intentType, conversationState);
+        return gerarRespostaComOllama(numero, mensagem, intentType, conversationState, customerProfile);
+    }
+
+    private boolean deveIniciarNovoAtendimento(String numero, IntentType intentType) {
+        if (!conversationStateService.possuiEstado(numero)) {
+            return true;
+        }
+
+        ConversationState conversationState = conversationStateService.buscarPorNumero(numero);
+        return intentType == IntentType.SAUDACAO
+                && !conversationStateService.conversaEmAndamento(conversationState);
+    }
+
+    private CustomerProfile sincronizarNome(String numero,
+                                            Optional<String> nomeInformado,
+                                            ConversationState conversationState,
+                                            CustomerProfile customerProfile) {
+        if (nomeInformado.isPresent()) {
+            conversationStateService.atualizarNome(numero, nomeInformado.get());
+            return customerProfileService.salvarNome(numero, nomeInformado.get());
+        }
+
+        String nomeAtendimento = conversationState.getNome();
+        if (nomeAtendimento != null && !nomeAtendimento.isBlank()) {
+            String nomePerfil = customerProfile.getNome();
+            if (nomePerfil == null || !nomePerfil.equals(nomeAtendimento)) {
+                return customerProfileService.salvarNome(numero, nomeAtendimento);
+            }
+        }
+
+        return customerProfile;
+    }
+
+    private String montarSaudacao(CustomerProfile customerProfile) {
+        return customerProfileService.nomePreferido(customerProfile)
+                .map(nome -> "Boa tarde, " + nome + "! Como posso ajudar?")
+                .orElse("Boa tarde! Como posso ajudar?");
+    }
+
+    private String montarRespostaNome(CustomerProfile customerProfile) {
+        return customerProfileService.nomePreferido(customerProfile)
+                .map(nome -> "Seu nome está salvo como " + nome + ".")
+                .orElse("Você ainda não informou seu nome. Como prefere que eu te chame?");
     }
 
     private boolean deveUsarRespostaRapida(IntentType intentType, ConversationState conversationState, String mensagem) {
@@ -90,9 +156,13 @@ public class ConversationService {
         return true;
     }
 
-    private String gerarRespostaComOllama(String numero, String mensagem, IntentType intentType, ConversationState conversationState) {
+    private String gerarRespostaComOllama(String numero,
+                                          String mensagem,
+                                          IntentType intentType,
+                                          ConversationState conversationState,
+                                          CustomerProfile customerProfile) {
         String resumoEstado = conversationStateService.montarResumo(conversationState);
-        String contexto = contextService.montarContexto(numero, mensagem, intentType, resumoEstado);
+        String contexto = contextService.montarContexto(numero, mensagem, intentType, resumoEstado, customerProfile);
         List<ConversationMessage> historico = conversationMemory.getConversation(numero);
 
         conversationMemory.addUserMessage(numero, mensagem);

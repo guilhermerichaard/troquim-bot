@@ -23,17 +23,31 @@ public class ConversationStateService {
     private final ConcurrentMap<String, ConversationState> states = new ConcurrentHashMap<>();
 
     public ConversationState buscarPorNumero(String numero) {
-        return states.computeIfAbsent(chave(numero), ConversationState::new);
+        return buscarPorNumero(numero, null);
+    }
+
+    public ConversationState buscarPorNumero(String numero, String nomeInicial) {
+        ConversationState state = states.computeIfAbsent(chave(numero), ConversationState::new);
+        aplicarNome(state, nomeInicial);
+        return state;
+    }
+
+    public boolean possuiEstado(String numero) {
+        return states.containsKey(chave(numero));
     }
 
     public ConversationState processarMensagem(String numero, String mensagem) {
-        ConversationState state = buscarPorNumero(numero);
+        return processarMensagem(numero, mensagem, null);
+    }
+
+    public ConversationState processarMensagem(String numero, String mensagem, String nomeInicial) {
+        ConversationState state = buscarPorNumero(numero, nomeInicial);
 
         // Se estado está FINALIZADO, verifica se deve reiniciar
         if (state.getStep() == ConversationStep.FINALIZADO) {
             if (deveReiniciarConversa(mensagem)) {
                 limparEstado(numero);
-                state = buscarPorNumero(numero);
+                state = buscarPorNumero(numero, nomeInicial);
             } else {
                 atualizarStep(state);
                 return state;
@@ -47,6 +61,11 @@ public class ConversationStateService {
 
         ConversationStep stepAntes = state.getStep();
         String texto = normalizar(mensagem);
+
+        Optional<String> nomeInformado = extrairNomeInformado(mensagem);
+        if (nomeInformado.isPresent()) {
+            aplicarNome(state, nomeInformado.get());
+        }
 
         // Se for mensagem de lembrete ("já falei", "esqueceu?", etc.), não processar novamente
         if (isMensagemLembranca(texto)) {
@@ -75,9 +94,12 @@ public class ConversationStateService {
             detectarDia(texto, draftAtual);
             detectarHorario(mensagem, draftAtual);
 
-            // Só detecta nome se não tiver nome ainda E se estiver no step correto
-            if (estaVazio(draftAtual.getNome()) && stepAntes == ConversationStep.AGUARDANDO_NOME) {
-                detectarNome(mensagem, draftAtual);
+            // Só detecta resposta curta como nome se estiver no step correto
+            if (estaVazio(state.getNome()) && stepAntes == ConversationStep.AGUARDANDO_NOME) {
+                Optional<String> nomeResposta = extrairNomeResposta(mensagem);
+                if (nomeResposta.isPresent()) {
+                    aplicarNome(state, draftAtual, nomeResposta.get());
+                }
             }
         }
 
@@ -122,7 +144,7 @@ public class ConversationStateService {
         if (draft == null) {
             draft = state.criarNovoDraft();
         }
-        draft.setNome(nome);
+        aplicarNome(state, draft, nome);
         atualizarStep(state);
     }
 
@@ -160,9 +182,8 @@ public class ConversationStateService {
         }
         
         if (intentType == IntentType.CONSULTAR_NOME) {
-            AppointmentDraft draft = state.getDraftAtual();
-            if (draft != null && draft.getNome() != null) {
-                return Optional.of("Seu nome está salvo como " + draft.getNome() + ".");
+            if (!estaVazio(state.getNome())) {
+                return Optional.of("Seu nome está salvo como " + state.getNome() + ".");
             }
             return Optional.of("Você ainda não informou seu nome. Como prefere que eu te chame?");
         }
@@ -181,7 +202,7 @@ public class ConversationStateService {
                 "Serviço: " + valorOuNaoInformado(draft != null ? draft.getServico() : null),
                 "Dia: " + valorOuNaoInformado(draft != null ? draft.getDia() : null),
                 "Horário: " + valorOuNaoInformado(draft != null ? draft.getHorario() : null),
-                "Nome: " + valorOuNaoInformado(draft != null ? draft.getNome() : null),
+                "Nome: " + valorOuNaoInformado(state.getNome()),
                 "Próxima etapa: " + proximaEtapa(state)
         );
     }
@@ -194,8 +215,7 @@ public class ConversationStateService {
         
         return !estaVazio(draft.getServico())
                 || !estaVazio(draft.getDia())
-                || !estaVazio(draft.getHorario())
-                || !estaVazio(draft.getNome());
+                || !estaVazio(draft.getHorario());
     }
 
     public void limparEstado(String numero) {
@@ -293,8 +313,8 @@ public class ConversationStateService {
         Matcher matcher = HORARIO_PATTERN.matcher(mensagem);
 
         if (matcher.find()) {
-            String hora = primeiroValor(matcher.group(1), matcher.group(3));
-            String minuto = primeiroValor(matcher.group(2), matcher.group(4), matcher.group(5));
+            String hora = primeiroValor(matcher.group(1), matcher.group(3), matcher.group(5));
+            String minuto = primeiroValor(matcher.group(2), matcher.group(4));
 
             if (hora != null) {
                 draft.setHorario(formatarHorario(hora, minuto));
@@ -302,41 +322,110 @@ public class ConversationStateService {
         }
     }
 
-    private void detectarNome(String mensagem, AppointmentDraft draft) {
-        String nome = extrairNome(mensagem);
-
-        if (nome != null) {
-            draft.setNome(nome);
-        }
+    public Optional<String> extrairNomeInformado(String mensagem) {
+        return extrairNome(mensagem, false);
     }
 
-    private String extrairNome(String mensagem) {
+    private Optional<String> extrairNomeResposta(String mensagem) {
+        return extrairNome(mensagem, true);
+    }
+
+    private Optional<String> extrairNome(String mensagem, boolean aceitarRespostaCurta) {
+        if (mensagem == null || mensagem.isBlank()) {
+            return Optional.empty();
+        }
+
         String texto = mensagem.trim();
         String normalizado = normalizar(texto);
 
-        if (normalizado.startsWith("meu nome e ")) {
-            texto = texto.substring(11).trim();
-        } else if (normalizado.startsWith("me chamo ")) {
-            texto = texto.substring(9).trim();
+        if (contem(normalizado, "qual meu nome", "voce sabe meu nome", "sabe meu nome")) {
+            return Optional.empty();
+        }
+
+        String nome = null;
+
+        if (normalizado.contains("meu nome e ")) {
+            nome = texto.substring(normalizado.indexOf("meu nome e ") + 11).trim();
+        } else if (normalizado.contains("me chamo ")) {
+            nome = texto.substring(normalizado.indexOf("me chamo ") + 9).trim();
+        } else if (normalizado.contains("pode me chamar de ")) {
+            nome = texto.substring(normalizado.indexOf("pode me chamar de ") + 18).trim();
+        } else if (normalizado.contains("me chama de ")) {
+            nome = texto.substring(normalizado.indexOf("me chama de ") + 12).trim();
         } else if (normalizado.startsWith("sou ")) {
-            texto = texto.substring(4).trim();
-        } else if (normalizado.startsWith("e ")) {
-            texto = texto.substring(2).trim();
+            nome = texto.substring(4).trim();
+        } else if (aceitarRespostaCurta && normalizado.startsWith("e ")) {
+            nome = texto.substring(2).trim();
+        } else if (aceitarRespostaCurta) {
+            nome = texto;
         }
 
-        if (texto.length() < 2 || texto.length() > 60) {
-            return null;
+        return validarNome(nome);
+    }
+
+    private Optional<String> validarNome(String nome) {
+        if (nome == null) {
+            return Optional.empty();
         }
 
-        if (texto.matches(".*\\d.*")) {
-            return null;
+        String nomeLimpo = limparNome(nome);
+
+        if (nomeLimpo.length() < 2 || nomeLimpo.length() > 60) {
+            return Optional.empty();
         }
 
-        if (nomeBloqueado(normalizar(texto))) {
-            return null;
+        if (nomeLimpo.matches(".*\\d.*")) {
+            return Optional.empty();
         }
 
-        return texto;
+        if (nomeBloqueado(normalizar(nomeLimpo))) {
+            return Optional.empty();
+        }
+
+        return Optional.of(nomeLimpo);
+    }
+
+    private String limparNome(String nome) {
+        String nomeLimpo = nome.trim()
+                .replaceAll("^[,:;.!?\\s]+", "")
+                .replaceAll("[,:;.!?\\s]+$", "");
+
+        String normalizado = normalizar(nomeLimpo);
+        for (String separador : List.of(" e quero ", " quero ", " gostaria ", " para ", " pra ")) {
+            int indice = normalizado.indexOf(separador);
+            if (indice > 0) {
+                nomeLimpo = nomeLimpo.substring(0, indice).trim();
+                break;
+            }
+        }
+
+        return nomeLimpo.replaceAll("[,:;.!?\\s]+$", "").trim();
+    }
+
+    private void aplicarNome(ConversationState state, String nome) {
+        if (state == null || estaVazio(nome)) {
+            return;
+        }
+
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft == null) {
+            draft = state.criarNovoDraft();
+        }
+
+        aplicarNome(state, draft, nome);
+    }
+
+    private void aplicarNome(ConversationState state, AppointmentDraft draft, String nome) {
+        if (state == null || estaVazio(nome)) {
+            return;
+        }
+
+        String nomeLimpo = nome.trim();
+        state.setNome(nomeLimpo);
+
+        if (draft != null) {
+            draft.setNome(nomeLimpo);
+        }
     }
 
     private void atualizarStep(ConversationState state) {
@@ -346,6 +435,8 @@ public class ConversationStateService {
         if (draftAtual == null) {
             draftAtual = state.criarNovoDraft();
         }
+
+        aplicarNome(state, draftAtual, state.getNome());
         
         // Se o draft atual está completo, vai para AGUARDANDO_CONFIRMACAO
         if (draftAtual.isCompleto()) {
@@ -402,7 +493,7 @@ public class ConversationStateService {
             return "Perfeito. Recebi sua solicitação e vou verificar a disponibilidade.";
         }
         
-        return "Perfeito, " + valorOuNaoInformado(draft.getNome())
+        return "Perfeito, " + valorOuNaoInformado(state.getNome())
                 + ". Recebi sua solicitação para " + valorOuNaoInformado(draft.getServico())
                 + " na " + valorOuNaoInformado(draft.getDia())
                 + " às " + valorOuNaoInformado(draft.getHorario())
@@ -461,15 +552,15 @@ public class ConversationStateService {
 
         // Se perguntou o próprio nome
         if (contem(texto, "meu nome", "qual meu nome", "meu nome e", "voce sabe meu nome")) {
-            if (draft != null && draft.getNome() != null) {
-                return "Seu nome está salvo como " + draft.getNome() + ".";
+            if (!estaVazio(state.getNome())) {
+                return "Seu nome está salvo como " + state.getNome() + ".";
             }
             return "Você ainda não informou seu nome. Como prefere que eu te chame?";
         }
 
         // Default: resposta genérica pós-agendamento
         if (draft != null) {
-            return "Perfeito, " + valorOuNaoInformado(draft.getNome())
+            return "Perfeito, " + valorOuNaoInformado(state.getNome())
                     + ". Recebi sua solicitação para " + valorOuNaoInformado(draft.getServico())
                     + " na " + valorOuNaoInformado(draft.getDia())
                     + " às " + valorOuNaoInformado(draft.getHorario())
