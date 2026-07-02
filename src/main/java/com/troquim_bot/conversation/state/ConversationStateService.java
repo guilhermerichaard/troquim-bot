@@ -43,17 +43,6 @@ public class ConversationStateService {
     public ConversationState processarMensagem(String numero, String mensagem, String nomeInicial) {
         ConversationState state = buscarPorNumero(numero, nomeInicial);
 
-        // Se estado está FINALIZADO, verifica se deve reiniciar
-        if (state.getStep() == ConversationStep.FINALIZADO) {
-            if (deveReiniciarConversa(mensagem)) {
-                limparEstado(numero);
-                state = buscarPorNumero(numero, nomeInicial);
-            } else {
-                atualizarStep(state);
-                return state;
-            }
-        }
-
         if (mensagem == null || mensagem.isBlank()) {
             atualizarStep(state);
             return state;
@@ -61,6 +50,11 @@ public class ConversationStateService {
 
         ConversationStep stepAntes = state.getStep();
         String texto = normalizar(mensagem);
+
+        if (state.getStep() == ConversationStep.FINALIZADO && !deveCriarNovoAgendamento(texto)) {
+            atualizarStep(state);
+            return state;
+        }
 
         Optional<String> nomeInformado = extrairNomeInformado(mensagem);
         if (nomeInformado.isPresent()) {
@@ -80,8 +74,10 @@ public class ConversationStateService {
         }
 
         if (!mensagemNeutra(texto)) {
-            // Se está em FINALIZADO e recebeu mensagem de novo agendamento, cria novo draft
-            if (state.getStep() == ConversationStep.FINALIZADO && deveCriarNovoAgendamento(texto)) {
+            // Se um fluxo completo receber novo agendamento, preserva o anterior e cria outro draft.
+            if ((state.getStep() == ConversationStep.FINALIZADO
+                    || state.getStep() == ConversationStep.AGUARDANDO_CONFIRMACAO)
+                    && deveCriarNovoAgendamento(texto)) {
                 state.criarNovoDraft();
             }
             
@@ -148,6 +144,38 @@ public class ConversationStateService {
         atualizarStep(state);
     }
 
+    public boolean deveContinuarFluxo(ConversationState state, String mensagem, IntentType intentType) {
+        if (mensagem == null || mensagem.isBlank()) {
+            return false;
+        }
+
+        IntentType intent = intentType == null ? IntentType.DESCONHECIDO : intentType;
+        if (isIntencaoIndependente(intent)) {
+            return false;
+        }
+
+        String texto = normalizar(mensagem);
+        ConversationStep step = state == null ? ConversationStep.INICIO : state.getStep();
+
+        if (mensagemNeutra(texto)) {
+            return step != ConversationStep.INICIO;
+        }
+
+        if (intent == IntentType.NOVO_AGENDAMENTO) {
+            return true;
+        }
+
+        return switch (step) {
+            case INICIO -> intent == IntentType.AGENDAMENTO || contemDadosAgendamento(texto, mensagem);
+            case AGUARDANDO_SERVICO -> intent == IntentType.AGENDAMENTO || contemServico(texto);
+            case AGUARDANDO_DIA -> contemDia(texto);
+            case AGUARDANDO_HORARIO -> contemHorario(mensagem);
+            case AGUARDANDO_NOME -> extrairNomeResposta(mensagem).isPresent();
+            case AGUARDANDO_CONFIRMACAO, FINALIZADO ->
+                    intent == IntentType.AGENDAMENTO && contemDadosAgendamento(texto, mensagem);
+        };
+    }
+
     public Optional<String> montarRespostaAutomatica(ConversationState state, String mensagem) {
         String texto = normalizar(mensagem);
 
@@ -169,10 +197,10 @@ public class ConversationStateService {
         if (intentType == IntentType.CONSULTAR_AGENDAMENTO) {
             AppointmentDraft draft = state.getDraftAtual();
             if (draft != null && draft.isCompleto()) {
-                return Optional.of("Você solicitou um agendamento de " + draft.getServico()
+                return Optional.of("Sua solicitação de " + draft.getServico()
                         + " para " + draft.getDia()
                         + " às " + draft.getHorario()
-                        + ". Ainda estou aguardando a confirmação do salão.");
+                        + " ainda está aguardando confirmação.");
             }
             return Optional.of("Você ainda não tem um agendamento ativo. Qual serviço você gostaria de agendar?");
         }
@@ -239,6 +267,33 @@ public class ConversationStateService {
         
         sb.append("\nTodos estão aguardando confirmação de disponibilidade.");
         return sb.toString();
+    }
+
+    private boolean isIntencaoIndependente(IntentType intentType) {
+        return switch (intentType) {
+            case SAUDACAO, AGRADECIMENTO, DESPEDIDA, HUMANO, ORCAMENTO,
+                    CONSULTAR_AGENDAMENTO, CONSULTAR_NOME, LEMBRAR_CLIENTE, CONSULTAR_SERVICOS -> true;
+            case AGENDAMENTO, NOVO_AGENDAMENTO, DESCONHECIDO -> false;
+        };
+    }
+
+    private boolean contemDadosAgendamento(String texto, String mensagem) {
+        return contemServico(texto) || contemDia(texto) || contemHorario(mensagem);
+    }
+
+    private boolean contemServico(String texto) {
+        return contem(texto, "pe e mao", "manicure", "pedicure", "unha", "mao", "cabelo",
+                "corte", "escova", "progressiva", "sobrancelha", "cilios", "maquiagem")
+                || contemPalavra(texto, "pe");
+    }
+
+    private boolean contemDia(String texto) {
+        return contem(texto, "segunda", "terca", "quarta", "quinta", "sexta", "sabado",
+                "domingo", "hoje", "amanha");
+    }
+
+    private boolean contemHorario(String mensagem) {
+        return mensagem != null && HORARIO_PATTERN.matcher(mensagem).find();
     }
 
     private void detectarServico(String texto, AppointmentDraft draft) {
@@ -407,12 +462,12 @@ public class ConversationStateService {
             return;
         }
 
-        AppointmentDraft draft = state.getDraftAtual();
-        if (draft == null) {
-            draft = state.criarNovoDraft();
-        }
+        state.setNome(nome.trim());
 
-        aplicarNome(state, draft, nome);
+        AppointmentDraft draft = state.getDraftAtual();
+        if (draft != null) {
+            draft.setNome(nome.trim());
+        }
     }
 
     private void aplicarNome(ConversationState state, AppointmentDraft draft, String nome) {
@@ -619,7 +674,8 @@ public class ConversationStateService {
     private boolean deveCriarNovoAgendamento(String texto) {
         return contem(texto, "quero agendar", "quero marcar", "gostaria de agendar", 
                       "gostaria de marcar", "novo agendamento", "nova marcação",
-                      "outro horario", "outra marcação", "remarcar", "mudar");
+                      "outro horario", "outra marcação", "outra marcacao", "posso agendar",
+                      "agendar outra coisa", "remarcar", "mudar");
     }
 
     public boolean isApenasAgradecimentoCurto(String mensagem) {

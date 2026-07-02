@@ -46,59 +46,109 @@ public class ConversationService {
     }
 
     public String gerarResposta(String numero, String mensagem) {
-
         if (mensagem == null || mensagem.isBlank()) {
             return "Não consegui entender sua mensagem. Pode me enviar novamente?";
         }
 
         IntentType intentType = intentService.classificar(mensagem);
-        boolean novoAtendimento = deveIniciarNovoAtendimento(numero, intentType);
-        if (novoAtendimento && conversationStateService.possuiEstado(numero)) {
-            conversationStateService.limparEstado(numero);
+        CustomerProfile customerProfile = carregarPerfil(numero, intentType);
+        String nomePreferido = customerProfileService.nomePreferido(customerProfile).orElse(null);
+        ConversationState conversationState = conversationStateService.buscarPorNumero(numero, nomePreferido);
+        Optional<String> nomeInformado = conversationStateService.extrairNomeInformado(mensagem);
+        ConversationRoute route = rotearMensagem(conversationState, mensagem, intentType);
+
+        if (route.continuaFluxo()) {
+            conversationState = conversationStateService.processarMensagem(numero, mensagem, nomePreferido);
         }
 
-        CustomerProfile customerProfile = novoAtendimento
-                ? customerProfileService.iniciarAtendimento(numero)
-                : customerProfileService.buscarOuCriar(numero);
-
-        String nomePreferido = customerProfileService.nomePreferido(customerProfile).orElse(null);
-        Optional<String> nomeInformado = conversationStateService.extrairNomeInformado(mensagem);
-        ConversationState conversationState = conversationStateService.processarMensagem(numero, mensagem, nomePreferido);
         customerProfile = sincronizarNome(numero, nomeInformado, conversationState, customerProfile);
 
-        Optional<String> respostaRapida = quickResponseService.buscarResposta(intentType);
-
-        if (respostaRapida.isPresent() && deveUsarRespostaRapida(intentType, conversationState, mensagem)) {
-            String resposta = intentType == IntentType.SAUDACAO
-                    ? montarSaudacao(customerProfile)
-                    : respostaRapida.get();
-            return responderComMemoria(numero, mensagem, resposta);
+        Optional<String> respostaIntencao = executarIntencao(
+                route,
+                mensagem,
+                conversationState,
+                customerProfile,
+                nomeInformado
+        );
+        if (respostaIntencao.isPresent()) {
+            return responderComMemoria(numero, mensagem, respostaIntencao.get());
         }
 
-        if (intentType == IntentType.CONSULTAR_NOME && nomeInformado.isEmpty()) {
-            return responderComMemoria(numero, mensagem, montarRespostaNome(customerProfile));
-        }
-
-        Optional<String> respostaEstado = conversationStateService.montarRespostaAutomatica(conversationState, mensagem);
-
-        if (respostaEstado.isPresent()) {
-            return responderComMemoria(numero, mensagem, respostaEstado.get());
-        }
-
-        // Verifica se há resposta específica para a intenção detectada
-        Optional<String> respostaPorIntencao = conversationStateService.montarRespostaPorIntencao(conversationState, mensagem, intentType);
-
-        if (respostaPorIntencao.isPresent()) {
-            return responderComMemoria(numero, mensagem, respostaPorIntencao.get());
-        }
-
-        // Se perguntou sobre agendamentos, retorna a lista
-        if (conversationStateService.isPerguntaSobreAgendamentos(mensagem)) {
-            String lista = conversationStateService.listarAgendamentosPendentes(conversationState);
-            return responderComMemoria(numero, mensagem, lista);
+        Optional<String> respostaFluxo = executarFluxo(route, conversationState, mensagem);
+        if (respostaFluxo.isPresent()) {
+            return responderComMemoria(numero, mensagem, respostaFluxo.get());
         }
 
         return gerarRespostaComOllama(numero, mensagem, intentType, conversationState, customerProfile);
+    }
+
+    private CustomerProfile carregarPerfil(String numero, IntentType intentType) {
+        if (deveIniciarNovoAtendimento(numero, intentType)) {
+            return customerProfileService.iniciarAtendimento(numero);
+        }
+
+        return customerProfileService.buscarOuCriar(numero);
+    }
+
+    private ConversationRoute rotearMensagem(ConversationState conversationState,
+                                             String mensagem,
+                                             IntentType intentType) {
+        boolean continuaFluxo = conversationStateService.deveContinuarFluxo(conversationState, mensagem, intentType);
+        return new ConversationRoute(intentType, continuaFluxo);
+    }
+
+    private Optional<String> executarIntencao(ConversationRoute route,
+                                             String mensagem,
+                                             ConversationState conversationState,
+                                             CustomerProfile customerProfile,
+                                             Optional<String> nomeInformado) {
+        IntentType intentType = route.intentType();
+        Optional<String> respostaRapida = quickResponseService.buscarResposta(intentType);
+
+        if (respostaRapida.isPresent() && deveUsarRespostaRapida(intentType, mensagem)) {
+            if (intentType == IntentType.SAUDACAO) {
+                return Optional.of(montarSaudacao(customerProfile));
+            }
+
+            return respostaRapida;
+        }
+
+        if (intentType == IntentType.LEMBRAR_CLIENTE) {
+            return Optional.of(montarRespostaLembranca(customerProfile));
+        }
+
+        if (intentType == IntentType.CONSULTAR_NOME) {
+            if (nomeInformado.isPresent()) {
+                return Optional.of("Perfeito, " + nomeInformado.get() + ". Vou lembrar.");
+            }
+
+            return Optional.of(montarRespostaNome(customerProfile));
+        }
+
+        Optional<String> respostaPorIntencao = conversationStateService.montarRespostaPorIntencao(
+                conversationState,
+                mensagem,
+                intentType
+        );
+        if (respostaPorIntencao.isPresent()) {
+            return respostaPorIntencao;
+        }
+
+        if (conversationStateService.isPerguntaSobreAgendamentos(mensagem)) {
+            return Optional.of(conversationStateService.listarAgendamentosPendentes(conversationState));
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<String> executarFluxo(ConversationRoute route,
+                                           ConversationState conversationState,
+                                           String mensagem) {
+        if (!route.continuaFluxo()) {
+            return Optional.empty();
+        }
+
+        return conversationStateService.montarRespostaAutomatica(conversationState, mensagem);
     }
 
     private boolean deveIniciarNovoAtendimento(String numero, IntentType intentType) {
@@ -143,12 +193,17 @@ public class ConversationService {
                 .orElse("Você ainda não informou seu nome. Como prefere que eu te chame?");
     }
 
-    private boolean deveUsarRespostaRapida(IntentType intentType, ConversationState conversationState, String mensagem) {
+    private String montarRespostaLembranca(CustomerProfile customerProfile) {
+        return customerProfileService.nomePreferido(customerProfile)
+                .map(nome -> "Lembro sim, " + nome + ". Como posso ajudar?")
+                .orElse("Ainda não tenho seu nome salvo. Como prefere que eu te chame?");
+    }
+
+    private boolean deveUsarRespostaRapida(IntentType intentType, String mensagem) {
         if (intentType == IntentType.SAUDACAO) {
-            return !conversationStateService.conversaEmAndamento(conversationState);
+            return true;
         }
 
-        // Se for AGRADECIMENTO, só usar resposta rápida se for APENAS agradecimento curto
         if (intentType == IntentType.AGRADECIMENTO) {
             return conversationStateService.isApenasAgradecimentoCurto(mensagem);
         }
@@ -180,5 +235,8 @@ public class ConversationService {
         conversationMemory.addAssistantMessage(numero, resposta);
 
         return resposta;
+    }
+
+    private record ConversationRoute(IntentType intentType, boolean continuaFluxo) {
     }
 }

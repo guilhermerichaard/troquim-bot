@@ -61,4 +61,32 @@ class ConversationServiceCustomerProfileTest {
 
         assertEquals("Perfeito, Guilherme. Recebi sua solicitação para manicure na sexta às 16h. Vou verificar a disponibilidade e retorno com a confirmação.", resposta);
     }
+
+    @Test
+    void estadoPendenteNaoMonopolizaNovasIntencoes() {
+        CustomerProfileService customerProfileService = new CustomerProfileService();
+        ConversationService conversationService = new ConversationService(
+                new IntentService(),
+                new QuickResponseService(),
+                new ContextService(),
+                new ConversationStateService(),
+                new ConversationMemory(),
+                new OllamaService(new AiConfiguration()),
+                new PromptService(),
+                customerProfileService
+        );
+
+        String numero = "5511666666666";
+        customerProfileService.salvarNome(numero, "Guilherme");
+
+        conversationService.gerarResposta(numero, "quero unha");
+        conversationService.gerarResposta(numero, "segunda");
+        conversationService.gerarResposta(numero, "15h");
+
+        assertEquals("Boa tarde, Guilherme! Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
+        assertEquals("Seu nome está salvo como Guilherme.", conversationService.gerarResposta(numero, "Qual meu nome?"));
+        assertEquals("Lembro sim, Guilherme. Como posso ajudar?", conversationService.gerarResposta(numero, "Lembra de mim?"));
+        assertEquals("Sua solicitação de unha para segunda às 15h ainda está aguardando confirmação.",
+                conversationService.gerarResposta(numero, "Agendou mesmo?"));
+    }
 }
