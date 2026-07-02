@@ -19,11 +19,26 @@ public class IntentService {
             return IntentType.HUMANO;
         }
 
-        if (contem(texto, "o que agendei", "quais agendamentos", "meus agendamentos",
-                "qual dia marquei", "que dia marquei", "que horario", "qual horario",
-                "qual agendamento", "agendamentos pendentes", "agendou", "confirmou",
-                "foi agendado", "foi marcado", "marcou mesmo", "agendou mesmo")) {
+        if (contem(texto, "agendei", "agendou", "o que agendei", "quais agendamentos", "meus agendamentos",
+                "qual meu agendamento", "qual agendamento", "agendamentos pendentes", "agendou mesmo")) {
             return IntentType.CONSULTAR_AGENDAMENTO;
+        }
+
+        if (contem(texto, "qual dia marquei", "que dia marquei", "que dia eu", "qual dia eu",
+                "que dia agendei", "qual dia agendei", "marquei para quando", "agendei para quando")) {
+            return IntentType.CONSULTAR_DIA_AGENDADO;
+        }
+
+        if (contem(texto, "que horario marquei", "qual horario marquei", "que horario eu",
+                "qual horario eu", "que horario agendei", "qual horario agendei",
+                "qual horario", "que horario")) {
+            return IntentType.CONSULTAR_HORARIO_AGENDADO;
+        }
+
+        if (contem(texto, "o que eu marquei", "que servico marquei", "qual servico marquei",
+                "o que agendei", "que servico agendei", "qual servico agendei",
+                "qual servico", "que servico")) {
+            return IntentType.CONSULTAR_SERVICO_AGENDADO;
         }
 
         if (contem(texto, "quero agendar outro", "outro agendamento", "novo agendamento",

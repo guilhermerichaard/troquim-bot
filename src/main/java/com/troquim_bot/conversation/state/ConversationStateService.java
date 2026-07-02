@@ -73,6 +73,12 @@ public class ConversationStateService {
             return state;
         }
 
+        // Se for pergunta (contém termos interrogativos), não extrair entidades
+        if (isPergunta(texto)) {
+            atualizarStep(state);
+            return state;
+        }
+
         if (!mensagemNeutra(texto)) {
             // Se um fluxo completo receber novo agendamento, preserva o anterior e cria outro draft.
             if ((state.getStep() == ConversationStep.FINALIZADO
@@ -197,12 +203,36 @@ public class ConversationStateService {
         if (intentType == IntentType.CONSULTAR_AGENDAMENTO) {
             AppointmentDraft draft = state.getDraftAtual();
             if (draft != null && draft.isCompleto()) {
-                return Optional.of("Sua solicitação de " + draft.getServico()
+                return Optional.of("Você solicitou " + draft.getServico()
                         + " para " + draft.getDia()
                         + " às " + draft.getHorario()
-                        + " ainda está aguardando confirmação.");
+                        + ". Ainda estou aguardando a confirmação do salão.");
             }
             return Optional.of("Você ainda não tem um agendamento ativo. Qual serviço você gostaria de agendar?");
+        }
+        
+        if (intentType == IntentType.CONSULTAR_DIA_AGENDADO) {
+            AppointmentDraft draft = state.getDraftAtual();
+            if (draft != null && !estaVazio(draft.getDia())) {
+                return Optional.of("Você agendou para " + draft.getDia() + " às " + draft.getHorario() + ".");
+            }
+            return Optional.of("Você ainda não tem um dia agendado. Para qual dia você gostaria?");
+        }
+        
+        if (intentType == IntentType.CONSULTAR_HORARIO_AGENDADO) {
+            AppointmentDraft draft = state.getDraftAtual();
+            if (draft != null && !estaVazio(draft.getHorario())) {
+                return Optional.of("O horário solicitado foi " + draft.getHorario() + ".");
+            }
+            return Optional.of("Você ainda não tem um horário agendado. Qual horário você prefere?");
+        }
+        
+        if (intentType == IntentType.CONSULTAR_SERVICO_AGENDADO) {
+            AppointmentDraft draft = state.getDraftAtual();
+            if (draft != null && !estaVazio(draft.getServico())) {
+                return Optional.of("Você solicitou " + draft.getServico() + ".");
+            }
+            return Optional.of("Você ainda não tem um serviço agendado. Qual serviço você gostaria?");
         }
         
         if (intentType == IntentType.NOVO_AGENDAMENTO) {
@@ -271,8 +301,9 @@ public class ConversationStateService {
 
     private boolean isIntencaoIndependente(IntentType intentType) {
         return switch (intentType) {
-            case SAUDACAO, AGRADECIMENTO, DESPEDIDA, HUMANO, ORCAMENTO,
-                    CONSULTAR_AGENDAMENTO, CONSULTAR_NOME, LEMBRAR_CLIENTE, CONSULTAR_SERVICOS -> true;
+            case LEMBRAR_CLIENTE, SAUDACAO, AGRADECIMENTO, DESPEDIDA, HUMANO, ORCAMENTO,
+                    CONSULTAR_AGENDAMENTO, CONSULTAR_DIA_AGENDADO, CONSULTAR_HORARIO_AGENDADO,
+                    CONSULTAR_SERVICO_AGENDADO, CONSULTAR_NOME, CONSULTAR_SERVICOS -> true;
             case AGENDAMENTO, NOVO_AGENDAMENTO, DESCONHECIDO -> false;
         };
     }
@@ -664,6 +695,19 @@ public class ConversationStateService {
     private boolean isMensagemLembranca(String texto) {
         return contem(texto, "esqueceu", "já falei", "ja falei", "acabei de falar", "acabei de dizer", 
                       "eu já disse", "eu ja disse", "repete", "repita", "lembra", "lembre");
+    }
+
+    private boolean isPergunta(String texto) {
+        return contem(texto, "?")
+                || contem(texto, "o que")
+                || contemPalavra(texto, "qual")
+                || contemPalavra(texto, "quais")
+                || contemPalavra(texto, "que")
+                || contemPalavra(texto, "quem")
+                || contemPalavra(texto, "quando")
+                || contemPalavra(texto, "onde")
+                || contemPalavra(texto, "como")
+                || contemPalavra(texto, "oq");
     }
 
     public boolean isPerguntaSobreAgendamentos(String texto) {

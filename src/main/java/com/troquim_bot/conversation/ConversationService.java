@@ -8,11 +8,17 @@ import com.troquim_bot.ai.memory.ConversationMessage;
 import com.troquim_bot.ai.prompt.PromptService;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
+import com.troquim_bot.conversation.state.AppointmentDraft;
 import com.troquim_bot.customer.CustomerProfile;
 import com.troquim_bot.customer.CustomerProfileService;
+import com.troquim_bot.schedule.Appointment;
+import com.troquim_bot.schedule.AppointmentBookingService;
+import com.troquim_bot.schedule.AppointmentService;
 import org.springframework.stereotype.Service;
 
+import java.text.Normalizer;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -26,6 +32,8 @@ public class ConversationService {
     private final OllamaService ollamaService;
     private final PromptService promptService;
     private final CustomerProfileService customerProfileService;
+    private final AppointmentService appointmentService;
+    private final AppointmentBookingService appointmentBookingService;
 
     public ConversationService(IntentService intentService,
                                QuickResponseService quickResponseService,
@@ -34,7 +42,9 @@ public class ConversationService {
                                ConversationMemory conversationMemory,
                                OllamaService ollamaService,
                                PromptService promptService,
-                               CustomerProfileService customerProfileService) {
+                               CustomerProfileService customerProfileService,
+                               AppointmentService appointmentService,
+                               AppointmentBookingService appointmentBookingService) {
         this.intentService = intentService;
         this.quickResponseService = quickResponseService;
         this.contextService = contextService;
@@ -43,6 +53,8 @@ public class ConversationService {
         this.ollamaService = ollamaService;
         this.promptService = promptService;
         this.customerProfileService = customerProfileService;
+        this.appointmentService = appointmentService;
+        this.appointmentBookingService = appointmentBookingService;
     }
 
     public String gerarResposta(String numero, String mensagem) {
@@ -56,15 +68,18 @@ public class ConversationService {
         ConversationState conversationState = conversationStateService.buscarPorNumero(numero, nomePreferido);
         Optional<String> nomeInformado = conversationStateService.extrairNomeInformado(mensagem);
         ConversationRoute route = rotearMensagem(conversationState, mensagem, intentType);
+        boolean tinhaDraftCompleto = draftAtualCompleto(conversationState);
 
         if (route.continuaFluxo()) {
             conversationState = conversationStateService.processarMensagem(numero, mensagem, nomePreferido);
         }
 
         customerProfile = sincronizarNome(numero, nomeInformado, conversationState, customerProfile);
+        registrarAgendamentoConcluido(numero, conversationState, tinhaDraftCompleto);
 
         Optional<String> respostaIntencao = executarIntencao(
                 route,
+                numero,
                 mensagem,
                 conversationState,
                 customerProfile,
@@ -98,11 +113,19 @@ public class ConversationService {
     }
 
     private Optional<String> executarIntencao(ConversationRoute route,
+                                             String numero,
                                              String mensagem,
                                              ConversationState conversationState,
                                              CustomerProfile customerProfile,
                                              Optional<String> nomeInformado) {
         IntentType intentType = route.intentType();
+        
+        // Verifica consulta de agendamento ANTES de retornar respostas rápidas
+        Optional<String> respostaAgendamento = responderConsultaAgendamento(numero, intentType, mensagem);
+        if (respostaAgendamento.isPresent()) {
+            return respostaAgendamento;
+        }
+
         Optional<String> respostaRapida = quickResponseService.buscarResposta(intentType);
 
         if (respostaRapida.isPresent() && deveUsarRespostaRapida(intentType, mensagem)) {
@@ -139,6 +162,18 @@ public class ConversationService {
         }
 
         return Optional.empty();
+    }
+
+    private Optional<String> responderConsultaAgendamento(String numero,
+                                                         IntentType intentType,
+                                                         String mensagem) {
+        if (!isConsultaAgendamento(intentType, mensagem)) {
+            return Optional.empty();
+        }
+
+        return Optional.of(appointmentService.buscarUltimoAgendamentoPorTelefone(numero)
+                .map(this::montarResumoAgendamento)
+                .orElse("Você ainda não tem uma solicitação de agendamento registrada."));
     }
 
     private Optional<String> executarFluxo(ConversationRoute route,
@@ -181,6 +216,28 @@ public class ConversationService {
         return customerProfile;
     }
 
+    private void registrarAgendamentoConcluido(String numero,
+                                               ConversationState conversationState,
+                                               boolean tinhaDraftCompleto) {
+        AppointmentDraft draft = conversationState.getDraftAtual();
+        if (tinhaDraftCompleto || draft == null || !draft.isCompleto()) {
+            return;
+        }
+
+        appointmentBookingService.bookIfAvailable(
+                numero,
+                draft.getNome(),
+                draft.getServico(),
+                draft.getDia(),
+                draft.getHorario()
+        );
+    }
+
+    private boolean draftAtualCompleto(ConversationState conversationState) {
+        AppointmentDraft draft = conversationState.getDraftAtual();
+        return draft != null && draft.isCompleto();
+    }
+
     private String montarSaudacao(CustomerProfile customerProfile) {
         return customerProfileService.nomePreferido(customerProfile)
                 .map(nome -> "Boa tarde, " + nome + "! Como posso ajudar?")
@@ -197,6 +254,27 @@ public class ConversationService {
         return customerProfileService.nomePreferido(customerProfile)
                 .map(nome -> "Lembro sim, " + nome + ". Como posso ajudar?")
                 .orElse("Ainda não tenho seu nome salvo. Como prefere que eu te chame?");
+    }
+
+    private String montarResumoAgendamento(Appointment appointment) {
+        return "Sua solicitação para " + appointment.getServico()
+                + " na " + appointment.getDia()
+                + " às " + appointment.getHorario()
+                + " está com status " + appointment.getStatus() + ".";
+    }
+
+    private boolean isConsultaAgendamento(IntentType intentType, String mensagem) {
+        if (intentType == IntentType.CONSULTAR_AGENDAMENTO
+                || intentType == IntentType.CONSULTAR_DIA_AGENDADO
+                || intentType == IntentType.CONSULTAR_HORARIO_AGENDADO
+                || intentType == IntentType.CONSULTAR_SERVICO_AGENDADO) {
+            return true;
+        }
+
+        String texto = normalizar(mensagem);
+        return contem(texto, "agendei", "marquei", "qual meu agendamento", "qual agendamento",
+                "qual horario", "que horario", "qual servico", "que servico",
+                "marquei para quando", "agendei para quando");
     }
 
     private boolean deveUsarRespostaRapida(IntentType intentType, String mensagem) {
@@ -235,6 +313,23 @@ public class ConversationService {
         conversationMemory.addAssistantMessage(numero, resposta);
 
         return resposta;
+    }
+
+    private boolean contem(String texto, String... termos) {
+        for (String termo : termos) {
+            if (texto.contains(normalizar(termo))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private String normalizar(String texto) {
+        String semAcentos = Normalizer.normalize(texto, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+
+        return semAcentos.toLowerCase(Locale.ROOT);
     }
 
     private record ConversationRoute(IntentType intentType, boolean continuaFluxo) {

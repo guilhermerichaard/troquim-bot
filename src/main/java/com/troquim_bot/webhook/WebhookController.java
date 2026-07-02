@@ -2,7 +2,7 @@ package com.troquim_bot.webhook;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.troquim_bot.conversation.ConversationService;
+import com.troquim_bot.application.conversation.ConversationApplicationService;
 import com.troquim_bot.evolution.EvolutionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -10,19 +10,21 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 @RestController
 @RequestMapping("/webhook")
 public class WebhookController {
 
     private final Set<String> mensagensProcessadas = ConcurrentHashMap.newKeySet();
-    private final ConversationService conversationService;
+    private final ConversationApplicationService conversationApplicationService;
     private final EvolutionService evolutionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ConcurrentHashMap<String, ReentrantLock> locksPorNumero = new ConcurrentHashMap<>();
 
-    public WebhookController(EvolutionService evolutionService, ConversationService conversationService) {
+    public WebhookController(EvolutionService evolutionService, ConversationApplicationService conversationApplicationService) {
         this.evolutionService = evolutionService;
-        this.conversationService = conversationService;
+        this.conversationApplicationService = conversationApplicationService;
     }
 
     @PostMapping("/whatsapp")
@@ -68,16 +70,32 @@ public class WebhookController {
         System.out.println("remoteJid: " + remoteJid);
         System.out.println("sender: " + sender);
         System.out.println("numero usado: " + numero);
+        System.out.println("messageId: " + messageId);
         System.out.println("mensagem: " + mensagem);
 
+        // Obter lock específico para este número (serializa processamento por contato)
+        ReentrantLock lock = locksPorNumero.computeIfAbsent(numero, k -> new ReentrantLock());
+        
         try {
-            String resposta = conversationService.gerarResposta(numero, mensagem);
-            evolutionService.enviarMensagem(numero, resposta);
+            // Tenta adquirir lock com timeout curto para não bloquear indefinidamente
+            if (lock.tryLock(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                try {
+                    System.out.println("Processando mensagem - messageId: " + messageId + ", numero: " + numero);
+                    
+                    String resposta = conversationApplicationService.processarMensagem(numero, mensagem);
+                    evolutionService.enviarMensagem(numero, resposta);
 
-            System.out.println("Mensagem enviada com sucesso!");
+                    System.out.println("Resposta enviada - messageId: " + messageId + ", numero: " + numero + ", resposta: " + resposta);
+
+                } finally {
+                    lock.unlock();
+                }
+            } else {
+                System.out.println("Mensagem ignorada (processamento anterior em andamento) - messageId: " + messageId + ", numero: " + numero);
+            }
 
         } catch (Exception e) {
-            System.out.println("Erro ao enviar mensagem:");
+            System.out.println("Erro ao processar mensagem - messageId: " + messageId + ", numero: " + numero);
             e.printStackTrace();
         }
 
