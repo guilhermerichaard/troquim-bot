@@ -60,7 +60,7 @@ class ProfessionalControllerTest {
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$").isArray())
             .andExpect(jsonPath("$.length()").value(2))
-            .andExpect(jsonPath("$[*].nome", hasItems("João Silva", "Maria Santos")));
+            .andExpect(jsonPath("$[*].name", hasItems("João Silva", "Maria Santos")));
     }
 
     @Test
@@ -92,13 +92,13 @@ class ProfessionalControllerTest {
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.id").value(professional.getId().getValue().toString()))
-            .andExpect(jsonPath("$.nome").value("João Silva"))
-            .andExpect(jsonPath("$.telefone").value("(11) 11111-1111"))
+            .andExpect(jsonPath("$.name").value("João Silva"))
+            .andExpect(jsonPath("$.phone").value("(11) 11111-1111"))
             .andExpect(jsonPath("$.status").value("ATIVO"))
-            .andExpect(jsonPath("$.especialidades").isArray())
-            .andExpect(jsonPath("$.especialidades.length()").value(2))
-            .andExpect(jsonPath("$.criadoEm").exists())
-            .andExpect(jsonPath("$.atualizadoEm").exists());
+            .andExpect(jsonPath("$.specialties").isArray())
+            .andExpect(jsonPath("$.specialties.length()").value(2))
+            .andExpect(jsonPath("$.createdAt").exists())
+            .andExpect(jsonPath("$.updatedAt").exists());
     }
 
     @Test
@@ -119,17 +119,17 @@ class ProfessionalControllerTest {
         // Testa POST /professionals
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"João Silva\",\"especialidades\":[\"Corte\",\"Barba\"],\"telefone\":\"(11) 11111-1111\"}"))
+                .content("{\"name\":\"João Silva\",\"specialties\":[\"Corte\",\"Barba\"],\"phone\":\"(11) 11111-1111\"}"))
             .andExpect(status().isCreated())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-            .andExpect(jsonPath("$.nome").value("João Silva"))
-            .andExpect(jsonPath("$.telefone").value("(11) 11111-1111"))
+            .andExpect(jsonPath("$.name").value("João Silva"))
+            .andExpect(jsonPath("$.phone").value("(11) 11111-1111"))
             .andExpect(jsonPath("$.status").value("ATIVO"))
-            .andExpect(jsonPath("$.especialidades").isArray())
-            .andExpect(jsonPath("$.especialidades.length()").value(2))
+            .andExpect(jsonPath("$.specialties").isArray())
+            .andExpect(jsonPath("$.specialties.length()").value(2))
             .andExpect(jsonPath("$.id").exists())
-            .andExpect(jsonPath("$.criadoEm").exists())
-            .andExpect(jsonPath("$.atualizadoEm").exists());
+            .andExpect(jsonPath("$.createdAt").exists())
+            .andExpect(jsonPath("$.updatedAt").exists());
     }
 
     @Test
@@ -144,7 +144,7 @@ class ProfessionalControllerTest {
     void deveRetornar400QuandoNomeVazio() throws Exception {
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"\",\"especialidades\":[\"Corte\"],\"telefone\":\"(11) 11111-1111\"}"))
+                .content("{\"name\":\"\",\"specialties\":[\"Corte\"],\"phone\":\"(11) 11111-1111\"}"))
             .andExpect(status().isBadRequest());
     }
 
@@ -152,7 +152,7 @@ class ProfessionalControllerTest {
     void deveRetornar400QuandoNomeNulo() throws Exception {
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"especialidades\":[\"Corte\"],\"telefone\":\"(11) 11111-1111\"}"))
+                .content("{\"specialties\":[\"Corte\"],\"phone\":\"(11) 11111-1111\"}"))
             .andExpect(status().isBadRequest());
     }
 
@@ -160,7 +160,7 @@ class ProfessionalControllerTest {
     void deveRetornar400QuandoEspecialidadesVazias() throws Exception {
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"João\",\"especialidades\":[],\"telefone\":\"(11) 11111-1111\"}"))
+                .content("{\"name\":\"João\",\"specialties\":[],\"phone\":\"(11) 11111-1111\"}"))
             .andExpect(status().isBadRequest());
     }
 
@@ -168,7 +168,7 @@ class ProfessionalControllerTest {
     void deveRetornar400QuandoEspecialidadesNulas() throws Exception {
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"João\",\"telefone\":\"(11) 11111-1111\"}"))
+                .content("{\"name\":\"João\",\"phone\":\"(11) 11111-1111\"}"))
             .andExpect(status().isBadRequest());
     }
 
@@ -176,7 +176,7 @@ class ProfessionalControllerTest {
     void deveRetornar400QuandoTelefoneVazio() throws Exception {
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"João\",\"especialidades\":[\"Corte\"],\"telefone\":\"\"}"))
+                .content("{\"name\":\"João\",\"specialties\":[\"Corte\"],\"phone\":\"\"}"))
             .andExpect(status().isBadRequest());
     }
 
@@ -184,7 +184,7 @@ class ProfessionalControllerTest {
     void deveRetornar400QuandoTelefoneNulo() throws Exception {
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"João\",\"especialidades\":[\"Corte\"]}"))
+                .content("{\"name\":\"João\",\"specialties\":[\"Corte\"]}"))
             .andExpect(status().isBadRequest());
     }
 
@@ -208,13 +208,13 @@ class ProfessionalControllerTest {
 
         mockMvc.perform(put("/professionals/" + professional.getId().getValue())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"João Santos\",\"especialidades\":[\"Barba\",\"Coloração\"],\"telefone\":\"(11) 99999-9999\"}"))
+                .content("{\"name\":\"João Santos\",\"specialties\":[\"Barba\",\"Coloração\"],\"phone\":\"(11) 99999-9999\"}"))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-            .andExpect(jsonPath("$.nome").value("João Santos"))
-            .andExpect(jsonPath("$.telefone").value("(11) 99999-9999"))
-            .andExpect(jsonPath("$.especialidades").isArray())
-            .andExpect(jsonPath("$.especialidades.length()").value(2));
+            .andExpect(jsonPath("$.name").value("João Santos"))
+            .andExpect(jsonPath("$.phone").value("(11) 99999-9999"))
+            .andExpect(jsonPath("$.specialties").isArray())
+            .andExpect(jsonPath("$.specialties.length()").value(2));
     }
 
     @Test
@@ -231,19 +231,19 @@ class ProfessionalControllerTest {
         // Atualiza apenas o nome
         mockMvc.perform(put("/professionals/" + professional.getId().getValue())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"João Santos\"}"))
+                .content("{\"name\":\"João Santos\"}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.nome").value("João Santos"))
-            .andExpect(jsonPath("$.telefone").value("(11) 11111-1111")) // Não alterado
-            .andExpect(jsonPath("$.especialidades").isArray())
-            .andExpect(jsonPath("$.especialidades.length()").value(1)); // Não alterado
+            .andExpect(jsonPath("$.name").value("João Santos"))
+            .andExpect(jsonPath("$.phone").value("(11) 11111-1111")) // Não alterado
+            .andExpect(jsonPath("$.specialties").isArray())
+            .andExpect(jsonPath("$.specialties.length()").value(1)); // Não alterado
     }
 
     @Test
     void deveRetornar404AoAtualizarProfessionalInexistente() throws Exception {
         mockMvc.perform(put("/professionals/12345678-1234-1234-1234-123456789012")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nome\":\"João\"}"))
+                .content("{\"name\":\"João\"}"))
             .andExpect(status().isNotFound());
     }
 
@@ -312,7 +312,7 @@ class ProfessionalControllerTest {
         mockMvc.perform(get("/professionals"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(3))
-            .andExpect(jsonPath("$[*].nome", hasItems("João", "Maria", "Pedro")));
+        .andExpect(jsonPath("$[*].name", hasItems("João", "Maria", "Pedro")));
     }
 
     @Test

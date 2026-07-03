@@ -1,6 +1,9 @@
 package com.troquim_bot.controller.dto;
 
+import java.util.Collections;
 import java.util.Set;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * DTO para requisição de criação de Professional.
@@ -8,40 +11,57 @@ import java.util.Set;
  */
 public class CreateProfessionalRequest {
 
-    private String nome;
-    private Set<String> especialidades;
-    private String telefone;
+    @JsonProperty("name")
+    private String name;
+    
+    @JsonProperty("specialties")
+    private Object specialtiesObj;
+    
+    @JsonProperty("phone")
+    private String phone;
 
     public CreateProfessionalRequest() {
     }
 
-    public CreateProfessionalRequest(String nome, Set<String> especialidades, String telefone) {
-        this.nome = nome;
-        this.especialidades = especialidades;
-        this.telefone = telefone;
+    public CreateProfessionalRequest(String name, Set<String> specialties, String phone) {
+        this.name = name;
+        this.specialtiesObj = specialties;
+        this.phone = phone;
     }
 
-    public String getNome() {
-        return nome;
+    public String getName() {
+        return name;
     }
 
-    public void setNome(String nome) {
-        this.nome = nome;
+    public void setName(String name) {
+        this.name = name;
     }
 
-    public Set<String> getEspecialidades() {
-        return especialidades;
+    public Set<String> getSpecialties() {
+        if (specialtiesObj == null) {
+            return Collections.emptySet();
+        }
+        if (specialtiesObj instanceof Set) {
+            return (Set<String>) specialtiesObj;
+        }
+        if (specialtiesObj instanceof String) {
+            return Collections.singleton((String) specialtiesObj);
+        }
+        if (specialtiesObj instanceof java.util.Collection) {
+            return new java.util.HashSet<>((java.util.Collection<String>) specialtiesObj);
+        }
+        return Collections.singleton(specialtiesObj.toString());
     }
 
-    public void setEspecialidades(Set<String> especialidades) {
-        this.especialidades = especialidades;
+    public void setSpecialties(Set<String> specialties) {
+        this.specialtiesObj = specialties;
     }
 
-    public String getTelefone() {
-        return telefone;
+    public String getPhone() {
+        return phone;
     }
 
-    public void setTelefone(String telefone) {
-        this.telefone = telefone;
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 }

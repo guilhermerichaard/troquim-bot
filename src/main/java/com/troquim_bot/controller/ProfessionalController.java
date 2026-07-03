@@ -79,9 +79,9 @@ public class ProfessionalController {
 
         try {
             Professional professional = professionalApplicationService.criarProfessional(
-                request.getNome(),
-                request.getEspecialidades(),
-                request.getTelefone()
+                request.getName(),
+                request.getSpecialties(),
+                request.getPhone()
             );
 
             return ResponseEntity.status(HttpStatus.CREATED).body(ProfessionalResponse.from(professional));
@@ -112,9 +112,9 @@ public class ProfessionalController {
 
             Professional professional = professionalApplicationService.atualizarProfessional(
                 professionalId,
-                request.getNome(),
-                request.getEspecialidades(),
-                request.getTelefone()
+                request.getName(),
+                request.getSpecialties(),
+                request.getPhone()
             );
 
             return ResponseEntity.ok(ProfessionalResponse.from(professional));

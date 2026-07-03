@@ -2,46 +2,53 @@ package com.troquim_bot.controller.dto;
 
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * DTO para requisição de atualização de Professional.
  * Usado apenas na camada de apresentação (REST).
  */
 public class UpdateProfessionalRequest {
 
-    private String nome;
-    private Set<String> especialidades;
-    private String telefone;
+    @JsonProperty("name")
+    private String name;
+    
+    @JsonProperty("specialties")
+    private Set<String> specialties;
+    
+    @JsonProperty("phone")
+    private String phone;
 
     public UpdateProfessionalRequest() {
     }
 
-    public UpdateProfessionalRequest(String nome, Set<String> especialidades, String telefone) {
-        this.nome = nome;
-        this.especialidades = especialidades;
-        this.telefone = telefone;
+    public UpdateProfessionalRequest(String name, Set<String> specialties, String phone) {
+        this.name = name;
+        this.specialties = specialties;
+        this.phone = phone;
     }
 
-    public String getNome() {
-        return nome;
+    public String getName() {
+        return name;
     }
 
-    public void setNome(String nome) {
-        this.nome = nome;
+    public void setName(String name) {
+        this.name = name;
     }
 
-    public Set<String> getEspecialidades() {
-        return especialidades;
+    public Set<String> getSpecialties() {
+        return specialties;
     }
 
-    public void setEspecialidades(Set<String> especialidades) {
-        this.especialidades = especialidades;
+    public void setSpecialties(Set<String> specialties) {
+        this.specialties = specialties;
     }
 
-    public String getTelefone() {
-        return telefone;
+    public String getPhone() {
+        return phone;
     }
 
-    public void setTelefone(String telefone) {
-        this.telefone = telefone;
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 }

@@ -8,32 +8,47 @@ import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * DTO para resposta de Professional.
  * Usado apenas na camada de apresentação (REST).
  */
 public class ProfessionalResponse {
 
+    @JsonProperty("id")
     private String id;
-    private String nome;
-    private Set<String> especialidades;
-    private String telefone;
+    
+    @JsonProperty("name")
+    private String name;
+    
+    @JsonProperty("specialties")
+    private Set<String> specialties;
+    
+    @JsonProperty("phone")
+    private String phone;
+    
+    @JsonProperty("status")
     private String status;
-    private LocalDateTime criadoEm;
-    private LocalDateTime atualizadoEm;
+    
+    @JsonProperty("createdAt")
+    private LocalDateTime createdAt;
+    
+    @JsonProperty("updatedAt")
+    private LocalDateTime updatedAt;
 
     public ProfessionalResponse() {
     }
 
-    public ProfessionalResponse(String id, String nome, Set<String> especialidades, String telefone,
-                                String status, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
+    public ProfessionalResponse(String id, String name, Set<String> specialties, String phone,
+                                 String status, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
-        this.nome = nome;
-        this.especialidades = especialidades;
-        this.telefone = telefone;
+        this.name = name;
+        this.specialties = specialties;
+        this.phone = phone;
         this.status = status;
-        this.criadoEm = criadoEm;
-        this.atualizadoEm = atualizadoEm;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 
     public static ProfessionalResponse from(Professional professional) {
@@ -56,27 +71,27 @@ public class ProfessionalResponse {
         return id;
     }
 
-    public String getNome() {
-        return nome;
+    public String getName() {
+        return name;
     }
 
-    public Set<String> getEspecialidades() {
-        return especialidades;
+    public Set<String> getSpecialties() {
+        return specialties;
     }
 
-    public String getTelefone() {
-        return telefone;
+    public String getPhone() {
+        return phone;
     }
 
     public String getStatus() {
         return status;
     }
 
-    public LocalDateTime getCriadoEm() {
-        return criadoEm;
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 
-    public LocalDateTime getAtualizadoEm() {
-        return atualizadoEm;
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 }
