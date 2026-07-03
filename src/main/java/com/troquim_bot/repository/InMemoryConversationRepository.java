@@ -2,12 +2,14 @@ package com.troquim_bot.repository;
 
 import com.troquim_bot.conversation.Conversation;
 import com.troquim_bot.conversation.ConversationId;
+import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+@Repository
 public class InMemoryConversationRepository implements ConversationRepository {
 
     private final ConcurrentMap<ConversationId, Conversation> conversations = new ConcurrentHashMap<>();

@@ -36,7 +36,14 @@ class ConversationApplicationServiceTest {
     @BeforeEach
     void setUp() {
         conversationRepository = new InMemoryConversationRepository();
-        conversationApplicationService = new ConversationApplicationService(conversationRepository);
+        conversationApplicationService = new ConversationApplicationService(
+            new ConversationRegistry(conversationRepository),
+            new ConversationOrchestrator(
+                (numero, mensagem) -> "resposta",
+                new IgnoringWhatsAppAdapter()
+            ),
+            new ConversationInputMapper()
+        );
 
         customerId = UUID.randomUUID().toString();
         serviceId = UUID.randomUUID().toString();
@@ -326,5 +333,16 @@ class ConversationApplicationServiceTest {
     void deveLancarQuandoConversaNaoExiste() {
         assertThrows(NoSuchElementException.class, () ->
             conversationApplicationService.avancarEtapa(ConversationId.generate()));
+    }
+
+    private static class IgnoringWhatsAppAdapter implements WhatsAppAdapter {
+        @Override
+        public Optional<IncomingMessage> receberMensagem(String payload) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void enviarMensagem(String numero, String texto) {
+        }
     }
 }

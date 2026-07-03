@@ -1,6 +1,10 @@
 package com.troquim_bot.controller;
 
 import com.troquim_bot.application.conversation.ConversationApplicationService;
+import com.troquim_bot.application.conversation.ConversationInputMapper;
+import com.troquim_bot.application.conversation.ConversationOrchestrator;
+import com.troquim_bot.application.conversation.ConversationRegistry;
+import com.troquim_bot.application.conversation.WhatsAppAdapter;
 import com.troquim_bot.conversation.Conversation;
 import com.troquim_bot.repository.InMemoryConversationRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItems;
@@ -34,7 +39,14 @@ class ConversationControllerTest {
 
     @BeforeEach
     void setUp() {
-        conversationApplicationService = new ConversationApplicationService(new InMemoryConversationRepository());
+        conversationApplicationService = new ConversationApplicationService(
+            new ConversationRegistry(new InMemoryConversationRepository()),
+            new ConversationOrchestrator(
+                (numero, mensagem) -> "resposta",
+                new IgnoringWhatsAppAdapter()
+            ),
+            new ConversationInputMapper()
+        );
         ConversationController conversationController = new ConversationController(conversationApplicationService);
         mockMvc = MockMvcBuilders.standaloneSetup(conversationController).build();
 
@@ -271,5 +283,16 @@ class ConversationControllerTest {
     void deveRetornar400AoDeletarComIdInvalido() throws Exception {
         mockMvc.perform(delete("/conversations/id-invalido"))
             .andExpect(status().isBadRequest());
+    }
+
+    private static class IgnoringWhatsAppAdapter implements WhatsAppAdapter {
+        @Override
+        public Optional<IncomingMessage> receberMensagem(String payload) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void enviarMensagem(String numero, String texto) {
+        }
     }
 }
