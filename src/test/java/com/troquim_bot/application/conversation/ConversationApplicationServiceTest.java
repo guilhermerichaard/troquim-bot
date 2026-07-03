@@ -1,5 +1,8 @@
 package com.troquim_bot.application.conversation;
 
+import com.troquim_bot.application.intent.IntentEngine;
+import com.troquim_bot.application.intent.IntentResult;
+import com.troquim_bot.application.intent.IntentType;
 import com.troquim_bot.conversation.Conversation;
 import com.troquim_bot.conversation.ConversationId;
 import com.troquim_bot.conversation.ConversationStatus;
@@ -36,11 +39,18 @@ class ConversationApplicationServiceTest {
     @BeforeEach
     void setUp() {
         conversationRepository = new InMemoryConversationRepository();
+        IntentEngine intentEngine = new IntentEngine() {
+            @Override
+            public IntentResult classify(String message) {
+                return new IntentResult(IntentType.UNKNOWN);
+            }
+        };
         conversationApplicationService = new ConversationApplicationService(
             new ConversationRegistry(conversationRepository),
             new ConversationOrchestrator(
                 (numero, mensagem) -> "resposta",
-                new IgnoringWhatsAppAdapter()
+                new IgnoringWhatsAppAdapter(),
+                intentEngine
             ),
             new ConversationInputMapper()
         );

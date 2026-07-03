@@ -1,5 +1,8 @@
 package com.troquim_bot.application.conversation;
 
+import com.troquim_bot.application.intent.IntentEngine;
+import com.troquim_bot.application.intent.IntentResult;
+import com.troquim_bot.application.intent.IntentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -17,22 +20,37 @@ public class ConversationOrchestrator {
 
     private final ConversationMessageProcessor conversationMessageProcessor;
     private final WhatsAppAdapter whatsAppAdapter;
+    private final IntentEngine intentEngine;
     private final Set<String> mensagensProcessadas = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<String, ReentrantLock> locksPorNumero = new ConcurrentHashMap<>();
 
     public ConversationOrchestrator(ConversationMessageProcessor conversationMessageProcessor,
-                                    WhatsAppAdapter whatsAppAdapter) {
+                                    WhatsAppAdapter whatsAppAdapter,
+                                    IntentEngine intentEngine) {
         if (conversationMessageProcessor == null) {
             throw new IllegalArgumentException("ConversationMessageProcessor e obrigatorio");
         }
         if (whatsAppAdapter == null) {
             throw new IllegalArgumentException("WhatsAppAdapter e obrigatorio");
         }
+        if (intentEngine == null) {
+            throw new IllegalArgumentException("IntentEngine e obrigatorio");
+        }
         this.conversationMessageProcessor = conversationMessageProcessor;
         this.whatsAppAdapter = whatsAppAdapter;
+        this.intentEngine = intentEngine;
     }
 
     public String processarMensagem(String numero, String mensagem) {
+        IntentResult intentResult = intentEngine.classify(mensagem);
+        IntentType intentType = intentResult.type();
+
+        // TODO MVP: Substituir decisao temporaria por IntentRouter + IntentHandlers
+        if (intentType == IntentType.GREETING) {
+            return "Ola! Como posso ajudar voce hoje?";
+        }
+
+        // BOOK_APPOINTMENT, UNKNOWN e todas as outras intenções vao para o fluxo atual
         return conversationMessageProcessor.gerarResposta(numero, mensagem);
     }
 

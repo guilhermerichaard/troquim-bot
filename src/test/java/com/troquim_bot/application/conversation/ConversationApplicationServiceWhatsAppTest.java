@@ -1,5 +1,8 @@
 package com.troquim_bot.application.conversation;
 
+import com.troquim_bot.application.intent.IntentEngine;
+import com.troquim_bot.application.intent.IntentResult;
+import com.troquim_bot.application.intent.IntentType;
 import com.troquim_bot.repository.InMemoryConversationRepository;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +24,13 @@ class ConversationApplicationServiceWhatsAppTest {
             ))
         );
         TestConversationMessageProcessor messageProcessor = new TestConversationMessageProcessor("Ola");
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter);
+        IntentEngine intentEngine = new IntentEngine() {
+            @Override
+            public IntentResult classify(String message) {
+                return new IntentResult(IntentType.UNKNOWN);
+            }
+        };
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,
@@ -41,7 +50,13 @@ class ConversationApplicationServiceWhatsAppTest {
     void deveIgnorarWebhookSemMensagemRecebida() throws Exception {
         RecordingWhatsAppAdapter whatsAppAdapter = new RecordingWhatsAppAdapter(Optional.empty());
         TestConversationMessageProcessor messageProcessor = new TestConversationMessageProcessor("Ola");
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter);
+        IntentEngine intentEngine = new IntentEngine() {
+            @Override
+            public IntentResult classify(String message) {
+                return new IntentResult(IntentType.UNKNOWN);
+            }
+        };
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,
@@ -65,7 +80,13 @@ class ConversationApplicationServiceWhatsAppTest {
             ))
         );
         TestConversationMessageProcessor messageProcessor = new TestConversationMessageProcessor("Ola");
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter);
+        IntentEngine intentEngine = new IntentEngine() {
+            @Override
+            public IntentResult classify(String message) {
+                return new IntentResult(IntentType.UNKNOWN);
+            }
+        };
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,
@@ -83,7 +104,13 @@ class ConversationApplicationServiceWhatsAppTest {
     void deveDelegarProcessamentoDiretoParaOrchestrator() {
         RecordingWhatsAppAdapter whatsAppAdapter = new RecordingWhatsAppAdapter(Optional.empty());
         TestConversationMessageProcessor messageProcessor = new TestConversationMessageProcessor("Ola");
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter);
+        IntentEngine intentEngine = new IntentEngine() {
+            @Override
+            public IntentResult classify(String message) {
+                return new IntentResult(IntentType.UNKNOWN);
+            }
+        };
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,
