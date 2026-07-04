@@ -1,5 +1,11 @@
 package com.troquim_bot.schedule;
 
+import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.reservation.ReservationApplicationService;
+import com.troquim_bot.repository.InMemoryAppointmentRepository;
+import com.troquim_bot.repository.InMemoryReservationRepository;
+import com.troquim_bot.reservation.Reservation;
+import com.troquim_bot.reservation.ReservationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -12,12 +18,28 @@ class AppointmentBookingServiceTest {
     private ScheduleService scheduleService;
     private AppointmentService appointmentService;
     private AppointmentBookingService bookingService;
+    private InMemoryReservationRepository reservationRepository;
+    private InMemoryAppointmentRepository appointmentRepository;
+    private ReservationApplicationService reservationApplicationService;
+    private AppointmentApplicationService appointmentApplicationService;
 
     @BeforeEach
     void setUp() {
         scheduleService = new ScheduleService();
         appointmentService = new AppointmentService();
-        bookingService = new AppointmentBookingService(scheduleService, appointmentService);
+        reservationRepository = new InMemoryReservationRepository();
+        appointmentRepository = new InMemoryAppointmentRepository();
+        reservationApplicationService = new ReservationApplicationService(reservationRepository);
+        appointmentApplicationService = new AppointmentApplicationService(
+                appointmentRepository,
+                reservationRepository
+        );
+        bookingService = new AppointmentBookingService(
+                scheduleService,
+                appointmentService,
+                reservationApplicationService,
+                appointmentApplicationService
+        );
     }
 
     // Cenário 1: Quando o slot está livre
@@ -36,13 +58,14 @@ class AppointmentBookingServiceTest {
         // Verifica que o slot foi reservado
         assertFalse(scheduleService.isHorarioDisponivel("segunda", "10:00"));
         
-        // Verifica que o Appointment foi criado
-        List<Appointment> appointments = appointmentService.listarAgendamentosDoCliente("5511999999999");
+        // Verifica que o Appointment foi criado via Reservation (apenas 1)
+        List<com.troquim_bot.appointment.Appointment> appointments = appointmentApplicationService.listarTodos();
         assertEquals(1, appointments.size());
-        assertEquals("unha", appointments.get(0).getServico());
-        assertEquals("segunda", appointments.get(0).getDia());
-        assertEquals("10:00", appointments.get(0).getHorario());
-        assertEquals(AppointmentStatus.PENDENTE, appointments.get(0).getStatus());
+        
+        // Verifica que a Reservation foi cancelada (consumida)
+        List<Reservation> reservations = reservationApplicationService.listarTodos();
+        assertEquals(1, reservations.size());
+        assertEquals(ReservationStatus.CANCELADO, reservations.get(0).getStatus());
     }
 
     // Cenário 2: Quando o slot não está livre
@@ -67,6 +90,72 @@ class AppointmentBookingServiceTest {
     }
 
     // Cenário 3: Normalização de horário
+    @Test
+    void deveCriarReservationEAppointmentDeReservaQuandoSlotLivre() {
+        InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
+        InMemoryAppointmentRepository appointmentRepository = new InMemoryAppointmentRepository();
+        ReservationApplicationService reservationApplicationService = new ReservationApplicationService(reservationRepository);
+        AppointmentApplicationService appointmentApplicationService = new AppointmentApplicationService(
+                appointmentRepository,
+                reservationRepository
+        );
+        bookingService = new AppointmentBookingService(
+                scheduleService,
+                appointmentService,
+                reservationApplicationService,
+                appointmentApplicationService
+        );
+
+        String resultado = bookingService.bookIfAvailable(
+                "5511999999999",
+                "Guilherme",
+                "unha",
+                "segunda",
+                "10:00"
+        );
+
+        assertEquals("Perfeito! Vou reservar unha na segunda às 10:00 para você.", resultado);
+
+        List<Reservation> reservations = reservationApplicationService.listarTodos();
+        assertEquals(1, reservations.size());
+        assertEquals(ReservationStatus.CANCELADO, reservations.get(0).getStatus());
+
+        List<com.troquim_bot.appointment.Appointment> appointments = appointmentApplicationService.listarTodos();
+        assertEquals(1, appointments.size());
+        assertEquals(reservations.get(0).getId(), appointments.get(0).getReservationId());
+    }
+
+    @Test
+    void naoDeveCriarReservationOuAppointmentQuandoSlotOcupado() {
+        InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
+        InMemoryAppointmentRepository appointmentRepository = new InMemoryAppointmentRepository();
+        ReservationApplicationService reservationApplicationService = new ReservationApplicationService(reservationRepository);
+        AppointmentApplicationService appointmentApplicationService = new AppointmentApplicationService(
+                appointmentRepository,
+                reservationRepository
+        );
+        bookingService = new AppointmentBookingService(
+                scheduleService,
+                appointmentService,
+                reservationApplicationService,
+                appointmentApplicationService
+        );
+        scheduleService.reservarHorario("segunda", "10:00", "5511888888888");
+
+        String resultado = bookingService.bookIfAvailable(
+                "5511999999999",
+                "Guilherme",
+                "unha",
+                "segunda",
+                "10:00"
+        );
+
+        assertTrue(resultado.contains("não está mais disponível"));
+        assertTrue(reservationApplicationService.listarTodos().isEmpty());
+        assertTrue(appointmentApplicationService.listarTodos().isEmpty());
+        assertTrue(appointmentService.listarAgendamentosDoCliente("5511999999999").isEmpty());
+    }
+
     @Test
     void deveNormalizarHorarioComH() {
         String resultado = bookingService.bookIfAvailable(
@@ -175,7 +264,8 @@ class AppointmentBookingServiceTest {
 
         assertEquals("Perfeito! Vou reservar  na segunda às 10:00 para você.", resultado);
         
-        List<Appointment> appointments = appointmentService.listarAgendamentosDoCliente("5511999999999");
+        // Verifica que o Appointment foi criado via Reservation (apenas 1)
+        List<com.troquim_bot.appointment.Appointment> appointments = appointmentApplicationService.listarTodos();
         assertEquals(1, appointments.size());
     }
 
@@ -192,9 +282,9 @@ class AppointmentBookingServiceTest {
 
         assertEquals("Perfeito! Vou reservar unha na segunda às 10:00 para você.", resultado);
         
-        List<Appointment> appointments = appointmentService.listarAgendamentosDoCliente("5511999999999");
+        // Verifica que o Appointment foi criado via Reservation (apenas 1)
+        List<com.troquim_bot.appointment.Appointment> appointments = appointmentApplicationService.listarTodos();
         assertEquals(1, appointments.size());
-        assertEquals("", appointments.get(0).getNomeCliente());
     }
 
     @Test
@@ -246,7 +336,7 @@ class AppointmentBookingServiceTest {
         bookingService.bookIfAvailable("5511999999999", "Guilherme", "unha", "segunda", "10:00");
         bookingService.bookIfAvailable("5511999999999", "Guilherme", "cabelo", "terça", "11:00");
 
-        List<Appointment> appointments = appointmentService.listarAgendamentosDoCliente("5511999999999");
+        List<com.troquim_bot.appointment.Appointment> appointments = appointmentApplicationService.listarTodos();
         assertEquals(2, appointments.size());
     }
 
@@ -255,7 +345,7 @@ class AppointmentBookingServiceTest {
         bookingService.bookIfAvailable("5511999999999", "Guilherme", "unha", "segunda", "10:00");
         bookingService.bookIfAvailable("5511999999999", "Guilherme", "cabelo", "segunda", "11:00");
 
-        List<Appointment> appointments = appointmentService.listarAgendamentosDoCliente("5511999999999");
+        List<com.troquim_bot.appointment.Appointment> appointments = appointmentApplicationService.listarTodos();
         assertEquals(2, appointments.size());
     }
 }

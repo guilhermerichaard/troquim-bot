@@ -75,7 +75,14 @@ public class ConversationService {
         }
 
         customerProfile = sincronizarNome(numero, nomeInformado, conversationState, customerProfile);
-        registrarAgendamentoConcluido(numero, conversationState, tinhaDraftCompleto);
+        Optional<String> respostaAgendamento = registrarAgendamentoConcluido(
+                numero,
+                conversationState,
+                tinhaDraftCompleto
+        );
+        if (respostaAgendamento.isPresent()) {
+            return responderComMemoria(numero, mensagem, respostaAgendamento.get());
+        }
 
         Optional<String> respostaIntencao = executarIntencao(
                 route,
@@ -216,21 +223,43 @@ public class ConversationService {
         return customerProfile;
     }
 
-    private void registrarAgendamentoConcluido(String numero,
-                                               ConversationState conversationState,
-                                               boolean tinhaDraftCompleto) {
+    private Optional<String> registrarAgendamentoConcluido(String numero,
+                                                           ConversationState conversationState,
+                                                           boolean tinhaDraftCompleto) {
         AppointmentDraft draft = conversationState.getDraftAtual();
         if (tinhaDraftCompleto || draft == null || !draft.isCompleto()) {
-            return;
+            return Optional.empty();
         }
 
-        appointmentBookingService.bookIfAvailable(
+        String resultado = appointmentBookingService.bookIfAvailable(
                 numero,
                 draft.getNome(),
                 draft.getServico(),
                 draft.getDia(),
                 draft.getHorario()
         );
+
+        if (isHorarioDisponivel(resultado)) {
+            return Optional.of("Perfeito, " + draft.getNome()
+                    + ". Seu horário para " + draft.getServico()
+                    + " na " + draft.getDia()
+                    + " às " + draft.getHorario()
+                    + " foi reservado.");
+        }
+
+        if (isHorarioIndisponivel(resultado)) {
+            return Optional.of("Esse horário não está disponível. Quer tentar outro horário?");
+        }
+
+        return Optional.of(resultado);
+    }
+
+    private boolean isHorarioDisponivel(String resultado) {
+        return resultado != null && resultado.contains("Perfeito! Vou reservar");
+    }
+
+    private boolean isHorarioIndisponivel(String resultado) {
+        return resultado != null && normalizar(resultado).contains("nao esta mais disponivel");
     }
 
     private boolean draftAtualCompleto(ConversationState conversationState) {
