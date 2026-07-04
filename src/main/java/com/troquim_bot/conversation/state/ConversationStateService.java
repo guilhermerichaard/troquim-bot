@@ -303,7 +303,8 @@ public class ConversationStateService {
         return switch (intentType) {
             case LEMBRAR_CLIENTE, SAUDACAO, AGRADECIMENTO, DESPEDIDA, HUMANO, ORCAMENTO,
                     CONSULTAR_AGENDAMENTO, CONSULTAR_DIA_AGENDADO, CONSULTAR_HORARIO_AGENDADO,
-                    CONSULTAR_SERVICO_AGENDADO, CONSULTAR_NOME, CONSULTAR_SERVICOS -> true;
+                    CONSULTAR_SERVICO_AGENDADO, CONSULTAR_NOME, CONSULTAR_SERVICOS,
+                    CONSULTAR_HORARIOS, CONSULTAR_ENDERECO, CONSULTAR_QUEM_SOU -> true;
             case AGENDAMENTO, NOVO_AGENDAMENTO, DESCONHECIDO -> false;
         };
     }
@@ -424,7 +425,8 @@ public class ConversationStateService {
         String texto = mensagem.trim();
         String normalizado = normalizar(texto);
 
-        if (contem(normalizado, "qual meu nome", "voce sabe meu nome", "sabe meu nome")) {
+        if (contem(normalizado, "qual meu nome", "voce sabe meu nome", "sabe meu nome",
+                   "meu nome e qual", "qual e meu nome", "e qual meu nome")) {
             return Optional.empty();
         }
 
@@ -583,7 +585,7 @@ public class ConversationStateService {
                 + ". Recebi sua solicitação para " + valorOuNaoInformado(draft.getServico())
                 + " na " + valorOuNaoInformado(draft.getDia())
                 + " às " + valorOuNaoInformado(draft.getHorario())
-                + ". Vou verificar a disponibilidade e retorno com a confirmação.";
+                + ". Estou registrando sua solicitação.";
     }
 
     private String montarRespostaPosAgendamento(ConversationState state, String mensagem) {
@@ -594,10 +596,10 @@ public class ConversationStateService {
         if (contem(texto, "qual dia", "que dia", "quando agendei", "qual data", "que data", 
                    "que horario", "qual horario", "que horas")) {
             if (draft != null) {
-                return "Você agendou " + valorOuNaoInformado(draft.getServico())
+                return "Você solicitou " + valorOuNaoInformado(draft.getServico())
                         + " na " + valorOuNaoInformado(draft.getDia())
                         + " às " + valorOuNaoInformado(draft.getHorario())
-                        + ". Vou verificar a disponibilidade e retorno com a confirmação.";
+                        + ". Estou registrando sua solicitação.";
             }
             return "Você ainda não tem um agendamento ativo. Qual serviço você gostaria de agendar?";
         }
@@ -631,7 +633,7 @@ public class ConversationStateService {
                 return "Ainda não foi confirmado. Recebi sua solicitação para " + valorOuNaoInformado(draft.getServico())
                         + " na " + valorOuNaoInformado(draft.getDia())
                         + " às " + valorOuNaoInformado(draft.getHorario())
-                        + " e vou verificar a disponibilidade.";
+                        + " e estou registrando.";
             }
             return "Você ainda não tem um agendamento ativo. Qual serviço você gostaria de agendar?";
         }
@@ -650,7 +652,7 @@ public class ConversationStateService {
                     + ". Recebi sua solicitação para " + valorOuNaoInformado(draft.getServico())
                     + " na " + valorOuNaoInformado(draft.getDia())
                     + " às " + valorOuNaoInformado(draft.getHorario())
-                    + ". Vou verificar a disponibilidade e retorno com a confirmação.";
+                    + ". Estou registrando sua solicitação.";
         }
         
         return "Perfeito. Recebi sua solicitação e vou verificar a disponibilidade.";

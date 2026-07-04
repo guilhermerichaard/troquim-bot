@@ -27,8 +27,17 @@ public class RuleBasedIntentEngine implements IntentEngine {
         if (hasAny(text, "atendente", "humano", "pessoa")) {
             return result(IntentType.HUMAN_ATTENDANT);
         }
-        if (hasAny(text, "servicos", "precos", "valor")) {
+        if (hasAny(text, "servicos", "precos", "valor", "quais servicos", "que servicos", "o que voce faz", "o que faz", "o que voce oferece", "quais os servicos")) {
             return result(IntentType.ASK_SERVICES);
+        }
+        if (hasAny(text, "horario de funcionamento", "horario comercial", "que horas abre", "que horas fecha", "horario de atendimento", "funciona que horas", "horarios")) {
+            return result(IntentType.ASK_HOURS);
+        }
+        if (hasAny(text, "onde fica", "endereco", "localizacao", "como chegar", "qual o endereco")) {
+            return result(IntentType.ASK_LOCATION);
+        }
+        if (hasAny(text, "quem e voce", "quem e vc", "voce e quem", "o que e troquim", "o que e o troquim")) {
+            return result(IntentType.ASK_WHO_ARE_YOU);
         }
         if (hasAny(text, "agendar", "marcar horario", "agendar horario", "marcar um horario", "quero agendar", "quero marcar horario", "preciso agendar")) {
             return result(IntentType.BOOK_APPOINTMENT);

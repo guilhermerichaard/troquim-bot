@@ -2,6 +2,7 @@ package com.troquim_bot.repository;
 
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
+import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 
 import java.time.LocalDate;
@@ -57,6 +58,16 @@ public class InMemoryAppointmentRepository implements AppointmentRepository {
         }
         return appointments.values().stream()
             .filter(a -> professionalId.equals(a.getProfessionalId()) && date.equals(a.getDate()))
+            .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Appointment> findByCustomerId(CustomerId customerId) {
+        if (customerId == null) {
+            return List.of();
+        }
+        return appointments.values().stream()
+            .filter(a -> customerId.equals(a.getCustomerId()))
             .collect(Collectors.toList());
     }
 

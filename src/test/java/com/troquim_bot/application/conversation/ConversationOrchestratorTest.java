@@ -6,6 +6,10 @@ import com.troquim_bot.application.intent.IntentType;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -121,6 +125,48 @@ class ConversationOrchestratorTest {
         assertEquals(1, messageProcessor.quantidadeProcessada);
         assertEquals("5511999999999", messageProcessor.numeroRecebido);
         assertEquals("xyz", messageProcessor.mensagemRecebida);
+    }
+
+    @Test
+    void deveProcessarApenasUmaVezCom10ChamadasSimultaneasMesmoMessageId() throws Exception {
+        RecordingWhatsAppAdapter whatsAppAdapter = new RecordingWhatsAppAdapter(
+            Optional.of(new WhatsAppAdapter.IncomingMessage(
+                "message-duplicate",
+                "5511999999999@s.whatsapp.net",
+                "5511999999999",
+                "Oi"
+            ))
+        );
+        RecordingMessageProcessor messageProcessor = new RecordingMessageProcessor("Ola");
+        IntentEngine intentEngine = new IntentEngine() {
+            @Override
+            public IntentResult classify(String message) {
+                return new IntentResult(IntentType.UNKNOWN);
+            }
+        };
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
+
+        int numeroThreads = 10;
+        ExecutorService executor = Executors.newFixedThreadPool(numeroThreads);
+        CountDownLatch latch = new CountDownLatch(numeroThreads);
+
+        for (int i = 0; i < numeroThreads; i++) {
+            executor.submit(() -> {
+                try {
+                    orchestrator.receberWebhookWhatsApp("payload");
+                } catch (Exception e) {
+                    // Ignore exceptions for this test
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        latch.await(5, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        assertEquals(1, messageProcessor.quantidadeProcessada, "Apenas 1 processamento deve ocorrer");
+        assertEquals(1, whatsAppAdapter.quantidadeEnviada, "Apenas 1 envio deve ocorrer");
     }
 
     private static class RecordingWhatsAppAdapter implements WhatsAppAdapter {

@@ -8,18 +8,21 @@ import com.troquim_bot.ai.memory.ConversationMessage;
 import com.troquim_bot.ai.prompt.PromptService;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
+import com.troquim_bot.conversation.state.ConversationStep;
 import com.troquim_bot.conversation.state.AppointmentDraft;
+import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerProfile;
 import com.troquim_bot.customer.CustomerProfileService;
-import com.troquim_bot.schedule.Appointment;
+import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.schedule.AppointmentBookingService;
-import com.troquim_bot.schedule.AppointmentService;
+import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class ConversationService {
@@ -32,7 +35,7 @@ public class ConversationService {
     private final OllamaService ollamaService;
     private final PromptService promptService;
     private final CustomerProfileService customerProfileService;
-    private final AppointmentService appointmentService;
+    private final AppointmentApplicationService appointmentApplicationService;
     private final AppointmentBookingService appointmentBookingService;
 
     public ConversationService(IntentService intentService,
@@ -43,7 +46,7 @@ public class ConversationService {
                                OllamaService ollamaService,
                                PromptService promptService,
                                CustomerProfileService customerProfileService,
-                               AppointmentService appointmentService,
+                               AppointmentApplicationService appointmentApplicationService,
                                AppointmentBookingService appointmentBookingService) {
         this.intentService = intentService;
         this.quickResponseService = quickResponseService;
@@ -53,7 +56,7 @@ public class ConversationService {
         this.ollamaService = ollamaService;
         this.promptService = promptService;
         this.customerProfileService = customerProfileService;
-        this.appointmentService = appointmentService;
+        this.appointmentApplicationService = appointmentApplicationService;
         this.appointmentBookingService = appointmentBookingService;
     }
 
@@ -172,13 +175,20 @@ public class ConversationService {
     }
 
     private Optional<String> responderConsultaAgendamento(String numero,
-                                                         IntentType intentType,
-                                                         String mensagem) {
+                                                          IntentType intentType,
+                                                          String mensagem) {
         if (!isConsultaAgendamento(intentType, mensagem)) {
             return Optional.empty();
         }
 
-        return Optional.of(appointmentService.buscarUltimoAgendamentoPorTelefone(numero)
+        // Busca appointments do customer usando o novo serviço
+        CustomerId customerId = CustomerId.from(UUID.nameUUIDFromBytes(numero.getBytes()));
+        
+        Optional<Appointment> appointment = appointmentApplicationService.listarAtivos().stream()
+                .filter(a -> a.getCustomerId().equals(customerId))
+                .findFirst();
+        
+        return Optional.of(appointment
                 .map(this::montarResumoAgendamento)
                 .orElse("Você ainda não tem uma solicitação de agendamento registrada."));
     }
@@ -248,7 +258,9 @@ public class ConversationService {
         }
 
         if (isHorarioIndisponivel(resultado)) {
-            return Optional.of("Esse horário não está disponível. Quer tentar outro horário?");
+            draft.setHorario(null);
+            conversationState.setStep(ConversationStep.AGUARDANDO_HORARIO);
+            return Optional.of("Esse horário não está disponível. Qual outro horário você prefere?");
         }
 
         return Optional.of(resultado);
@@ -286,9 +298,9 @@ public class ConversationService {
     }
 
     private String montarResumoAgendamento(Appointment appointment) {
-        return "Sua solicitação para " + appointment.getServico()
-                + " na " + appointment.getDia()
-                + " às " + appointment.getHorario()
+        return "Sua solicitação para " + appointment.getServiceId()
+                + " na " + appointment.getDate()
+                + " às " + appointment.getStartTime()
                 + " está com status " + appointment.getStatus() + ".";
     }
 

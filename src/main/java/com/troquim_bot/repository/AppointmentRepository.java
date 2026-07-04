@@ -2,6 +2,7 @@ package com.troquim_bot.repository;
 
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
+import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 
 import java.time.LocalDate;
@@ -23,6 +24,8 @@ public interface AppointmentRepository {
     List<Appointment> findAll();
 
     List<Appointment> findByProfessionalIdAndDate(ProfessionalId professionalId, LocalDate date);
+
+    List<Appointment> findByCustomerId(CustomerId customerId);
 
     void delete(AppointmentId id);
 }

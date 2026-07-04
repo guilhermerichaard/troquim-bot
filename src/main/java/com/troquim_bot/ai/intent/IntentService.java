@@ -55,8 +55,21 @@ public class IntentService {
         }
 
         if (contem(texto, "quais servicos", "que servicos", "o que voces fazem",
-                "procedimentos", "servicos disponiveis")) {
+                "procedimentos", "servicos disponiveis", "o que voce faz", "o que faz", "o que voce oferece", "quais os servicos")) {
             return IntentType.CONSULTAR_SERVICOS;
+        }
+
+        if (contem(texto, "horario de funcionamento", "horario comercial", "que horas abre", "que horas fecha",
+                "horario de atendimento", "funciona que horas", "horarios", "horario")) {
+            return IntentType.CONSULTAR_HORARIOS;
+        }
+
+        if (contem(texto, "onde fica", "endereco", "localizacao", "como chegar", "qual o endereco")) {
+            return IntentType.CONSULTAR_ENDERECO;
+        }
+
+        if (contem(texto, "quem e voce", "quem e vc", "voce e quem", "o que e troquim", "o que e o troquim")) {
+            return IntentType.CONSULTAR_QUEM_SOU;
         }
 
         if (contem(texto, "obrigado", "obrigada", "agradeco", "valeu")) {
