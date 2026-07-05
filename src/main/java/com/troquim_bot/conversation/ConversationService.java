@@ -72,7 +72,12 @@ public class ConversationService {
         String nomePreferido = customerProfileService.nomePreferido(customerProfile).orElse(null);
         ConversationState conversationState = conversationStateService.buscarPorNumero(numero, nomePreferido);
         Optional<String> nomeInformado = conversationStateService.extrairNomeInformado(mensagem);
-        ConversationRoute route = rotearMensagem(conversationState, mensagem, intentType);
+        ConversationRoute route = ConversationRoute.rotear(
+                conversationStateService,
+                conversationState,
+                mensagem,
+                intentType
+        );
         boolean tinhaDraftCompleto = draftAtualCompleto(conversationState);
 
         if (route.continuaFluxo()) {
@@ -115,13 +120,6 @@ public class ConversationService {
         }
 
         return customerProfileService.buscarOuCriar(numero);
-    }
-
-    private ConversationRoute rotearMensagem(ConversationState conversationState,
-                                             String mensagem,
-                                             IntentType intentType) {
-        boolean continuaFluxo = conversationStateService.deveContinuarFluxo(conversationState, mensagem, intentType);
-        return new ConversationRoute(intentType, continuaFluxo);
     }
 
     private Optional<String> executarIntencao(ConversationRoute route,
@@ -513,6 +511,4 @@ public class ConversationService {
         return semAcentos.toLowerCase(Locale.ROOT);
     }
 
-    private record ConversationRoute(IntentType intentType, boolean continuaFluxo) {
-    }
 }
