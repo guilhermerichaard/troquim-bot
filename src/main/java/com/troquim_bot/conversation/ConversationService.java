@@ -18,9 +18,9 @@ import com.troquim_bot.schedule.AppointmentBookingService;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import org.springframework.stereotype.Service;
 
-import java.text.Normalizer;
+import com.troquim_bot.conversation.language.ConversationTextUtils;
+
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -204,13 +204,13 @@ public class ConversationService {
     }
 
     private Optional<String> responderConsultaDisponibilidade(String mensagem, ConversationState conversationState) {
-        String texto = normalizar(mensagem);
+        String texto = ConversationTextUtils.normalizar(mensagem);
         
         // Detecta se é uma consulta de disponibilidade (tem dia mas não é pergunta sobre horário de funcionamento)
-        boolean temDia = contem(texto, "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo", "hoje", "amanha");
-        boolean perguntaHorario = contem(texto, "horario de funcionamento", "horario comercial", "que horas abre", 
+        boolean temDia = ConversationTextUtils.contem(texto, "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo", "hoje", "amanha");
+        boolean perguntaHorario = ConversationTextUtils.contem(texto, "horario de funcionamento", "horario comercial", "que horas abre", 
                                          "que horas fecha", "horario de atendimento", "funciona que horas");
-        boolean perguntaDisponibilidade = contem(texto, "disponivel", "disponibilidade", "tem vaga", "tem horario", 
+        boolean perguntaDisponibilidade = ConversationTextUtils.contem(texto, "disponivel", "disponibilidade", "tem vaga", "tem horario", 
                                                   "quais dias", "horarios disponivel", "horario disponivel");
         
         if (!temDia || perguntaHorario) {
@@ -220,11 +220,11 @@ public class ConversationService {
         // Tenta extrair serviço da mensagem atual primeiro, depois do draft
         String servico = extrairServico(texto);
         AppointmentDraft draft = conversationState.getDraftAtual();
-        if (estaVazio(servico) && draft != null) {
+        if (ConversationTextUtils.estaVazio(servico) && draft != null) {
             servico = draft.getServico();
         }
         
-        if (estaVazio(servico)) {
+        if (ConversationTextUtils.estaVazio(servico)) {
             return Optional.of("Qual serviço você gostaria de agendar?");
         }
 
@@ -245,15 +245,15 @@ public class ConversationService {
     }
 
     private String extrairDia(String texto) {
-        if (contem(texto, "segunda")) return "segunda";
-        if (contem(texto, "terca", "terça")) return "terça";
-        if (contem(texto, "quarta")) return "quarta";
-        if (contem(texto, "quinta")) return "quinta";
-        if (contem(texto, "sexta")) return "sexta";
-        if (contem(texto, "sabado", "sábado")) return "sábado";
-        if (contem(texto, "domingo")) return "domingo";
-        if (contem(texto, "hoje")) return "hoje";
-        if (contem(texto, "amanha", "amanhã")) return "amanhã";
+        if (ConversationTextUtils.contem(texto, "segunda")) return "segunda";
+        if (ConversationTextUtils.contem(texto, "terca", "terça")) return "terça";
+        if (ConversationTextUtils.contem(texto, "quarta")) return "quarta";
+        if (ConversationTextUtils.contem(texto, "quinta")) return "quinta";
+        if (ConversationTextUtils.contem(texto, "sexta")) return "sexta";
+        if (ConversationTextUtils.contem(texto, "sabado", "sábado")) return "sábado";
+        if (ConversationTextUtils.contem(texto, "domingo")) return "domingo";
+        if (ConversationTextUtils.contem(texto, "hoje")) return "hoje";
+        if (ConversationTextUtils.contem(texto, "amanha", "amanhã")) return "amanhã";
         return null;
     }
 
@@ -335,7 +335,7 @@ public class ConversationService {
     }
 
     private boolean isHorarioIndisponivel(String resultado) {
-        return resultado != null && normalizar(resultado).contains("nao esta mais disponivel");
+        return resultado != null && ConversationTextUtils.normalizar(resultado).contains("nao esta mais disponivel");
     }
 
     private boolean draftAtualCompleto(ConversationState conversationState) {
@@ -380,8 +380,8 @@ public class ConversationService {
             return true;
         }
 
-        String texto = normalizar(mensagem);
-        return contem(texto, "agendei", "marquei", "qual meu agendamento", "meu agendamento", "qual agendamento",
+        String texto = ConversationTextUtils.normalizar(mensagem);
+        return ConversationTextUtils.contem(texto, "agendei", "marquei", "qual meu agendamento", "meu agendamento", "qual agendamento",
                 "qual horario", "que horario", "qual servico", "que servico",
                 "marquei para quando", "agendei para quando");
     }
@@ -399,7 +399,7 @@ public class ConversationService {
     }
 
     private boolean isConfirmacaoCurta(String mensagem) {
-        String texto = normalizar(mensagem);
+        String texto = ConversationTextUtils.normalizar(mensagem);
         if (texto.length() > 20) {
             return false;
         }
@@ -435,23 +435,7 @@ public class ConversationService {
         return resposta;
     }
 
-    private boolean contem(String texto, String... termos) {
-        for (String termo : termos) {
-            if (texto.contains(normalizar(termo))) {
-                return true;
-            }
-        }
 
-        return false;
-    }
-
-    private boolean contemPalavra(String texto, String termo) {
-        return texto.contains(" " + termo + " ") || texto.startsWith(termo + " ") || texto.endsWith(" " + termo) || texto.equals(termo);
-    }
-
-    private boolean estaVazio(String valor) {
-        return valor == null || valor.isBlank();
-    }
 
     private String formatarHorario(String horario) {
         // Formata "09:00" para "9h"
@@ -492,23 +476,16 @@ public class ConversationService {
     }
 
     private String extrairServico(String texto) {
-        if (contem(texto, "pe e mao", "pé e mão")) return "pé e mão";
-        if (contem(texto, "manicure")) return "manicure";
-        if (contem(texto, "pedicure")) return "pedicure";
-        if (contem(texto, "unha", "mao", "mão")) return "unha";
-        if (contemPalavra(texto, "pe")) return "pé";
-        if (contem(texto, "cabelo", "corte", "escova", "progressiva")) return "cabelo";
-        if (contem(texto, "sobrancelha")) return "sobrancelha";
-        if (contem(texto, "cilios", "cílios")) return "cílios";
-        if (contem(texto, "maquiagem")) return "maquiagem";
+        if (ConversationTextUtils.contem(texto, "pe e mao", "pé e mão")) return "pé e mão";
+        if (ConversationTextUtils.contem(texto, "manicure")) return "manicure";
+        if (ConversationTextUtils.contem(texto, "pedicure")) return "pedicure";
+        if (ConversationTextUtils.contem(texto, "unha", "mao", "mão")) return "unha";
+        if (ConversationTextUtils.contemPalavra(texto, "pe")) return "pé";
+        if (ConversationTextUtils.contem(texto, "cabelo", "corte", "escova", "progressiva")) return "cabelo";
+        if (ConversationTextUtils.contem(texto, "sobrancelha")) return "sobrancelha";
+        if (ConversationTextUtils.contem(texto, "cilios", "cílios")) return "cílios";
+        if (ConversationTextUtils.contem(texto, "maquiagem")) return "maquiagem";
         return null;
-    }
-
-    private String normalizar(String texto) {
-        String semAcentos = Normalizer.normalize(texto, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "");
-
-        return semAcentos.toLowerCase(Locale.ROOT);
     }
 
 }
