@@ -1,5 +1,6 @@
 package com.troquim_bot.application.conversation;
 
+import com.troquim_bot.application.conversation.engine.ContextStep;
 import com.troquim_bot.application.conversation.engine.ConversationPipeline;
 import com.troquim_bot.application.conversation.engine.DefaultEntityExtractor;
 import com.troquim_bot.application.conversation.engine.EntityExtractionStep;
@@ -44,6 +45,7 @@ public class ConversationOrchestrator {
         this.conversationPipeline = new ConversationPipeline(List.of(
             new IntentDetectionStep(intentEngine),
             new EntityExtractionStep(new DefaultEntityExtractor()),
+            new ContextStep(),
             new GreetingResponseStep(new ResponseBuilder()),
             new LegacyConversationProcessorStep(conversationMessageProcessor)
         ));
