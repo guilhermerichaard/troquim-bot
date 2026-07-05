@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -65,6 +66,12 @@ public class AppointmentBookingService {
         return scheduleService.isHorarioDisponivel(day, time);
     }
 
+    public List<String> listarHorariosDisponiveis(String day) {
+        return scheduleService.listarHorariosDisponiveis(day).stream()
+                .map(ScheduleSlot::getHorario)
+                .toList();
+    }
+
     public String bookIfAvailable(String customerNumber, String customerName, String service, String day, String time) {
         String horarioNormalizado = normalizarHorario(time);
 
@@ -93,7 +100,7 @@ public class AppointmentBookingService {
         LocalTime endTime = startTime.plusHours(1);
 
         Reservation reservation = reservationApplicationService.criarReserva(
-                CustomerId.from(stableUuid("customer:" + valorSeguro(customerNumber))),
+                CustomerId.fromPhone(customerNumber),
                 DEFAULT_PROFESSIONAL_ID,
                 ServiceId.from(stableUuid("service:" + valorSeguro(service))),
                 AvailabilityId.from(stableUuid("availability:" + normalizarTexto(day) + ":" + normalizedTime)),

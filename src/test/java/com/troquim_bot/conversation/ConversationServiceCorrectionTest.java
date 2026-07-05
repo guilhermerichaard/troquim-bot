@@ -1,82 +1,229 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.ai.config.AiConfiguration;
+import com.troquim_bot.ai.intent.IntentService;
+import com.troquim_bot.ai.llm.OllamaService;
+import com.troquim_bot.ai.memory.ConversationMemory;
+import com.troquim_bot.ai.prompt.PromptService;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.availability.AvailabilityApplicationService;
+import com.troquim_bot.application.reservation.ReservationApplicationService;
+import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.customer.CustomerProfileService;
+import com.troquim_bot.repository.InMemoryAppointmentRepository;
+import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.schedule.AppointmentBookingService;
 import com.troquim_bot.schedule.AppointmentService;
-import org.junit.jupiter.api.BeforeEach;
+import com.troquim_bot.schedule.ScheduleService;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ConversationServiceCorrectionTest {
 
-    private ConversationService conversationService;
-    private AppointmentApplicationService appointmentApplicationService;
-    private CustomerProfileService customerProfileService;
-    private AppointmentBookingService appointmentBookingService;
+    @Test
+    void agendaDepoisQualMeuAgendamentoRetornaAppointmentReal() {
+        Fixture fixture = criarFixtureComNome("5511000000001");
 
-    @BeforeEach
-    void setUp() {
-        appointmentApplicationService = mock(AppointmentApplicationService.class);
-        customerProfileService = mock(CustomerProfileService.class);
-        appointmentBookingService = mock(AppointmentBookingService.class);
-        
-        conversationService = new ConversationService(
-                mock(com.troquim_bot.ai.intent.IntentService.class),
-                mock(QuickResponseService.class),
-                mock(ContextService.class),
-                mock(com.troquim_bot.conversation.state.ConversationStateService.class),
-                mock(com.troquim_bot.ai.memory.ConversationMemory.class),
-                mock(com.troquim_bot.ai.llm.OllamaService.class),
-                mock(com.troquim_bot.ai.prompt.PromptService.class),
+        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, "13h");
+
+        assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
+        assertEquals("Você tem um agendamento para unha na segunda às 13h.",
+                fixture.conversationService.gerarResposta(fixture.numero, "qual meu agendamento"));
+    }
+
+    @Test
+    void agendeiRetornaAppointmentReal() {
+        Fixture fixture = criarFixtureComNome("5511000000002");
+
+        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, "13h");
+
+        assertEquals("Você tem um agendamento para unha na segunda às 13h.",
+                fixture.conversationService.gerarResposta(fixture.numero, "agendei?"));
+    }
+
+    @Test
+    void podeVerificarSeAgendeiServicoRetornaAppointmentReal() {
+        Fixture fixture = criarFixtureComNome("5511000000003");
+
+        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, "13h");
+
+        assertEquals("Você tem um agendamento para unha na segunda às 13h.",
+                fixture.conversationService.gerarResposta(fixture.numero, "pode verificar se eu agendei unha?"));
+    }
+
+    @Test
+    void queroAgendarUnhaDepoisDiaEHorarioJuntosCriaBookingReal() {
+        Fixture fixture = criarFixtureComNome("5511000000004");
+
+        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "segunda às 13");
+
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+        assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
+    }
+
+    @Test
+    void segundaUnhaAs13CriaBookingReal() {
+        Fixture fixture = criarFixtureComNome("5511000000005");
+
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "segunda unha às 13");
+
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+        assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
+    }
+
+    @Test
+    void unhaSegundaAs13CriaBookingReal() {
+        Fixture fixture = criarFixtureComNome("5511000000006");
+
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "unha segunda às 13");
+
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+        assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
+    }
+
+    @Test
+    void nomeJaSalvoNaoPerguntaNomeNovamente() {
+        Fixture fixture = criarFixtureComNome("5511000000007");
+
+        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "segunda às 13");
+
+        assertFalse(resposta.contains("Como você prefere que eu te chame?"));
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+    }
+
+    @Test
+    void dadosCompletosNaoRetornamTextoAntigoDeDisponibilidade() {
+        Fixture fixture = criarFixtureComNome("5511000000008");
+
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "agendar unha segunda às 13");
+
+        assertFalse(resposta.toLowerCase().contains("vou verificar"));
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+    }
+
+    @Test
+    void faqContinuaFuncionando() {
+        Fixture fixture = criarFixtureSemNome("5511000000009");
+
+        assertEquals("Estamos na Rua Augusta, 1500, Consolação, São Paulo.",
+                fixture.conversationService.gerarResposta(fixture.numero, "qual o endereço?"));
+    }
+
+    @Test
+    void fallbackContinuaFuncionando() {
+        Fixture fixture = criarFixtureSemNome("5511000000010");
+
+        assertEquals("Resposta de fallback.",
+                fixture.conversationService.gerarResposta(fixture.numero, "minha cadeira é azul"));
+    }
+
+    @Test
+    void quemSouEuRetornaNomeSalvo() {
+        Fixture fixture = criarFixtureComNome("5511000000011");
+
+        assertEquals("Seu nome está salvo como Guilherme.",
+                fixture.conversationService.gerarResposta(fixture.numero, "Quem sou eu?"));
+    }
+
+    @Test
+    void ataRetornaConfirmacaoCurta() {
+        Fixture fixture = criarFixtureSemNome("5511000000012");
+
+        assertEquals("Certo.", fixture.conversationService.gerarResposta(fixture.numero, "Ata"));
+    }
+
+    @Test
+    void temHorarioParaServicoEDiaConsultaDisponibilidadeReal() {
+        Fixture fixture = criarFixtureSemNome("5511000000013");
+
+        assertEquals("Tenho horários para unha na segunda: 9h, 10h, 11h, 12h, 13h, 14h, 15h, 16h e 17h.",
+                fixture.conversationService.gerarResposta(fixture.numero, "Tem horário para unha segunda?"));
+    }
+
+    @Test
+    void agendarSabado17HorasBloqueiaForaDoExpediente() {
+        Fixture fixture = criarFixtureComNome("5511000000014");
+
+        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "Agendar sábado 17 horas");
+
+        assertEquals("Esse horário não está disponível. Qual outro horário você prefere?", resposta);
+        assertEquals(0, fixture.appointmentApplicationService.listarTodos().size());
+    }
+
+    private Fixture criarFixtureComNome(String numero) {
+        Fixture fixture = criarFixtureSemNome(numero);
+        fixture.customerProfileService.salvarNome(numero, "Guilherme");
+        return fixture;
+    }
+
+    private Fixture criarFixtureSemNome(String numero) {
+        CustomerProfileService customerProfileService = new CustomerProfileService();
+        AppointmentService appointmentService = new AppointmentService();
+        ScheduleService scheduleService = new ScheduleService();
+        InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
+        InMemoryAppointmentRepository appointmentRepository = new InMemoryAppointmentRepository();
+        ReservationApplicationService reservationApplicationService =
+                new ReservationApplicationService(reservationRepository);
+        AppointmentApplicationService appointmentApplicationService = new AppointmentApplicationService(
+                appointmentRepository,
+                reservationRepository
+        );
+        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(
+                new com.troquim_bot.repository.InMemoryAvailabilityRepository(),
+                scheduleService
+        );
+        ConversationService conversationService = new ConversationService(
+                new IntentService(),
+                new QuickResponseService(),
+                new ContextService(),
+                new ConversationStateService(),
+                new ConversationMemory(),
+                new StubOllamaService(),
+                new PromptService(),
                 customerProfileService,
                 appointmentApplicationService,
-                appointmentBookingService
+                new AppointmentBookingService(
+                        scheduleService,
+                        appointmentService,
+                        reservationApplicationService,
+                        appointmentApplicationService
+                ),
+                availabilityApplicationService
+        );
+
+        return new Fixture(
+                numero,
+                conversationService,
+                customerProfileService,
+                appointmentApplicationService
         );
     }
 
-    @Test
-    void deveConsultarAgendamentoRetornandoAppointmentReal() {
-        // Teste para verificar que consulta de agendamento usa o novo serviço
-        // Este teste valida a integração com AppointmentApplicationService
-        assertTrue(true, "Consulta de agendamento deve usar AppointmentApplicationService");
+    private record Fixture(String numero,
+                           ConversationService conversationService,
+                           CustomerProfileService customerProfileService,
+                           AppointmentApplicationService appointmentApplicationService) {
     }
 
-    @Test
-    void naoDeveSalvarQualComoNome() {
-        // Teste para "meu nome é qual" não salvar "qual" como nome
-        // Este teste valida a correção na extração de nome
-        assertTrue(true, "Não deve salvar 'qual' como nome");
-    }
+    private static class StubOllamaService extends OllamaService {
+        StubOllamaService() {
+            super(new AiConfiguration());
+        }
 
-    @Test
-    void naoDeveSalvarQualComoNomeEmVariacao() {
-        // Teste para "qual meu nome" não salvar "qual" como nome
-        assertTrue(true, "Não deve salvar 'qual' como nome em variações");
-    }
-
-    @Test
-    void deveRetornarTextoAntigoQuandoDadosCompletos() {
-        // Teste para garantir que quando dados completos estão presentes,
-        // não retorna o texto antigo "vou verificar e retorno"
-        // Em vez disso, deve tentar booking real
-        assertTrue(true, "Fluxo completo deve usar real booking, não texto antigo");
-    }
-
-    @Test
-    void deveManterFAQFuncionando() {
-        // Teste para garantir que FAQ continua funcionando após as correções
-        assertTrue(true, "FAQ deve continuar funcionando");
-    }
-
-    @Test
-    void deveManterFallbackFuncionando() {
-        // Teste para garantir que fallback continua funcionando após as correções
-        assertTrue(true, "Fallback deve continuar funcionando");
+        @Override
+        public String responder(String mensagem) {
+            return "Resposta de fallback.";
+        }
     }
 }

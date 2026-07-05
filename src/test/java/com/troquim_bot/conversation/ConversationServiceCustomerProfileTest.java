@@ -6,6 +6,7 @@ import com.troquim_bot.ai.llm.OllamaService;
 import com.troquim_bot.ai.memory.ConversationMemory;
 import com.troquim_bot.ai.prompt.PromptService;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.conversation.state.AppointmentDraft;
 import com.troquim_bot.conversation.state.ConversationState;
@@ -79,6 +80,7 @@ class ConversationServiceCustomerProfileTest {
                 customerProfileService,
                 appointmentService,
                 conversationStateService,
+                appointmentApplicationService,
                 new AppointmentBookingService(
                         scheduleService,
                         appointmentService,
@@ -123,6 +125,7 @@ class ConversationServiceCustomerProfileTest {
                 customerProfileService,
                 appointmentService,
                 conversationStateService,
+                appointmentApplicationService,
                 new AppointmentBookingService(
                         scheduleService,
                         appointmentService,
@@ -170,6 +173,7 @@ class ConversationServiceCustomerProfileTest {
                 customerProfileService,
                 appointmentService,
                 conversationStateService,
+                appointmentApplicationService,
                 new AppointmentBookingService(
                         scheduleService,
                         appointmentService,
@@ -232,7 +236,7 @@ class ConversationServiceCustomerProfileTest {
         assertEquals("Boa tarde, Guilherme! Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
         assertEquals("Seu nome está salvo como Guilherme.", conversationService.gerarResposta(numero, "Qual meu nome?"));
         assertEquals("Lembro sim, Guilherme. Como posso ajudar?", conversationService.gerarResposta(numero, "Lembra de mim?"));
-        assertEquals("Você ainda não tem uma solicitação de agendamento registrada.",
+        assertEquals("Você tem um agendamento para unha na segunda às 15h.",
                 conversationService.gerarResposta(numero, "Agendou mesmo?"));
     }
 
@@ -250,13 +254,13 @@ class ConversationServiceCustomerProfileTest {
         conversationService.gerarResposta(numero, "15h");
 
         assertEquals(0, appointmentService.listarAgendamentosDoCliente(numero).size());
-        assertEquals("Você ainda não tem uma solicitação de agendamento registrada.",
+        assertEquals("Você tem um agendamento para unha na terça às 15h.",
                 conversationService.gerarResposta(numero, "qual meu agendamento?"));
-        assertEquals("Você ainda não tem uma solicitação de agendamento registrada.",
+        assertEquals("Você tem um agendamento para unha na terça às 15h.",
                 conversationService.gerarResposta(numero, "qual horário?"));
-        assertEquals("Você ainda não tem uma solicitação de agendamento registrada.",
+        assertEquals("Você tem um agendamento para unha na terça às 15h.",
                 conversationService.gerarResposta(numero, "qual serviço?"));
-        assertEquals("Você ainda não tem uma solicitação de agendamento registrada.",
+        assertEquals("Você tem um agendamento para unha na terça às 15h.",
                 conversationService.gerarResposta(numero, "marquei para quando?"));
     }
 
@@ -273,6 +277,8 @@ class ConversationServiceCustomerProfileTest {
         return criarConversationService(
                 customerProfileService,
                 appointmentService,
+                new ConversationStateService(),
+                appointmentApplicationService,
                 new AppointmentBookingService(
                         scheduleService,
                         appointmentService,
@@ -285,10 +291,18 @@ class ConversationServiceCustomerProfileTest {
     private ConversationService criarConversationService(CustomerProfileService customerProfileService,
                                                         AppointmentService appointmentService,
                                                         AppointmentBookingService appointmentBookingService) {
+        InMemoryAppointmentRepository appointmentRepository = new InMemoryAppointmentRepository();
+        InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
+        AppointmentApplicationService appointmentApplicationService = new AppointmentApplicationService(
+                appointmentRepository,
+                reservationRepository
+        );
+
         return criarConversationService(
                 customerProfileService,
                 appointmentService,
                 new ConversationStateService(),
+                appointmentApplicationService,
                 appointmentBookingService
         );
     }
@@ -296,14 +310,13 @@ class ConversationServiceCustomerProfileTest {
     private ConversationService criarConversationService(CustomerProfileService customerProfileService,
                                                         AppointmentService appointmentService,
                                                         ConversationStateService conversationStateService,
+                                                        AppointmentApplicationService appointmentApplicationService,
                                                         AppointmentBookingService appointmentBookingService) {
-        InMemoryAppointmentRepository appointmentRepository = new InMemoryAppointmentRepository();
-        InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
-        AppointmentApplicationService appointmentApplicationService = new AppointmentApplicationService(
-                appointmentRepository,
-                reservationRepository
+        ScheduleService scheduleService = new ScheduleService();
+        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(
+                new com.troquim_bot.repository.InMemoryAvailabilityRepository(),
+                scheduleService
         );
-        
         return new ConversationService(
                 new IntentService(),
                 new QuickResponseService(),
@@ -314,7 +327,8 @@ class ConversationServiceCustomerProfileTest {
                 new PromptService(),
                 customerProfileService,
                 appointmentApplicationService,
-                appointmentBookingService
+                appointmentBookingService,
+                availabilityApplicationService
         );
     }
 }

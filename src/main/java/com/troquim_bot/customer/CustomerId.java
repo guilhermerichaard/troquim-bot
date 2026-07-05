@@ -1,5 +1,6 @@
 package com.troquim_bot.customer;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -23,6 +24,14 @@ public class CustomerId {
 
     public static CustomerId generate() {
         return new CustomerId(UUID.randomUUID());
+    }
+
+    public static CustomerId fromPhone(String phone) {
+        return new CustomerId(UUID.nameUUIDFromBytes(("customer:" + safeValue(phone)).getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static String safeValue(String value) {
+        return value == null ? "" : value;
     }
 
     public UUID getValue() {

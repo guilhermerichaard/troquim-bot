@@ -22,7 +22,6 @@ import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.UUID;
 
 @Service
 public class ConversationService {
@@ -37,6 +36,7 @@ public class ConversationService {
     private final CustomerProfileService customerProfileService;
     private final AppointmentApplicationService appointmentApplicationService;
     private final AppointmentBookingService appointmentBookingService;
+    private final com.troquim_bot.application.availability.AvailabilityApplicationService availabilityApplicationService;
 
     public ConversationService(IntentService intentService,
                                QuickResponseService quickResponseService,
@@ -47,7 +47,8 @@ public class ConversationService {
                                PromptService promptService,
                                CustomerProfileService customerProfileService,
                                AppointmentApplicationService appointmentApplicationService,
-                               AppointmentBookingService appointmentBookingService) {
+                               AppointmentBookingService appointmentBookingService,
+                               com.troquim_bot.application.availability.AvailabilityApplicationService availabilityApplicationService) {
         this.intentService = intentService;
         this.quickResponseService = quickResponseService;
         this.contextService = contextService;
@@ -58,6 +59,7 @@ public class ConversationService {
         this.customerProfileService = customerProfileService;
         this.appointmentApplicationService = appointmentApplicationService;
         this.appointmentBookingService = appointmentBookingService;
+        this.availabilityApplicationService = availabilityApplicationService;
     }
 
     public String gerarResposta(String numero, String mensagem) {
@@ -123,17 +125,23 @@ public class ConversationService {
     }
 
     private Optional<String> executarIntencao(ConversationRoute route,
-                                             String numero,
-                                             String mensagem,
-                                             ConversationState conversationState,
-                                             CustomerProfile customerProfile,
-                                             Optional<String> nomeInformado) {
+                                              String numero,
+                                              String mensagem,
+                                              ConversationState conversationState,
+                                              CustomerProfile customerProfile,
+                                              Optional<String> nomeInformado) {
         IntentType intentType = route.intentType();
         
         // Verifica consulta de agendamento ANTES de retornar respostas rápidas
-        Optional<String> respostaAgendamento = responderConsultaAgendamento(numero, intentType, mensagem);
+        Optional<String> respostaAgendamento = responderConsultaAgendamento(numero, intentType, mensagem, conversationState);
         if (respostaAgendamento.isPresent()) {
             return respostaAgendamento;
+        }
+
+        // Verifica consulta de disponibilidade ANTES de retornar respostas rápidas de horário de funcionamento
+        Optional<String> respostaDisponibilidade = responderConsultaDisponibilidade(mensagem, conversationState);
+        if (respostaDisponibilidade.isPresent()) {
+            return respostaDisponibilidade;
         }
 
         Optional<String> respostaRapida = quickResponseService.buscarResposta(intentType);
@@ -144,6 +152,11 @@ public class ConversationService {
             }
 
             return respostaRapida;
+        }
+
+        // Verifica se é uma confirmação curta (como "ata", "certo", "beleza", etc.)
+        if (intentType == IntentType.DESCONHECIDO && isConfirmacaoCurta(mensagem)) {
+            return Optional.of("Certo.");
         }
 
         if (intentType == IntentType.LEMBRAR_CLIENTE) {
@@ -176,21 +189,74 @@ public class ConversationService {
 
     private Optional<String> responderConsultaAgendamento(String numero,
                                                           IntentType intentType,
-                                                          String mensagem) {
+                                                          String mensagem,
+                                                          ConversationState conversationState) {
         if (!isConsultaAgendamento(intentType, mensagem)) {
             return Optional.empty();
         }
 
         // Busca appointments do customer usando o novo serviço
-        CustomerId customerId = CustomerId.from(UUID.nameUUIDFromBytes(numero.getBytes()));
+        CustomerId customerId = CustomerId.fromPhone(numero);
         
-        Optional<Appointment> appointment = appointmentApplicationService.listarAtivos().stream()
-                .filter(a -> a.getCustomerId().equals(customerId))
-                .findFirst();
+        Optional<Appointment> appointment = appointmentApplicationService.buscarAtivoPorCliente(customerId);
         
         return Optional.of(appointment
-                .map(this::montarResumoAgendamento)
+                .map(a -> montarResumoAgendamento(a, conversationState))
                 .orElse("Você ainda não tem uma solicitação de agendamento registrada."));
+    }
+
+    private Optional<String> responderConsultaDisponibilidade(String mensagem, ConversationState conversationState) {
+        String texto = normalizar(mensagem);
+        
+        // Detecta se é uma consulta de disponibilidade (tem dia mas não é pergunta sobre horário de funcionamento)
+        boolean temDia = contem(texto, "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo", "hoje", "amanha");
+        boolean perguntaHorario = contem(texto, "horario de funcionamento", "horario comercial", "que horas abre", 
+                                         "que horas fecha", "horario de atendimento", "funciona que horas");
+        boolean perguntaDisponibilidade = contem(texto, "disponivel", "disponibilidade", "tem vaga", "tem horario", 
+                                                  "quais dias", "horarios disponivel", "horario disponivel");
+        
+        if (!temDia || perguntaHorario) {
+            return Optional.empty();
+        }
+
+        // Tenta extrair serviço da mensagem atual primeiro, depois do draft
+        String servico = extrairServico(texto);
+        AppointmentDraft draft = conversationState.getDraftAtual();
+        if (estaVazio(servico) && draft != null) {
+            servico = draft.getServico();
+        }
+        
+        if (estaVazio(servico)) {
+            return Optional.of("Qual serviço você gostaria de agendar?");
+        }
+
+        // Se tem serviço e dia, lista horários disponíveis reais
+        String dia = extrairDia(texto);
+        if (dia != null) {
+            List<String> horariosDisponiveis = availabilityApplicationService.consultarDisponibilidade(dia);
+            if (horariosDisponiveis.isEmpty()) {
+                return Optional.of("Não tenho horários disponíveis para " + servico + " na " + dia + ". Qual outro dia você prefere?");
+            }
+            String horarios = formatarListaHorarios(horariosDisponiveis.stream()
+                .map(this::formatarHorario)
+                .toList());
+            return Optional.of("Tenho horários para " + servico + " na " + dia + ": " + horarios + ".");
+        }
+
+        return Optional.empty();
+    }
+
+    private String extrairDia(String texto) {
+        if (contem(texto, "segunda")) return "segunda";
+        if (contem(texto, "terca", "terça")) return "terça";
+        if (contem(texto, "quarta")) return "quarta";
+        if (contem(texto, "quinta")) return "quinta";
+        if (contem(texto, "sexta")) return "sexta";
+        if (contem(texto, "sabado", "sábado")) return "sábado";
+        if (contem(texto, "domingo")) return "domingo";
+        if (contem(texto, "hoje")) return "hoje";
+        if (contem(texto, "amanha", "amanhã")) return "amanhã";
+        return null;
     }
 
     private Optional<String> executarFluxo(ConversationRoute route,
@@ -297,11 +363,15 @@ public class ConversationService {
                 .orElse("Ainda não tenho seu nome salvo. Como prefere que eu te chame?");
     }
 
-    private String montarResumoAgendamento(Appointment appointment) {
-        return "Sua solicitação para " + appointment.getServiceId()
-                + " na " + appointment.getDate()
-                + " às " + appointment.getStartTime()
-                + " está com status " + appointment.getStatus() + ".";
+    private String montarResumoAgendamento(Appointment appointment, ConversationState conversationState) {
+        AppointmentDraft draft = conversationState.getDraftAtual();
+        String servico = draft != null && draft.getServico() != null ? draft.getServico() : "serviço";
+        String dia = draft != null && draft.getDia() != null ? draft.getDia() : appointment.getDate().toString();
+        String horario = draft != null && draft.getHorario() != null ? draft.getHorario() : appointment.getStartTime().toString();
+        
+        return "Você tem um agendamento para " + servico
+                + " na " + dia
+                + " às " + horario + ".";
     }
 
     private boolean isConsultaAgendamento(IntentType intentType, String mensagem) {
@@ -313,7 +383,7 @@ public class ConversationService {
         }
 
         String texto = normalizar(mensagem);
-        return contem(texto, "agendei", "marquei", "qual meu agendamento", "qual agendamento",
+        return contem(texto, "agendei", "marquei", "qual meu agendamento", "meu agendamento", "qual agendamento",
                 "qual horario", "que horario", "qual servico", "que servico",
                 "marquei para quando", "agendei para quando");
     }
@@ -328,6 +398,17 @@ public class ConversationService {
         }
 
         return true;
+    }
+
+    private boolean isConfirmacaoCurta(String mensagem) {
+        String texto = normalizar(mensagem);
+        if (texto.length() > 20) {
+            return false;
+        }
+        return switch (texto) {
+            case "ata", "certo", "beleza", "perfeito", "ok", "ta", "tá" -> true;
+            default -> false;
+        };
     }
 
     private String gerarRespostaComOllama(String numero,
@@ -364,6 +445,65 @@ public class ConversationService {
         }
 
         return false;
+    }
+
+    private boolean contemPalavra(String texto, String termo) {
+        return texto.contains(" " + termo + " ") || texto.startsWith(termo + " ") || texto.endsWith(" " + termo) || texto.equals(termo);
+    }
+
+    private boolean estaVazio(String valor) {
+        return valor == null || valor.isBlank();
+    }
+
+    private String formatarHorario(String horario) {
+        // Formata "09:00" para "9h"
+        if (horario == null || horario.isBlank()) {
+            return horario;
+        }
+        String[] partes = horario.split(":");
+        if (partes.length == 2) {
+            int hora = Integer.parseInt(partes[0]);
+            return hora + "h";
+        }
+        return horario;
+    }
+
+    private String formatarListaHorarios(List<String> horarios) {
+        if (horarios == null || horarios.isEmpty()) {
+            return "";
+        }
+        if (horarios.size() == 1) {
+            return horarios.get(0);
+        }
+        if (horarios.size() == 2) {
+            return horarios.get(0) + " e " + horarios.get(1);
+        }
+        // Para 3 ou mais, junta todos com vírgula e adiciona "e" antes do último (sem vírgula antes do "e")
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < horarios.size(); i++) {
+            if (i > 0) {
+                if (i == horarios.size() - 1) {
+                    sb.append(" e ");
+                } else {
+                    sb.append(", ");
+                }
+            }
+            sb.append(horarios.get(i));
+        }
+        return sb.toString();
+    }
+
+    private String extrairServico(String texto) {
+        if (contem(texto, "pe e mao", "pé e mão")) return "pé e mão";
+        if (contem(texto, "manicure")) return "manicure";
+        if (contem(texto, "pedicure")) return "pedicure";
+        if (contem(texto, "unha", "mao", "mão")) return "unha";
+        if (contemPalavra(texto, "pe")) return "pé";
+        if (contem(texto, "cabelo", "corte", "escova", "progressiva")) return "cabelo";
+        if (contem(texto, "sobrancelha")) return "sobrancelha";
+        if (contem(texto, "cilios", "cílios")) return "cílios";
+        if (contem(texto, "maquiagem")) return "maquiagem";
+        return null;
     }
 
     private String normalizar(String texto) {

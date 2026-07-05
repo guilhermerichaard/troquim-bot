@@ -184,6 +184,19 @@ class ScheduleServiceTest {
         assertTrue(scheduleService.reservarHorario("quarta", "12:00", "5511999999999"));
         assertTrue(scheduleService.reservarHorario("quinta", "13:00", "5511999999999"));
         assertTrue(scheduleService.reservarHorario("sexta", "14:00", "5511999999999"));
-        assertTrue(scheduleService.reservarHorario("sábado", "15:00", "5511999999999"));
+        assertTrue(scheduleService.reservarHorario("sábado", "12:00", "5511999999999"));
+    }
+
+    @Test
+    void sabadoDeveFuncionarSomenteAte13h() {
+        List<ScheduleSlot> slots = scheduleService.listarHorarios("sábado");
+
+        assertEquals(4, slots.size());
+        assertEquals("09:00", slots.get(0).getHorario());
+        assertEquals("12:00", slots.get(3).getHorario());
+        assertTrue(scheduleService.isHorarioDisponivel("sábado", "12:00"));
+        assertFalse(scheduleService.isHorarioDisponivel("sábado", "13:00"));
+        assertFalse(scheduleService.isHorarioDisponivel("sábado", "17:00"));
+        assertFalse(scheduleService.reservarHorario("sábado", "17:00", "5511999999999"));
     }
 }

@@ -20,7 +20,7 @@ public class IntentService {
         }
 
         if (contem(texto, "agendei", "agendou", "o que agendei", "quais agendamentos", "meus agendamentos",
-                "qual meu agendamento", "qual agendamento", "agendamentos pendentes", "agendou mesmo")) {
+                "qual meu agendamento", "qual agendamento", "agendamentos pendentes", "agendou mesmo", "meu agendamento")) {
             return IntentType.CONSULTAR_AGENDAMENTO;
         }
 
@@ -46,7 +46,7 @@ public class IntentService {
             return IntentType.NOVO_AGENDAMENTO;
         }
 
-        if (contem(texto, "qual meu nome", "meu nome", "meu nome e", "sabe meu nome")) {
+        if (contem(texto, "qual meu nome", "meu nome", "meu nome e", "sabe meu nome", "quem sou eu")) {
             return IntentType.CONSULTAR_NOME;
         }
 

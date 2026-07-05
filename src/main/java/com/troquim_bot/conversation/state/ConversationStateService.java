@@ -675,7 +675,7 @@ public class ConversationStateService {
 
     private boolean mensagemNeutra(String texto) {
         return switch (texto) {
-            case "sim", "isso", "pode ser", "ok", "ta", "ta bom", "tá", "tá bom", "certo", "beleza", "perfeito" -> true;
+            case "sim", "isso", "pode ser", "ok", "ta", "ta bom", "tá", "tá bom", "certo", "beleza", "perfeito", "ata" -> true;
             default -> false;
         };
     }
@@ -700,6 +700,12 @@ public class ConversationStateService {
     }
 
     private boolean isPergunta(String texto) {
+        // Não tratar como pergunta se for consulta de disponibilidade com serviço/dia
+        if (contem(texto, "tem horario", "tem vaga", "disponivel", "disponibilidade")
+                && (contemServico(texto) || contemDia(texto))) {
+            return false;
+        }
+        
         return contem(texto, "?")
                 || contem(texto, "o que")
                 || contemPalavra(texto, "qual")

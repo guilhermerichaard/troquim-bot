@@ -7,6 +7,7 @@ import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AvailabilityRepository;
 import com.troquim_bot.repository.InMemoryAvailabilityRepository;
+import com.troquim_bot.schedule.ScheduleService;
 
 import java.time.LocalTime;
 import java.util.List;
@@ -27,19 +28,29 @@ import java.util.Optional;
 public class AvailabilityApplicationService {
 
     private final AvailabilityRepository availabilityRepository;
+    private final ScheduleService scheduleService;
 
     /**
      * Construtor para MVP com repositório em memória.
      */
     public AvailabilityApplicationService() {
-        this(new InMemoryAvailabilityRepository());
+        this(new InMemoryAvailabilityRepository(), new ScheduleService());
     }
 
     /**
      * Construtor com injeção de dependência (para testes ou futura implementação JPA).
      */
     public AvailabilityApplicationService(AvailabilityRepository availabilityRepository) {
+        this(availabilityRepository, new ScheduleService());
+    }
+
+    /**
+     * Construtor completo com injeção de dependência.
+     */
+    public AvailabilityApplicationService(AvailabilityRepository availabilityRepository,
+                                          ScheduleService scheduleService) {
         this.availabilityRepository = availabilityRepository;
+        this.scheduleService = scheduleService;
     }
 
     /**
@@ -221,6 +232,19 @@ public class AvailabilityApplicationService {
             return false;
         }
         return availabilityRepository.exists(id);
+    }
+
+    /**
+     * Consulta horários disponíveis para um determinado dia.
+     * Delega para o serviço de agendamento que gerencia a agenda real.
+     * 
+     * @param dia Nome do dia (segunda, terça, etc.) ou "hoje", "amanhã"
+     * @return Lista de horários disponíveis formatados como string
+     */
+    public List<String> consultarDisponibilidade(String dia) {
+        return scheduleService.listarHorariosDisponiveis(dia).stream()
+                .map(slot -> slot.getHorario())
+                .toList();
     }
 
     // ==================== MÉTODOS PRIVADOS ====================

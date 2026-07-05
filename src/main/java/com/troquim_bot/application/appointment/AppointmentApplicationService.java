@@ -16,6 +16,7 @@ import com.troquim_bot.service.ServiceId;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,6 +137,28 @@ public class AppointmentApplicationService {
         return appointmentRepository.findAll().stream()
             .filter(Appointment::isAtivo)
             .toList();
+    }
+
+    /**
+     * Lista agendamentos ativos de um cliente.
+     */
+    public List<Appointment> listarAtivosPorCliente(CustomerId customerId) {
+        if (customerId == null) {
+            return List.of();
+        }
+
+        return appointmentRepository.findByCustomerId(customerId).stream()
+            .filter(Appointment::isAtivo)
+            .sorted(Comparator.comparing(Appointment::getDate)
+                    .thenComparing(Appointment::getStartTime))
+            .toList();
+    }
+
+    /**
+     * Busca o proximo agendamento ativo de um cliente.
+     */
+    public Optional<Appointment> buscarAtivoPorCliente(CustomerId customerId) {
+        return listarAtivosPorCliente(customerId).stream().findFirst();
     }
 
     /**

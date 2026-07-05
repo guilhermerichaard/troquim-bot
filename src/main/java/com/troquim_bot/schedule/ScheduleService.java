@@ -19,11 +19,11 @@ public class ScheduleService {
     private void inicializarAgendaPadrao() {
         String[] dias = {"segunda", "terça", "quarta", "quinta", "sexta", "sábado"};
         LocalTime inicio = LocalTime.of(9, 0);
-        LocalTime fim = LocalTime.of(18, 0);
 
         for (String dia : dias) {
             ScheduleDay scheduleDay = new ScheduleDay(dia);
             LocalTime horarioAtual = inicio;
+            LocalTime fim = horarioFim(dia);
 
             while (horarioAtual.isBefore(fim)) {
                 String horarioFormatado = horarioAtual.toString().substring(0, 5);
@@ -34,6 +34,14 @@ public class ScheduleService {
 
             agenda.put(dia, scheduleDay);
         }
+    }
+
+    private LocalTime horarioFim(String dia) {
+        if ("sabado".equals(normalizar(dia))) {
+            return LocalTime.of(13, 0);
+        }
+
+        return LocalTime.of(18, 0);
     }
 
     public List<ScheduleSlot> listarHorarios(String dia) {
