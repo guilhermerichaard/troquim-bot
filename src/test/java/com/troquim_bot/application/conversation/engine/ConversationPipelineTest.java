@@ -41,6 +41,8 @@ class ConversationPipelineTest {
         return new ConversationPipeline(List.of(
             new IntentDetectionStep(intentEngine),
             new EntityExtractionStep(new DefaultEntityExtractor()),
+            new ContextStep(),
+            new FlowDispatcherStep(),
             new GreetingResponseStep(new ResponseBuilder()),
             new LegacyConversationProcessorStep(processor)
         ));

@@ -15,6 +15,8 @@ public class LegacyConversationProcessorStep implements ConversationPipelineStep
 
     @Override
     public void execute(ConversationEngineContext context) {
-        context.responder(conversationMessageProcessor.gerarResposta(context.numero(), context.mensagem()));
+        if (context.fluxo() == null || context.fluxo() == ConversationFlow.LEGACY) {
+            context.responder(conversationMessageProcessor.gerarResposta(context.numero(), context.mensagem()));
+        }
     }
 }

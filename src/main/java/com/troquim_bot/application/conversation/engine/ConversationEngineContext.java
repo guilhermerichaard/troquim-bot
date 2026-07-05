@@ -8,6 +8,7 @@ public class ConversationEngineContext {
     private final String mensagem;
     private IntentResult intentResult;
     private ExtractedEntities entities;
+    private ConversationFlow fluxo;
     private String resposta;
     private boolean finalizado;
 
@@ -39,6 +40,14 @@ public class ConversationEngineContext {
 
     public void definirEntities(ExtractedEntities entities) {
         this.entities = entities == null ? ExtractedEntities.empty() : entities;
+    }
+
+    public ConversationFlow fluxo() {
+        return fluxo;
+    }
+
+    public void definirFluxo(ConversationFlow fluxo) {
+        this.fluxo = fluxo;
     }
 
     public String resposta() {

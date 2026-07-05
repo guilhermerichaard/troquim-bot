@@ -1,7 +1,5 @@
 package com.troquim_bot.application.conversation.engine;
 
-import com.troquim_bot.application.intent.IntentType;
-
 public class GreetingResponseStep implements ConversationPipelineStep {
 
     private final ResponseBuilder responseBuilder;
@@ -15,7 +13,7 @@ public class GreetingResponseStep implements ConversationPipelineStep {
 
     @Override
     public void execute(ConversationEngineContext context) {
-        if (context.intentResult() != null && context.intentResult().type() == IntentType.GREETING) {
+        if (context.fluxo() == ConversationFlow.GREETING) {
             context.responder(responseBuilder.greeting());
         }
     }
