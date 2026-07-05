@@ -1,0 +1,572 @@
+diff --git a/src/main/java/com/troquim_bot/application/conversation/ConversationOrchestrator.java b/src/main/java/com/troquim_bot/application/conversation/ConversationOrchestrator.java
+index 392b1d5..0a9b4f7 100644
+--- a/src/main/java/com/troquim_bot/application/conversation/ConversationOrchestrator.java
++++ b/src/main/java/com/troquim_bot/application/conversation/ConversationOrchestrator.java
+@@ -1,13 +1,19 @@
+ package com.troquim_bot.application.conversation;
+ 
++import com.troquim_bot.application.conversation.engine.ConversationPipeline;
++import com.troquim_bot.application.conversation.engine.DefaultEntityExtractor;
++import com.troquim_bot.application.conversation.engine.EntityExtractionStep;
++import com.troquim_bot.application.conversation.engine.GreetingResponseStep;
++import com.troquim_bot.application.conversation.engine.IntentDetectionStep;
++import com.troquim_bot.application.conversation.engine.LegacyConversationProcessorStep;
++import com.troquim_bot.application.conversation.engine.ResponseBuilder;
+ import com.troquim_bot.application.intent.IntentEngine;
+-import com.troquim_bot.application.intent.IntentResult;
+-import com.troquim_bot.application.intent.IntentType;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ import org.springframework.stereotype.Service;
+ 
+ import java.time.LocalDateTime;
++import java.util.List;
+ import java.util.Optional;
+ import java.util.Set;
+ import java.util.concurrent.ConcurrentHashMap;
+@@ -18,9 +24,8 @@ public class ConversationOrchestrator {
+ 
+     private static final Logger logger = LoggerFactory.getLogger(ConversationOrchestrator.class);
+ 
+-    private final ConversationMessageProcessor conversationMessageProcessor;
++    private final ConversationPipeline conversationPipeline;
+     private final WhatsAppAdapter whatsAppAdapter;
+-    private final IntentEngine intentEngine;
+     private final Set<String> mensagensProcessadas = ConcurrentHashMap.newKeySet();
+     private final ConcurrentHashMap<String, ReentrantLock> locksPorNumero = new ConcurrentHashMap<>();
+ 
+@@ -36,22 +41,17 @@ public class ConversationOrchestrator {
+         if (intentEngine == null) {
+             throw new IllegalArgumentException("IntentEngine e obrigatorio");
+         }
+-        this.conversationMessageProcessor = conversationMessageProcessor;
++        this.conversationPipeline = new ConversationPipeline(List.of(
++            new IntentDetectionStep(intentEngine),
++            new EntityExtractionStep(new DefaultEntityExtractor()),
++            new GreetingResponseStep(new ResponseBuilder()),
++            new LegacyConversationProcessorStep(conversationMessageProcessor)
++        ));
+         this.whatsAppAdapter = whatsAppAdapter;
+-        this.intentEngine = intentEngine;
+     }
+ 
+     public String processarMensagem(String numero, String mensagem) {
+-        IntentResult intentResult = intentEngine.classify(mensagem);
+-        IntentType intentType = intentResult.type();
+-
+-        // TODO MVP: Substituir decisao temporaria por IntentRouter + IntentHandlers
+-        if (intentType == IntentType.GREETING) {
+-            return "Ola! Como posso ajudar voce hoje?";
+-        }
+-
+-        // BOOK_APPOINTMENT, UNKNOWN e todas as outras intenções vao para o fluxo atual
+-        return conversationMessageProcessor.gerarResposta(numero, mensagem);
++        return conversationPipeline.processar(numero, mensagem);
+     }
+ 
+     public void receberWebhookWhatsApp(String payload) throws Exception {
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/ConversationEngineContext.java b/src/main/java/com/troquim_bot/application/conversation/engine/ConversationEngineContext.java
+new file mode 100644
+index 0000000..13ab833
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/ConversationEngineContext.java
+@@ -0,0 +1,56 @@
++package com.troquim_bot.application.conversation.engine;
++
++import com.troquim_bot.application.intent.IntentResult;
++
++public class ConversationEngineContext {
++
++    private final String numero;
++    private final String mensagem;
++    private IntentResult intentResult;
++    private ExtractedEntities entities;
++    private String resposta;
++    private boolean finalizado;
++
++    public ConversationEngineContext(String numero, String mensagem) {
++        this.numero = numero;
++        this.mensagem = mensagem;
++        this.entities = ExtractedEntities.empty();
++    }
++
++    public String numero() {
++        return numero;
++    }
++
++    public String mensagem() {
++        return mensagem;
++    }
++
++    public IntentResult intentResult() {
++        return intentResult;
++    }
++
++    public void definirIntentResult(IntentResult intentResult) {
++        this.intentResult = intentResult;
++    }
++
++    public ExtractedEntities entities() {
++        return entities;
++    }
++
++    public void definirEntities(ExtractedEntities entities) {
++        this.entities = entities == null ? ExtractedEntities.empty() : entities;
++    }
++
++    public String resposta() {
++        return resposta;
++    }
++
++    public void responder(String resposta) {
++        this.resposta = resposta;
++        this.finalizado = true;
++    }
++
++    public boolean finalizado() {
++        return finalizado;
++    }
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/ConversationPipeline.java b/src/main/java/com/troquim_bot/application/conversation/engine/ConversationPipeline.java
+new file mode 100644
+index 0000000..7391186
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/ConversationPipeline.java
+@@ -0,0 +1,32 @@
++package com.troquim_bot.application.conversation.engine;
++
++import java.util.List;
++
++public class ConversationPipeline {
++
++    private final List<ConversationPipelineStep> steps;
++
++    public ConversationPipeline(List<ConversationPipelineStep> steps) {
++        if (steps == null || steps.isEmpty()) {
++            throw new IllegalArgumentException("ConversationPipeline precisa de ao menos um step");
++        }
++        this.steps = List.copyOf(steps);
++    }
++
++    public String processar(String numero, String mensagem) {
++        ConversationEngineContext context = new ConversationEngineContext(numero, mensagem);
++
++        for (ConversationPipelineStep step : steps) {
++            if (context.finalizado()) {
++                break;
++            }
++            step.execute(context);
++        }
++
++        if (context.resposta() == null || context.resposta().isBlank()) {
++            return "Não consegui entender sua mensagem. Pode me enviar novamente?";
++        }
++
++        return context.resposta();
++    }
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/ConversationPipelineStep.java b/src/main/java/com/troquim_bot/application/conversation/engine/ConversationPipelineStep.java
+new file mode 100644
+index 0000000..23b14a4
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/ConversationPipelineStep.java
+@@ -0,0 +1,5 @@
++package com.troquim_bot.application.conversation.engine;
++
++public interface ConversationPipelineStep {
++    void execute(ConversationEngineContext context);
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/DefaultEntityExtractor.java b/src/main/java/com/troquim_bot/application/conversation/engine/DefaultEntityExtractor.java
+new file mode 100644
+index 0000000..6de4e2c
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/DefaultEntityExtractor.java
+@@ -0,0 +1,103 @@
++package com.troquim_bot.application.conversation.engine;
++
++import java.text.Normalizer;
++import java.util.Locale;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++public class DefaultEntityExtractor implements EntityExtractor {
++
++    private static final Pattern TIME_PATTERN = Pattern.compile("\\b([01]?\\d|2[0-3])(?::([0-5]\\d))?\\s*h?\\b");
++    private static final Pattern NAME_PATTERN = Pattern.compile("(?:meu nome e|me chamo|sou o|sou a|sou)\\s+([a-zA-ZÀ-ÿ]{2,})");
++
++    @Override
++    public ExtractedEntities extract(String message) {
++        String normalized = normalize(message);
++        if (normalized.isBlank()) {
++            return ExtractedEntities.empty();
++        }
++
++        String service = extractService(normalized);
++        String day = extractDay(normalized);
++        String time = extractTime(normalized);
++        String customerName = extractName(normalized);
++
++        return new ExtractedEntities(service, day, time, customerName);
++    }
++
++    private String extractService(String text) {
++        if (containsAny(text, "unha", "manicure", "pedicure")) {
++            return "unha";
++        }
++        if (containsAny(text, "sobrancelha", "design")) {
++            return "sobrancelha";
++        }
++        if (containsAny(text, "cabelo", "corte", "escova", "progressiva")) {
++            return "cabelo";
++        }
++        return null;
++    }
++
++    private String extractDay(String text) {
++        String[] days = {"segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo", "hoje", "amanha"};
++        for (String day : days) {
++            if (hasTerm(text, day)) {
++                return day;
++            }
++        }
++        return null;
++    }
++
++    private String extractTime(String text) {
++        Matcher matcher = TIME_PATTERN.matcher(text);
++        if (!matcher.find()) {
++            return null;
++        }
++
++        int hour = Integer.parseInt(matcher.group(1));
++        String minute = matcher.group(2) == null ? "00" : matcher.group(2);
++        return String.format(Locale.ROOT, "%02d:%s", hour, minute);
++    }
++
++    private String extractName(String text) {
++        Matcher matcher = NAME_PATTERN.matcher(text);
++        if (!matcher.find()) {
++            return null;
++        }
++        return capitalize(matcher.group(1));
++    }
++
++    private boolean containsAny(String text, String... terms) {
++        for (String term : terms) {
++            if (hasTerm(text, term)) {
++                return true;
++            }
++        }
++        return false;
++    }
++
++    private boolean hasTerm(String text, String term) {
++        return (" " + text + " ").contains(" " + term + " ");
++    }
++
++    private String capitalize(String value) {
++        if (value == null || value.isBlank()) {
++            return value;
++        }
++        return value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1).toLowerCase(Locale.ROOT);
++    }
++
++    private String normalize(String message) {
++        if (message == null) {
++            return "";
++        }
++        String withoutAccents = Normalizer.normalize(message, Normalizer.Form.NFD)
++            .replaceAll("\\p{M}", "");
++
++        return withoutAccents
++            .toLowerCase(Locale.ROOT)
++            .replaceAll("[^a-z0-9:]+", " ")
++            .trim()
++            .replaceAll("\\s+", " ");
++    }
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/EntityExtractionStep.java b/src/main/java/com/troquim_bot/application/conversation/engine/EntityExtractionStep.java
+new file mode 100644
+index 0000000..41f5183
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/EntityExtractionStep.java
+@@ -0,0 +1,18 @@
++package com.troquim_bot.application.conversation.engine;
++
++public class EntityExtractionStep implements ConversationPipelineStep {
++
++    private final EntityExtractor entityExtractor;
++
++    public EntityExtractionStep(EntityExtractor entityExtractor) {
++        if (entityExtractor == null) {
++            throw new IllegalArgumentException("EntityExtractor e obrigatorio");
++        }
++        this.entityExtractor = entityExtractor;
++    }
++
++    @Override
++    public void execute(ConversationEngineContext context) {
++        context.definirEntities(entityExtractor.extract(context.mensagem()));
++    }
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/EntityExtractor.java b/src/main/java/com/troquim_bot/application/conversation/engine/EntityExtractor.java
+new file mode 100644
+index 0000000..e132d83
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/EntityExtractor.java
+@@ -0,0 +1,5 @@
++package com.troquim_bot.application.conversation.engine;
++
++public interface EntityExtractor {
++    ExtractedEntities extract(String message);
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/ExtractedEntities.java b/src/main/java/com/troquim_bot/application/conversation/engine/ExtractedEntities.java
+new file mode 100644
+index 0000000..6ee7d61
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/ExtractedEntities.java
+@@ -0,0 +1,34 @@
++package com.troquim_bot.application.conversation.engine;
++
++import java.util.Optional;
++
++public record ExtractedEntities(
++        String service,
++        String day,
++        String time,
++        String customerName
++) {
++    public static ExtractedEntities empty() {
++        return new ExtractedEntities(null, null, null, null);
++    }
++
++    public Optional<String> serviceOptional() {
++        return Optional.ofNullable(service).filter(value -> !value.isBlank());
++    }
++
++    public Optional<String> dayOptional() {
++        return Optional.ofNullable(day).filter(value -> !value.isBlank());
++    }
++
++    public Optional<String> timeOptional() {
++        return Optional.ofNullable(time).filter(value -> !value.isBlank());
++    }
++
++    public Optional<String> customerNameOptional() {
++        return Optional.ofNullable(customerName).filter(value -> !value.isBlank());
++    }
++
++    public boolean hasBookingData() {
++        return serviceOptional().isPresent() || dayOptional().isPresent() || timeOptional().isPresent();
++    }
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/GreetingResponseStep.java b/src/main/java/com/troquim_bot/application/conversation/engine/GreetingResponseStep.java
+new file mode 100644
+index 0000000..7cc3f95
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/GreetingResponseStep.java
+@@ -0,0 +1,22 @@
++package com.troquim_bot.application.conversation.engine;
++
++import com.troquim_bot.application.intent.IntentType;
++
++public class GreetingResponseStep implements ConversationPipelineStep {
++
++    private final ResponseBuilder responseBuilder;
++
++    public GreetingResponseStep(ResponseBuilder responseBuilder) {
++        if (responseBuilder == null) {
++            throw new IllegalArgumentException("ResponseBuilder e obrigatorio");
++        }
++        this.responseBuilder = responseBuilder;
++    }
++
++    @Override
++    public void execute(ConversationEngineContext context) {
++        if (context.intentResult() != null && context.intentResult().type() == IntentType.GREETING) {
++            context.responder(responseBuilder.greeting());
++        }
++    }
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/IntentDetectionStep.java b/src/main/java/com/troquim_bot/application/conversation/engine/IntentDetectionStep.java
+new file mode 100644
+index 0000000..1ed722b
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/IntentDetectionStep.java
+@@ -0,0 +1,20 @@
++package com.troquim_bot.application.conversation.engine;
++
++import com.troquim_bot.application.intent.IntentEngine;
++
++public class IntentDetectionStep implements ConversationPipelineStep {
++
++    private final IntentEngine intentEngine;
++
++    public IntentDetectionStep(IntentEngine intentEngine) {
++        if (intentEngine == null) {
++            throw new IllegalArgumentException("IntentEngine e obrigatorio");
++        }
++        this.intentEngine = intentEngine;
++    }
++
++    @Override
++    public void execute(ConversationEngineContext context) {
++        context.definirIntentResult(intentEngine.classify(context.mensagem()));
++    }
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/LegacyConversationProcessorStep.java b/src/main/java/com/troquim_bot/application/conversation/engine/LegacyConversationProcessorStep.java
+new file mode 100644
+index 0000000..c5a1fd9
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/LegacyConversationProcessorStep.java
+@@ -0,0 +1,20 @@
++package com.troquim_bot.application.conversation.engine;
++
++import com.troquim_bot.application.conversation.ConversationMessageProcessor;
++
++public class LegacyConversationProcessorStep implements ConversationPipelineStep {
++
++    private final ConversationMessageProcessor conversationMessageProcessor;
++
++    public LegacyConversationProcessorStep(ConversationMessageProcessor conversationMessageProcessor) {
++        if (conversationMessageProcessor == null) {
++            throw new IllegalArgumentException("ConversationMessageProcessor e obrigatorio");
++        }
++        this.conversationMessageProcessor = conversationMessageProcessor;
++    }
++
++    @Override
++    public void execute(ConversationEngineContext context) {
++        context.responder(conversationMessageProcessor.gerarResposta(context.numero(), context.mensagem()));
++    }
++}
+diff --git a/src/main/java/com/troquim_bot/application/conversation/engine/ResponseBuilder.java b/src/main/java/com/troquim_bot/application/conversation/engine/ResponseBuilder.java
+new file mode 100644
+index 0000000..3dd2d15
+--- /dev/null
++++ b/src/main/java/com/troquim_bot/application/conversation/engine/ResponseBuilder.java
+@@ -0,0 +1,8 @@
++package com.troquim_bot.application.conversation.engine;
++
++public class ResponseBuilder {
++
++    public String greeting() {
++        return "Ola! Como posso ajudar voce hoje?";
++    }
++}
+diff --git a/src/test/java/com/troquim_bot/application/conversation/engine/ConversationPipelineTest.java b/src/test/java/com/troquim_bot/application/conversation/engine/ConversationPipelineTest.java
+new file mode 100644
+index 0000000..10c2974
+--- /dev/null
++++ b/src/test/java/com/troquim_bot/application/conversation/engine/ConversationPipelineTest.java
+@@ -0,0 +1,67 @@
++package com.troquim_bot.application.conversation.engine;
++
++import com.troquim_bot.application.conversation.ConversationMessageProcessor;
++import com.troquim_bot.application.intent.IntentEngine;
++import com.troquim_bot.application.intent.IntentResult;
++import com.troquim_bot.application.intent.IntentType;
++import org.junit.jupiter.api.Test;
++
++import java.util.List;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++class ConversationPipelineTest {
++
++    @Test
++    void devePararNoStepDeSaudacaoSemChamarFluxoLegado() {
++        RecordingProcessor processor = new RecordingProcessor("legado");
++        ConversationPipeline pipeline = pipelineComIntent(IntentType.GREETING, processor);
++
++        String resposta = pipeline.processar("5511999999999", "Oi");
++
++        assertEquals("Ola! Como posso ajudar voce hoje?", resposta);
++        assertEquals(0, processor.calls);
++    }
++
++    @Test
++    void deveEncaminharMensagemNaoTratadaParaFluxoLegado() {
++        RecordingProcessor processor = new RecordingProcessor("Resposta do fluxo atual");
++        ConversationPipeline pipeline = pipelineComIntent(IntentType.BOOK_APPOINTMENT, processor);
++
++        String resposta = pipeline.processar("5511999999999", "Quero agendar unha segunda às 13");
++
++        assertEquals("Resposta do fluxo atual", resposta);
++        assertEquals(1, processor.calls);
++        assertEquals("5511999999999", processor.numeroRecebido);
++        assertEquals("Quero agendar unha segunda às 13", processor.mensagemRecebida);
++    }
++
++    private ConversationPipeline pipelineComIntent(IntentType intentType, ConversationMessageProcessor processor) {
++        IntentEngine intentEngine = message -> new IntentResult(intentType);
++        return new ConversationPipeline(List.of(
++            new IntentDetectionStep(intentEngine),
++            new EntityExtractionStep(new DefaultEntityExtractor()),
++            new GreetingResponseStep(new ResponseBuilder()),
++            new LegacyConversationProcessorStep(processor)
++        ));
++    }
++
++    private static class RecordingProcessor implements ConversationMessageProcessor {
++        private final String resposta;
++        private int calls;
++        private String numeroRecebido;
++        private String mensagemRecebida;
++
++        private RecordingProcessor(String resposta) {
++            this.resposta = resposta;
++        }
++
++        @Override
++        public String gerarResposta(String numero, String mensagem) {
++            calls++;
++            numeroRecebido = numero;
++            mensagemRecebida = mensagem;
++            return resposta;
++        }
++    }
++}
+diff --git a/src/test/java/com/troquim_bot/application/conversation/engine/DefaultEntityExtractorTest.java b/src/test/java/com/troquim_bot/application/conversation/engine/DefaultEntityExtractorTest.java
+new file mode 100644
+index 0000000..8b2ea8b
+--- /dev/null
++++ b/src/test/java/com/troquim_bot/application/conversation/engine/DefaultEntityExtractorTest.java
+@@ -0,0 +1,37 @@
++package com.troquim_bot.application.conversation.engine;
++
++import org.junit.jupiter.api.Test;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++class DefaultEntityExtractorTest {
++
++    private final DefaultEntityExtractor extractor = new DefaultEntityExtractor();
++
++    @Test
++    void deveExtrairServicoDiaEHorarioDaMensagemDeAgendamento() {
++        ExtractedEntities entities = extractor.extract("Quero unha segunda às 13");
++
++        assertEquals("unha", entities.service());
++        assertEquals("segunda", entities.day());
++        assertEquals("13:00", entities.time());
++        assertTrue(entities.hasBookingData());
++    }
++
++    @Test
++    void deveNormalizarHorarioComMinutos() {
++        ExtractedEntities entities = extractor.extract("sobrancelha sexta 16:30");
++
++        assertEquals("sobrancelha", entities.service());
++        assertEquals("sexta", entities.day());
++        assertEquals("16:30", entities.time());
++    }
++
++    @Test
++    void deveExtrairNomeInformado() {
++        ExtractedEntities entities = extractor.extract("meu nome é gui");
++
++        assertEquals("Gui", entities.customerName());
++    }
++}

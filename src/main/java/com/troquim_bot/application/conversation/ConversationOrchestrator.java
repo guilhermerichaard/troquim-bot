@@ -1,13 +1,19 @@
 package com.troquim_bot.application.conversation;
 
+import com.troquim_bot.application.conversation.engine.ConversationPipeline;
+import com.troquim_bot.application.conversation.engine.DefaultEntityExtractor;
+import com.troquim_bot.application.conversation.engine.EntityExtractionStep;
+import com.troquim_bot.application.conversation.engine.GreetingResponseStep;
+import com.troquim_bot.application.conversation.engine.IntentDetectionStep;
+import com.troquim_bot.application.conversation.engine.LegacyConversationProcessorStep;
+import com.troquim_bot.application.conversation.engine.ResponseBuilder;
 import com.troquim_bot.application.intent.IntentEngine;
-import com.troquim_bot.application.intent.IntentResult;
-import com.troquim_bot.application.intent.IntentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,9 +24,8 @@ public class ConversationOrchestrator {
 
     private static final Logger logger = LoggerFactory.getLogger(ConversationOrchestrator.class);
 
-    private final ConversationMessageProcessor conversationMessageProcessor;
+    private final ConversationPipeline conversationPipeline;
     private final WhatsAppAdapter whatsAppAdapter;
-    private final IntentEngine intentEngine;
     private final Set<String> mensagensProcessadas = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<String, ReentrantLock> locksPorNumero = new ConcurrentHashMap<>();
 
@@ -36,22 +41,17 @@ public class ConversationOrchestrator {
         if (intentEngine == null) {
             throw new IllegalArgumentException("IntentEngine e obrigatorio");
         }
-        this.conversationMessageProcessor = conversationMessageProcessor;
+        this.conversationPipeline = new ConversationPipeline(List.of(
+            new IntentDetectionStep(intentEngine),
+            new EntityExtractionStep(new DefaultEntityExtractor()),
+            new GreetingResponseStep(new ResponseBuilder()),
+            new LegacyConversationProcessorStep(conversationMessageProcessor)
+        ));
         this.whatsAppAdapter = whatsAppAdapter;
-        this.intentEngine = intentEngine;
     }
 
     public String processarMensagem(String numero, String mensagem) {
-        IntentResult intentResult = intentEngine.classify(mensagem);
-        IntentType intentType = intentResult.type();
-
-        // TODO MVP: Substituir decisao temporaria por IntentRouter + IntentHandlers
-        if (intentType == IntentType.GREETING) {
-            return "Ola! Como posso ajudar voce hoje?";
-        }
-
-        // BOOK_APPOINTMENT, UNKNOWN e todas as outras intenções vao para o fluxo atual
-        return conversationMessageProcessor.gerarResposta(numero, mensagem);
+        return conversationPipeline.processar(numero, mensagem);
     }
 
     public void receberWebhookWhatsApp(String payload) throws Exception {
