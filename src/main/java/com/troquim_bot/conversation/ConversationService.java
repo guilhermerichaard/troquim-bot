@@ -10,6 +10,7 @@ import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
 import com.troquim_bot.conversation.state.AppointmentDraft;
+import com.troquim_bot.conversation.context.ConversationContextResolver;
 import com.troquim_bot.customer.CustomerProfile;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.schedule.AppointmentBookingService;
@@ -37,6 +38,7 @@ public class ConversationService {
     private final AppointmentBookingService appointmentBookingService;
     private final com.troquim_bot.application.availability.AvailabilityApplicationService availabilityApplicationService;
     private final BookingQueryResponder bookingQueryResponder;
+    private final ConversationContextResolver conversationContextResolver;
 
     public ConversationService(IntentService intentService,
                                QuickResponseService quickResponseService,
@@ -64,6 +66,10 @@ public class ConversationService {
                 appointmentApplicationService,
                 availabilityApplicationService
         );
+        this.conversationContextResolver = new ConversationContextResolver(
+                conversationStateService,
+                customerProfileService
+        );
     }
 
     public String gerarResposta(String numero, String mensagem) {
@@ -72,7 +78,7 @@ public class ConversationService {
         }
 
         IntentType intentType = intentService.classificar(mensagem);
-        CustomerProfile customerProfile = carregarPerfil(numero, intentType);
+        CustomerProfile customerProfile = conversationContextResolver.carregarPerfil(numero, intentType);
         String nomePreferido = customerProfileService.nomePreferido(customerProfile).orElse(null);
         ConversationState conversationState = conversationStateService.buscarPorNumero(numero, nomePreferido);
         Optional<String> nomeInformado = conversationStateService.extrairNomeInformado(mensagem);
@@ -88,7 +94,7 @@ public class ConversationService {
             conversationState = conversationStateService.processarMensagem(numero, mensagem, nomePreferido);
         }
 
-        customerProfile = sincronizarNome(numero, nomeInformado, conversationState, customerProfile);
+        customerProfile = conversationContextResolver.sincronizarNome(numero, nomeInformado, conversationState, customerProfile);
         Optional<String> respostaAgendamento = registrarAgendamentoConcluido(
                 numero,
                 conversationState,
@@ -118,14 +124,6 @@ public class ConversationService {
         return gerarRespostaComOllama(numero, mensagem, intentType, conversationState, customerProfile);
     }
 
-    private CustomerProfile carregarPerfil(String numero, IntentType intentType) {
-        if (deveIniciarNovoAtendimento(numero, intentType)) {
-            return customerProfileService.iniciarAtendimento(numero);
-        }
-
-        return customerProfileService.buscarOuCriar(numero);
-    }
-
     private Optional<String> executarIntencao(ConversationRoute route,
                                               String numero,
                                               String mensagem,
@@ -150,7 +148,7 @@ public class ConversationService {
 
         if (respostaRapida.isPresent() && deveUsarRespostaRapida(intentType, mensagem)) {
             if (intentType == IntentType.SAUDACAO) {
-                return Optional.of(montarSaudacao(customerProfile));
+                return Optional.of(conversationContextResolver.montarSaudacao(customerProfile));
             }
 
             return respostaRapida;
@@ -162,7 +160,7 @@ public class ConversationService {
         }
 
         if (intentType == IntentType.LEMBRAR_CLIENTE) {
-            return Optional.of(montarRespostaLembranca(customerProfile));
+            return Optional.of(conversationContextResolver.montarRespostaLembranca(customerProfile));
         }
 
         if (intentType == IntentType.CONSULTAR_NOME) {
@@ -170,7 +168,7 @@ public class ConversationService {
                 return Optional.of("Perfeito, " + nomeInformado.get() + ". Vou lembrar.");
             }
 
-            return Optional.of(montarRespostaNome(customerProfile));
+            return Optional.of(conversationContextResolver.montarRespostaNome(customerProfile));
         }
 
         Optional<String> respostaPorIntencao = conversationStateService.montarRespostaPorIntencao(
@@ -197,36 +195,6 @@ public class ConversationService {
         }
 
         return conversationStateService.montarRespostaAutomatica(conversationState, mensagem);
-    }
-
-    private boolean deveIniciarNovoAtendimento(String numero, IntentType intentType) {
-        if (!conversationStateService.possuiEstado(numero)) {
-            return true;
-        }
-
-        ConversationState conversationState = conversationStateService.buscarPorNumero(numero);
-        return intentType == IntentType.SAUDACAO
-                && !conversationStateService.conversaEmAndamento(conversationState);
-    }
-
-    private CustomerProfile sincronizarNome(String numero,
-                                            Optional<String> nomeInformado,
-                                            ConversationState conversationState,
-                                            CustomerProfile customerProfile) {
-        if (nomeInformado.isPresent()) {
-            conversationStateService.atualizarNome(numero, nomeInformado.get());
-            return customerProfileService.salvarNome(numero, nomeInformado.get());
-        }
-
-        String nomeAtendimento = conversationState.getNome();
-        if (nomeAtendimento != null && !nomeAtendimento.isBlank()) {
-            String nomePerfil = customerProfile.getNome();
-            if (nomePerfil == null || !nomePerfil.equals(nomeAtendimento)) {
-                return customerProfileService.salvarNome(numero, nomeAtendimento);
-            }
-        }
-
-        return customerProfile;
     }
 
     private Optional<String> registrarAgendamentoConcluido(String numero,
@@ -273,24 +241,6 @@ public class ConversationService {
     private boolean draftAtualCompleto(ConversationState conversationState) {
         AppointmentDraft draft = conversationState.getDraftAtual();
         return draft != null && draft.isCompleto();
-    }
-
-    private String montarSaudacao(CustomerProfile customerProfile) {
-        return customerProfileService.nomePreferido(customerProfile)
-                .map(nome -> "Boa tarde, " + nome + "! Como posso ajudar?")
-                .orElse("Boa tarde! Como posso ajudar?");
-    }
-
-    private String montarRespostaNome(CustomerProfile customerProfile) {
-        return customerProfileService.nomePreferido(customerProfile)
-                .map(nome -> "Seu nome está salvo como " + nome + ".")
-                .orElse("Você ainda não informou seu nome. Como prefere que eu te chame?");
-    }
-
-    private String montarRespostaLembranca(CustomerProfile customerProfile) {
-        return customerProfileService.nomePreferido(customerProfile)
-                .map(nome -> "Lembro sim, " + nome + ". Como posso ajudar?")
-                .orElse("Ainda não tenho seu nome salvo. Como prefere que eu te chame?");
     }
 
     private boolean deveUsarRespostaRapida(IntentType intentType, String mensagem) {
