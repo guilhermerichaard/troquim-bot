@@ -37,6 +37,7 @@ public class CreateProfessionalRequest {
         this.name = name;
     }
 
+    @SuppressWarnings("unchecked")
     public Set<String> getSpecialties() {
         if (specialtiesObj == null) {
             return Collections.emptySet();

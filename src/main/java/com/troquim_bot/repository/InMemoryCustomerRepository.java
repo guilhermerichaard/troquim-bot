@@ -2,6 +2,7 @@ package com.troquim_bot.repository;
 
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -11,8 +12,10 @@ import java.util.concurrent.ConcurrentMap;
 
 /**
  * Implementação em memória do CustomerRepository.
+ * Ativado apenas nos profiles "test" e "inmemory".
  */
 @Repository
+@Profile({"test", "inmemory"})
 public class InMemoryCustomerRepository implements CustomerRepository {
 
     private final ConcurrentMap<CustomerId, Customer> customers = new ConcurrentHashMap<>();

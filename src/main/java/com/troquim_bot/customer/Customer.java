@@ -59,7 +59,7 @@ public class Customer {
      */
     public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes,
                      CustomerStatus status, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
-        this(id, name, phone, notes, status, 0, null, criadoEm, atualizadoEm);
+        this(id, name, phone, notes, null, status, 0, null, criadoEm, atualizadoEm);
     }
 
     /**
@@ -68,6 +68,16 @@ public class Customer {
      */
     public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes,
                      CustomerStatus status, int totalAtendimentos, LocalDateTime ultimoAtendimento,
+                     LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
+        this(id, name, phone, notes, null, status, totalAtendimentos, ultimoAtendimento, criadoEm, atualizadoEm);
+    }
+
+    /**
+     * Construtor completo para reconstituição de Customer existente, incluindo apelido.
+     * Usado apenas pela infraestrutura.
+     */
+    public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes,
+                     String apelido, CustomerStatus status, int totalAtendimentos, LocalDateTime ultimoAtendimento,
                      LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         if (id == null) {
             throw new IllegalArgumentException("CustomerId é obrigatório");
@@ -83,6 +93,7 @@ public class Customer {
         this.name = name;
         this.phone = phone;
         this.notes = notes != null ? notes.trim() : null;
+        this.apelido = apelido;
         this.status = status;
         this.totalAtendimentos = totalAtendimentos;
         this.ultimoAtendimento = ultimoAtendimento;

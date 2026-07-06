@@ -1,5 +1,6 @@
 package com.troquim_bot.evolution;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -11,9 +12,14 @@ public class EvolutionService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private final String evolutionUrl = "http://localhost:8082";
-    private final String instanceName = "troquim-dev";
-    private final String apiKey = "troquim237";
+    @Value("${evolution.api.base-url:http://localhost:8082}")
+    private String evolutionUrl;
+
+    @Value("${evolution.api.instance-name:troquim-dev}")
+    private String instanceName;
+
+    @Value("${evolution.api.api-key:troquim237}")
+    private String apiKey;
   
 
     public void enviarMensagem(String numero, String texto) {
