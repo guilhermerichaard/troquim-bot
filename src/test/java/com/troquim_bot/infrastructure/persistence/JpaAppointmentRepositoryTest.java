@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Usa o adapter JPA real (JpaAppointmentRepository) com banco H2.
  */
 @SpringBootTest
-@ActiveProfiles("prod")
+@ActiveProfiles("test")
 class JpaAppointmentRepositoryTest {
 
     @Autowired
