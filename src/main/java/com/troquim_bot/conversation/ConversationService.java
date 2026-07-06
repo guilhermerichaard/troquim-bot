@@ -280,6 +280,12 @@ public class ConversationService {
         String prompt = promptService.montarPrompt(mensagem, contexto, historico);
         String resposta = ollamaService.responder(prompt);
 
+        if (resposta == null) {
+            String fallback = "Não consegui entender completamente sua mensagem. Pode reformular ou me dizer qual serviço deseja agendar?";
+            conversationMemory.addAssistantMessage(numero, fallback);
+            return fallback;
+        }
+
         conversationMemory.addAssistantMessage(numero, resposta);
 
         return resposta;

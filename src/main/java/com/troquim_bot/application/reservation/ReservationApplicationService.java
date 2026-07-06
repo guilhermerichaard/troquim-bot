@@ -4,7 +4,6 @@ import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.ReservationRepository;
-import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.reservation.Reservation;
 import com.troquim_bot.reservation.ReservationId;
 import com.troquim_bot.service.ServiceId;
@@ -32,16 +31,6 @@ public class ReservationApplicationService {
 
     private final ReservationRepository reservationRepository;
 
-    /**
-     * Construtor para MVP com repositório em memória.
-     */
-    public ReservationApplicationService() {
-        this(new InMemoryReservationRepository());
-    }
-
-    /**
-     * Construtor com injeção de dependência (para testes ou futura implementação JPA).
-     */
     @Autowired
     public ReservationApplicationService(ReservationRepository reservationRepository) {
         this.reservationRepository = reservationRepository;
