@@ -10,7 +10,9 @@ import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.customer.CustomerProfileService;
+import com.troquim_bot.repository.CustomerRepository;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
+import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.schedule.AppointmentBookingService;
 import com.troquim_bot.schedule.AppointmentService;
@@ -147,7 +149,8 @@ class ConversationServiceRegressionTest {
     }
 
     private Fixture criarFixtureComNome(String numero, String nome) {
-        Fixture fixture = criarConversationServiceCompleto(new CustomerProfileService());
+        CustomerRepository repository = new InMemoryCustomerRepository();
+        Fixture fixture = criarConversationServiceCompleto(new CustomerProfileService(repository));
         fixture.customerProfileService.salvarNome(numero, nome);
         return new Fixture(
                 numero,
@@ -158,11 +161,12 @@ class ConversationServiceRegressionTest {
     }
 
     private Fixture criarFixtureSemNome(String numero) {
+        CustomerRepository repository = new InMemoryCustomerRepository();
         return new Fixture(
                 numero,
-                criarConversationServiceCompleto(new CustomerProfileService()).conversationService(),
-                new CustomerProfileService(),
-                criarConversationServiceCompleto(new CustomerProfileService()).appointmentApplicationService()
+                criarConversationServiceCompleto(new CustomerProfileService(repository)).conversationService(),
+                new CustomerProfileService(repository),
+                criarConversationServiceCompleto(new CustomerProfileService(new InMemoryCustomerRepository())).appointmentApplicationService()
         );
     }
 

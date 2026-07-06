@@ -11,6 +11,7 @@ import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
+import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.schedule.AppointmentBookingService;
 import com.troquim_bot.schedule.AppointmentService;
@@ -168,7 +169,7 @@ class ConversationServiceCorrectionTest {
     }
 
     private Fixture criarFixtureSemNome(String numero) {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        CustomerProfileService customerProfileService = new CustomerProfileService(new InMemoryCustomerRepository());
         AppointmentService appointmentService = new AppointmentService();
         ScheduleService scheduleService = new ScheduleService();
         InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();

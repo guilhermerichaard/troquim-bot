@@ -14,6 +14,7 @@ import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
+import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.reservation.Reservation;
 import com.troquim_bot.reservation.ReservationStatus;
@@ -30,7 +31,8 @@ class ConversationServiceCustomerProfileTest {
 
     @Test
     void salvaNomeEUsaPerfilEmAtendimentosFuturos() {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
+        CustomerProfileService customerProfileService = new CustomerProfileService(repository);
         ConversationService conversationService = criarConversationServiceCompleto(
                 customerProfileService
         );
@@ -47,7 +49,8 @@ class ConversationServiceCustomerProfileTest {
 
     @Test
     void naoPerguntaNomeNovamenteQuandoPerfilJaTemNome() {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
+        CustomerProfileService customerProfileService = new CustomerProfileService(repository);
         ConversationService conversationService = criarConversationServiceCompleto(
                 customerProfileService
         );
@@ -65,7 +68,8 @@ class ConversationServiceCustomerProfileTest {
 
     @Test
     void fluxoDeConversaCriaAppointmentAPartirDeReservation() {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
+        CustomerProfileService customerProfileService = new CustomerProfileService(repository);
         AppointmentService appointmentService = new AppointmentService();
         ScheduleService scheduleService = new ScheduleService();
         InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
@@ -110,7 +114,8 @@ class ConversationServiceCustomerProfileTest {
 
     @Test
     void respondeIndisponivelENaoCriaAppointmentQuandoHorarioOcupado() {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
+        CustomerProfileService customerProfileService = new CustomerProfileService(repository);
         AppointmentService appointmentService = new AppointmentService();
         ScheduleService scheduleService = new ScheduleService();
         InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
@@ -158,7 +163,8 @@ class ConversationServiceCustomerProfileTest {
 
     @Test
     void novoHorarioDepoisDeOcupadoCriaBookingSemReiniciarConversa() {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
+        CustomerProfileService customerProfileService = new CustomerProfileService(repository);
         AppointmentService appointmentService = new AppointmentService();
         ScheduleService scheduleService = new ScheduleService();
         InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
@@ -200,7 +206,8 @@ class ConversationServiceCustomerProfileTest {
 
     @Test
     void continuaPerguntandoDadoFaltanteAntesDeReservar() {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
+        CustomerProfileService customerProfileService = new CustomerProfileService(repository);
         AppointmentService appointmentService = new AppointmentService();
         ConversationService conversationService = criarConversationServiceCompleto(
                 customerProfileService
@@ -223,7 +230,8 @@ class ConversationServiceCustomerProfileTest {
 
     @Test
     void estadoPendenteNaoMonopolizaNovasIntencoes() {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
+        CustomerProfileService customerProfileService = new CustomerProfileService(repository);
         ConversationService conversationService = criarConversationServiceCompleto(customerProfileService);
 
         String numero = "5511666666666";
@@ -242,7 +250,8 @@ class ConversationServiceCustomerProfileTest {
 
     @Test
     void criaAppointmentPendenteQuandoFluxoFicaCompleto() {
-        CustomerProfileService customerProfileService = new CustomerProfileService();
+        InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
+        CustomerProfileService customerProfileService = new CustomerProfileService(repository);
         AppointmentService appointmentService = new AppointmentService();
         ConversationService conversationService = criarConversationServiceCompleto(customerProfileService);
 

@@ -1,5 +1,8 @@
 package com.troquim_bot.customer;
 
+import com.troquim_bot.repository.CustomerRepository;
+import com.troquim_bot.repository.InMemoryCustomerRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -7,7 +10,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CustomerProfileServiceTest {
 
-    private final CustomerProfileService service = new CustomerProfileService();
+    private CustomerProfileService service;
+    private CustomerRepository customerRepository;
+
+    @BeforeEach
+    void setUp() {
+        customerRepository = new InMemoryCustomerRepository();
+        service = new CustomerProfileService(customerRepository);
+    }
 
     @Test
     void criaPerfilAutomaticamenteESalvaNome() {
@@ -33,8 +43,8 @@ class CustomerProfileServiceTest {
 
     @Test
     void incrementaAtendimentosAoIniciarAtendimento() {
-        CustomerProfile profile = service.iniciarAtendimento("5511777777777");
         service.iniciarAtendimento("5511777777777");
+        CustomerProfile profile = service.iniciarAtendimento("5511777777777");
 
         assertEquals(2, profile.getTotalAtendimentos());
         assertTrue(profile.getUltimoAtendimento() != null);

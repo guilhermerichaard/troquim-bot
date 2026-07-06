@@ -2,6 +2,7 @@ package com.troquim_bot.repository;
 
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
+import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Implementação em memória do CustomerRepository.
  */
+@Repository
 public class InMemoryCustomerRepository implements CustomerRepository {
 
     private final ConcurrentMap<CustomerId, Customer> customers = new ConcurrentHashMap<>();

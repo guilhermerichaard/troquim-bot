@@ -8,18 +8,23 @@ import java.time.LocalDateTime;
 /**
  * Aggregate Root que representa um cliente do Troquim.
  * 
+ * Fonte única da verdade do cliente.
  * Responsabilidades:
- * - Gerenciar informações do cliente (nome, telefone, observações)
+ * - Gerenciar informações do cliente (nome, apelido, telefone, observações)
  * - Controlar o ciclo de vida do cliente (ATIVO, INATIVO)
+ * - Rastrear total de atendimentos e último atendimento
  * - Proteger invariants de negócio
  */
 public class Customer {
 
     private final CustomerId id;
     private CustomerName name;
+    private String apelido;
     private PhoneNumber phone;
     private String notes;
     private CustomerStatus status;
+    private int totalAtendimentos;
+    private LocalDateTime ultimoAtendimento;
     private final LocalDateTime criadoEm;
     private LocalDateTime atualizadoEm;
 
@@ -43,6 +48,7 @@ public class Customer {
         this.phone = phone;
         this.notes = notes != null ? notes.trim() : null;
         this.status = CustomerStatus.ATIVO;
+        this.totalAtendimentos = 0;
         this.criadoEm = LocalDateTime.now();
         this.atualizadoEm = LocalDateTime.now();
     }
@@ -53,6 +59,16 @@ public class Customer {
      */
     public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes,
                      CustomerStatus status, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
+        this(id, name, phone, notes, status, 0, null, criadoEm, atualizadoEm);
+    }
+
+    /**
+     * Construtor completo para reconstituição de Customer existente.
+     * Usado apenas pela infraestrutura.
+     */
+    public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes,
+                     CustomerStatus status, int totalAtendimentos, LocalDateTime ultimoAtendimento,
+                     LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         if (id == null) {
             throw new IllegalArgumentException("CustomerId é obrigatório");
         }
@@ -68,6 +84,8 @@ public class Customer {
         this.phone = phone;
         this.notes = notes != null ? notes.trim() : null;
         this.status = status;
+        this.totalAtendimentos = totalAtendimentos;
+        this.ultimoAtendimento = ultimoAtendimento;
         this.criadoEm = criadoEm;
         this.atualizadoEm = atualizadoEm;
     }
@@ -82,6 +100,10 @@ public class Customer {
         return name;
     }
 
+    public String getApelido() {
+        return apelido;
+    }
+
     public PhoneNumber getPhone() {
         return phone;
     }
@@ -92,6 +114,14 @@ public class Customer {
 
     public CustomerStatus getStatus() {
         return status;
+    }
+
+    public int getTotalAtendimentos() {
+        return totalAtendimentos;
+    }
+
+    public LocalDateTime getUltimoAtendimento() {
+        return ultimoAtendimento;
     }
 
     public LocalDateTime getCriadoEm() {
@@ -119,6 +149,14 @@ public class Customer {
             throw new IllegalArgumentException("Nome do cliente não pode ser nulo");
         }
         this.name = name;
+        tocar();
+    }
+
+    /**
+     * Define o apelido/nome preferido do cliente.
+     */
+    public void definirApelido(String apelido) {
+        this.apelido = apelido != null ? apelido.trim() : null;
         tocar();
     }
 
@@ -159,6 +197,24 @@ public class Customer {
             this.status = CustomerStatus.INATIVO;
             tocar();
         }
+    }
+
+    /**
+     * Registra um novo atendimento para este cliente.
+     * Incrementa o contador e atualiza a data do último atendimento.
+     */
+    public void registrarAtendimento() {
+        this.totalAtendimentos++;
+        this.ultimoAtendimento = LocalDateTime.now();
+        tocar();
+    }
+
+    /**
+     * Atualiza apenas a data do último atendimento (sem incrementar contador).
+     */
+    public void atualizarUltimoAtendimento() {
+        this.ultimoAtendimento = LocalDateTime.now();
+        tocar();
     }
 
     // ==================== MÉTODOS PRIVADOS ====================

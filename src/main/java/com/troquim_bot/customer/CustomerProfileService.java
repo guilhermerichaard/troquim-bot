@@ -1,30 +1,56 @@
 package com.troquim_bot.customer;
 
+import com.troquim_bot.common.valueobject.CustomerName;
+import com.troquim_bot.common.valueobject.PhoneNumber;
+import com.troquim_bot.repository.CustomerRepository;
+
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
+/**
+ * Serviço de perfil do cliente.
+ * 
+ * Customer é a única fonte da verdade do cliente.
+ * CustomerProfileService usa CustomerRepository como camada de persistência.
+ * 
+ * Mantém o contrato público para compatibilidade com ConversationService
+ * e ConversationContextResolver, que usam CustomerProfile como DTO.
+ */
 @Service
 public class CustomerProfileService {
 
-    private final ConcurrentMap<String, CustomerProfile> profiles = new ConcurrentHashMap<>();
+    private final CustomerRepository customerRepository;
+
+    public CustomerProfileService(CustomerRepository customerRepository) {
+        this.customerRepository = customerRepository;
+    }
 
     public Optional<CustomerProfile> localizarPorTelefone(String numero) {
-        return Optional.ofNullable(profiles.get(chave(numero)));
+        CustomerId id = CustomerId.fromPhone(numero);
+        Customer customer = customerRepository.findById(id);
+        return Optional.ofNullable(customer)
+                .map(c -> CustomerProfile.fromCustomer(c, numero));
     }
 
     public CustomerProfile buscarOuCriar(String numero) {
-        return profiles.computeIfAbsent(chave(numero), CustomerProfile::new);
+        CustomerId id = CustomerId.fromPhone(numero);
+        Customer customer = customerRepository.findById(id);
+        if (customer == null) {
+            customer = criarCliente(numero);
+        }
+        return CustomerProfile.fromCustomer(customer, numero);
     }
 
     public CustomerProfile iniciarAtendimento(String numero) {
-        return profiles.compute(chave(numero), (key, profile) -> {
-            CustomerProfile customerProfile = profile == null ? new CustomerProfile(key) : profile;
-            customerProfile.registrarNovoAtendimento();
-            return customerProfile;
-        });
+        CustomerId id = CustomerId.fromPhone(numero);
+        Customer customer = customerRepository.findById(id);
+        if (customer == null) {
+            customer = criarCliente(numero);
+        }
+        customer.registrarAtendimento();
+        customerRepository.save(customer);
+        return CustomerProfile.fromCustomer(customer, numero);
     }
 
     public CustomerProfile salvarNome(String numero, String nome) {
@@ -32,11 +58,26 @@ public class CustomerProfileService {
             return buscarOuCriar(numero);
         }
 
-        return profiles.compute(chave(numero), (key, profile) -> {
-            CustomerProfile customerProfile = profile == null ? new CustomerProfile(key) : profile;
-            customerProfile.setNome(nome.trim());
-            return customerProfile;
-        });
+        CustomerId id = CustomerId.fromPhone(numero);
+        Customer customer = customerRepository.findById(id);
+        CustomerName customerName = criarCustomerName(nome.trim());
+        if (customer == null) {
+            PhoneNumber phone = new PhoneNumber(numero);
+            customer = new Customer(id, customerName, phone, null);
+        } else {
+            customer.atualizarNome(customerName);
+        }
+        customerRepository.save(customer);
+        return CustomerProfile.fromCustomer(customer, numero);
+    }
+
+    private CustomerName criarCustomerName(String nome) {
+        try {
+            return CustomerName.of(nome);
+        } catch (IllegalArgumentException e) {
+            // Se o nome não tiver sobrenome, usa "Sr" como sobrenome padrão
+            return new CustomerName(nome, "Sr");
+        }
     }
 
     public CustomerProfile atualizarNome(String numero, String nome) {
@@ -52,11 +93,16 @@ public class CustomerProfileService {
             return Optional.of(profile.getApelido().trim());
         }
 
-        if (temValor(profile.getNome())) {
+        if (temValor(profile.getNome()) && !isNomeGenerico(profile.getNome())) {
             return Optional.of(profile.getNome().trim());
         }
 
         return Optional.empty();
+    }
+
+    private boolean isNomeGenerico(String nome) {
+        // Ignora nomes padrão atribuídos para clientes recém-criados
+        return nome != null && nome.strip().toLowerCase().startsWith("cliente");
     }
 
     public Optional<String> nomePreferido(String numero) {
@@ -64,18 +110,26 @@ public class CustomerProfileService {
     }
 
     public CustomerProfile atualizarUltimoAtendimento(String numero) {
-        return profiles.compute(chave(numero), (key, profile) -> {
-            CustomerProfile customerProfile = profile == null ? new CustomerProfile(key) : profile;
-            customerProfile.atualizarUltimoAtendimento();
-            return customerProfile;
-        });
+        CustomerId id = CustomerId.fromPhone(numero);
+        Customer customer = customerRepository.findById(id);
+        if (customer == null) {
+            customer = criarCliente(numero);
+        }
+        customer.atualizarUltimoAtendimento();
+        customerRepository.save(customer);
+        return CustomerProfile.fromCustomer(customer, numero);
+    }
+
+    private Customer criarCliente(String numero) {
+        CustomerId id = CustomerId.fromPhone(numero);
+        PhoneNumber phone = new PhoneNumber(numero);
+        // Nome genérico que será ignorado pelo nomePreferido
+        CustomerName name = new CustomerName("Cliente", phone.getDdd());
+        Customer customer = new Customer(id, name, phone, null);
+        return customerRepository.save(customer);
     }
 
     private boolean temValor(String valor) {
         return valor != null && !valor.isBlank();
-    }
-
-    private String chave(String numero) {
-        return numero == null ? "" : numero;
     }
 }
