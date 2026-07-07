@@ -17,8 +17,10 @@ import com.troquim_bot.schedule.AppointmentBookingService;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import org.springframework.stereotype.Service;
 
+import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.conversation.language.ConversationTextUtils;
 import com.troquim_bot.conversation.query.BookingQueryResponder;
+import com.troquim_bot.customer.CustomerId;
 
 import java.util.List;
 import java.util.Optional;
@@ -140,7 +142,12 @@ public class ConversationService {
                                               CustomerProfile customerProfile,
                                               Optional<String> nomeInformado) {
         IntentType intentType = route.intentType();
-        
+
+        // Cancelamento tem prioridade máxima: não pode ser interceptado por consulta de agendamento
+        if (intentType == IntentType.CANCELAR_AGENDAMENTO) {
+            return processarCancelamento(numero);
+        }
+
         // Verifica consulta de agendamento ANTES de retornar respostas rápidas
         Optional<String> respostaAgendamento = bookingQueryResponder.responderConsultaAgendamento(numero, intentType, mensagem, conversationState);
         if (respostaAgendamento.isPresent()) {
@@ -305,6 +312,28 @@ public class ConversationService {
         conversationMemory.addAssistantMessage(numero, resposta);
 
         return resposta;
+    }
+
+    private Optional<String> processarCancelamento(String numero) {
+        CustomerId customerId = CustomerId.fromPhone(numero);
+        List<Appointment> ativos = appointmentApplicationService.listarAtivosPorCliente(customerId);
+
+        if (ativos.isEmpty()) {
+            return Optional.of("Você não tem nenhum agendamento ativo para cancelar.");
+        }
+
+        if (ativos.size() == 1) {
+            Appointment appointment = ativos.get(0);
+            appointmentApplicationService.cancelarAgendamento(appointment.getId());
+            return Optional.of("Seu agendamento foi cancelado com sucesso.");
+        }
+
+        StringBuilder sb = new StringBuilder("Você tem mais de um agendamento. Qual deles você gostaria de cancelar?\n");
+        for (int i = 0; i < ativos.size(); i++) {
+            Appointment a = ativos.get(i);
+            sb.append(i + 1).append(". ").append(a.getDate()).append(" às ").append(a.getStartTime()).append("\n");
+        }
+        return Optional.of(sb.toString().trim());
     }
 
     private IntentType mapV2ToLegacyIntentType(com.troquim_bot.application.intent.IntentType v2Type) {
