@@ -34,18 +34,24 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
 
         String messageId = root.path("data").path("key").path("id").asText();
         String remoteJid = root.path("data").path("key").path("remoteJid").asText();
-        String sender = root.path("sender").asText();
+        String sender = rawSender(root.path("sender").asText());
         String mensagem = root.path("data").path("message").path("conversation").asText();
 
         if (mensagem == null || mensagem.isBlank()) {
             return Optional.empty();
         }
 
-        return Optional.of(new IncomingMessage(messageId, remoteJid, sender, mensagem));
+        String numero = PhoneNumberNormalizer.normalizar(remoteJid);
+
+        return Optional.of(new IncomingMessage(messageId, numero, sender, mensagem));
     }
 
     @Override
     public void enviarMensagem(String numero, String texto) {
         evolutionService.enviarMensagem(numero, texto);
+    }
+
+    private String rawSender(String sender) {
+        return sender == null ? null : PhoneNumberNormalizer.normalizar(sender);
     }
 }

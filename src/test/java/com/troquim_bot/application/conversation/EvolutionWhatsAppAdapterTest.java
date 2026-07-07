@@ -33,7 +33,7 @@ class EvolutionWhatsAppAdapterTest {
 
         assertTrue(message.isPresent());
         assertEquals("message-1", message.get().messageId());
-        assertEquals("5511999999999@s.whatsapp.net", message.get().numero());
+        assertEquals("5511999999999", message.get().numero());
         assertEquals("5511999999999", message.get().sender());
         assertEquals("Oi", message.get().mensagem());
     }
