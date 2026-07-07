@@ -11,6 +11,7 @@ import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.conversation.state.AppointmentDraft;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
+import com.troquim_bot.repository.InMemoryConversationStateRepository;
 import com.troquim_bot.conversation.state.ConversationStep;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
@@ -74,7 +75,7 @@ class ConversationServiceCustomerProfileTest {
         ScheduleService scheduleService = new ScheduleService();
         InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
         InMemoryAppointmentRepository appointmentRepository = new InMemoryAppointmentRepository();
-        ConversationStateService conversationStateService = new ConversationStateService();
+        ConversationStateService conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
         ReservationApplicationService reservationApplicationService = new ReservationApplicationService(reservationRepository);
         AppointmentApplicationService appointmentApplicationService = new AppointmentApplicationService(
                 appointmentRepository,
@@ -120,7 +121,7 @@ class ConversationServiceCustomerProfileTest {
         ScheduleService scheduleService = new ScheduleService();
         InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
         InMemoryAppointmentRepository appointmentRepository = new InMemoryAppointmentRepository();
-        ConversationStateService conversationStateService = new ConversationStateService();
+        ConversationStateService conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
         ReservationApplicationService reservationApplicationService = new ReservationApplicationService(reservationRepository);
         AppointmentApplicationService appointmentApplicationService = new AppointmentApplicationService(
                 appointmentRepository,
@@ -169,22 +170,22 @@ class ConversationServiceCustomerProfileTest {
         ScheduleService scheduleService = new ScheduleService();
         InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
         InMemoryAppointmentRepository appointmentRepository = new InMemoryAppointmentRepository();
-        ConversationStateService conversationStateService = new ConversationStateService();
-        ReservationApplicationService reservationApplicationService = new ReservationApplicationService(reservationRepository);
-        AppointmentApplicationService appointmentApplicationService = new AppointmentApplicationService(
+        ConversationStateService css = new ConversationStateService(new InMemoryConversationStateRepository());
+        ReservationApplicationService rsv = new ReservationApplicationService(reservationRepository);
+        AppointmentApplicationService aas = new AppointmentApplicationService(
                 appointmentRepository,
                 reservationRepository
         );
-        ConversationService conversationService = criarConversationService(
+        ConversationService cs = criarConversationService(
                 customerProfileService,
                 appointmentService,
-                conversationStateService,
-                appointmentApplicationService,
+                css,
+                aas,
                 new AppointmentBookingService(
                         scheduleService,
                         appointmentService,
-                        reservationApplicationService,
-                        appointmentApplicationService
+                        rsv,
+                        aas
                 )
         );
 
@@ -192,16 +193,16 @@ class ConversationServiceCustomerProfileTest {
         customerProfileService.salvarNome(numero, "Guilherme");
         scheduleService.reservarHorario("segunda", "10:00", "5511000000000");
 
-        conversationService.gerarResposta(numero, "quero unha");
-        conversationService.gerarResposta(numero, "segunda");
+        cs.gerarResposta(numero, "quero unha");
+        cs.gerarResposta(numero, "segunda");
         assertEquals("Esse horário não está disponível. Qual outro horário você prefere?",
-                conversationService.gerarResposta(numero, "10h"));
+                cs.gerarResposta(numero, "10h"));
 
-        String resposta = conversationService.gerarResposta(numero, "11h");
+        String resposta = cs.gerarResposta(numero, "11h");
 
         assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 11h foi reservado.", resposta);
-        assertEquals(1, appointmentApplicationService.listarTodos().size());
-        assertEquals(1, reservationApplicationService.listarTodos().size());
+        assertEquals(1, aas.listarTodos().size());
+        assertEquals(1, rsv.listarTodos().size());
     }
 
     @Test
@@ -286,7 +287,7 @@ class ConversationServiceCustomerProfileTest {
         return criarConversationService(
                 customerProfileService,
                 appointmentService,
-                new ConversationStateService(),
+                new ConversationStateService(new InMemoryConversationStateRepository()),
                 appointmentApplicationService,
                 new AppointmentBookingService(
                         scheduleService,
@@ -310,7 +311,7 @@ class ConversationServiceCustomerProfileTest {
         return criarConversationService(
                 customerProfileService,
                 appointmentService,
-                new ConversationStateService(),
+                new ConversationStateService(new InMemoryConversationStateRepository()),
                 appointmentApplicationService,
                 appointmentBookingService
         );

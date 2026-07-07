@@ -3,6 +3,7 @@ package com.troquim_bot.conversation;
 import com.troquim_bot.ai.intent.IntentType;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
+import com.troquim_bot.repository.InMemoryConversationStateRepository;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,6 +38,7 @@ class ConversationRouteTest {
         private IntentType intentTypeRecebido;
 
         private RecordingConversationStateService(boolean deveContinuarFluxo) {
+            super(new InMemoryConversationStateRepository());
             this.deveContinuarFluxo = deveContinuarFluxo;
         }
 

@@ -9,6 +9,7 @@ import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.conversation.state.ConversationStateService;
+import com.troquim_bot.repository.InMemoryConversationStateRepository;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
@@ -188,7 +189,7 @@ class ConversationServiceCorrectionTest {
                 new IntentService(),
                 new QuickResponseService(),
                 new ContextService(),
-                new ConversationStateService(),
+                new ConversationStateService(new InMemoryConversationStateRepository()),
                 new ConversationMemory(),
                 new StubOllamaService(),
                 new PromptService(),

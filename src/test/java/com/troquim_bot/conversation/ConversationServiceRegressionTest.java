@@ -9,6 +9,7 @@ import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.conversation.state.ConversationStateService;
+import com.troquim_bot.repository.InMemoryConversationStateRepository;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.CustomerRepository;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
@@ -119,7 +120,7 @@ class ConversationServiceRegressionTest {
                 new com.troquim_bot.repository.InMemoryAvailabilityRepository(),
                 scheduleService
         );
-        ConversationStateService conversationStateService = new ConversationStateService();
+        ConversationStateService conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
 
         ConversationService conversationService = new ConversationService(
                 new IntentService(),

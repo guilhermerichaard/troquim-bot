@@ -1,6 +1,7 @@
 package com.troquim_bot.conversation.state;
 
 import com.troquim_bot.ai.intent.IntentType;
+import com.troquim_bot.repository.ConversationStateRepository;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
@@ -8,8 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,24 +19,36 @@ public class ConversationStateService {
             "(?iu)(?:\\b(?:as|às)\\s*(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})\\s*(?:h(?:oras?)?\\b)?)"
     );
 
-    private final ConcurrentMap<String, ConversationState> states = new ConcurrentHashMap<>();
+    private final ConversationStateRepository stateRepository;
+
+    public ConversationStateService(ConversationStateRepository stateRepository) {
+        this.stateRepository = stateRepository;
+    }
 
     public ConversationState buscarPorNumero(String numero) {
         return buscarPorNumero(numero, null);
     }
 
     public ConversationState buscarPorNumero(String numero, String nomeInicial) {
-        ConversationState state = states.computeIfAbsent(chave(numero), ConversationState::new);
+        String chave = chave(numero);
+        ConversationState state = stateRepository.findByNumero(chave);
+        if (state == null) {
+            state = new ConversationState(chave);
+        }
         aplicarNome(state, nomeInicial);
         return state;
     }
 
     public boolean possuiEstado(String numero) {
-        return states.containsKey(chave(numero));
+        return stateRepository.existsByNumero(chave(numero));
     }
 
     public ConversationState processarMensagem(String numero, String mensagem) {
         return processarMensagem(numero, mensagem, null);
+    }
+
+    private void persistir(ConversationState state) {
+        stateRepository.save(state);
     }
 
     public ConversationState processarMensagem(String numero, String mensagem, String nomeInicial) {
@@ -45,6 +56,7 @@ public class ConversationStateService {
 
         if (mensagem == null || mensagem.isBlank()) {
             atualizarStep(state);
+            persistir(state);
             return state;
         }
 
@@ -53,6 +65,7 @@ public class ConversationStateService {
 
         if (state.getStep() == ConversationStep.FINALIZADO && !deveCriarNovoAgendamento(texto)) {
             atualizarStep(state);
+            persistir(state);
             return state;
         }
 
@@ -64,18 +77,21 @@ public class ConversationStateService {
         // Se for mensagem de lembrete ("já falei", "esqueceu?", etc.), não processar novamente
         if (isMensagemLembranca(texto)) {
             atualizarStep(state);
+            persistir(state);
             return state;
         }
 
         // Se for pergunta sobre agendamentos, não processar como novo agendamento
         if (isPerguntaSobreAgendamentos(texto)) {
             atualizarStep(state);
+            persistir(state);
             return state;
         }
 
         // Se for pergunta (contém termos interrogativos), não extrair entidades
         if (isPergunta(texto)) {
             atualizarStep(state);
+            persistir(state);
             return state;
         }
 
@@ -106,6 +122,7 @@ public class ConversationStateService {
         }
 
         atualizarStep(state);
+        persistir(state);
 
         return state;
     }
@@ -118,6 +135,7 @@ public class ConversationStateService {
         }
         draft.setServico(servico);
         atualizarStep(state);
+        persistir(state);
     }
 
     public void atualizarDia(String numero, String dia) {
@@ -128,6 +146,7 @@ public class ConversationStateService {
         }
         draft.setDia(dia);
         atualizarStep(state);
+        persistir(state);
     }
 
     public void atualizarHorario(String numero, String horario) {
@@ -138,6 +157,7 @@ public class ConversationStateService {
         }
         draft.setHorario(horario);
         atualizarStep(state);
+        persistir(state);
     }
 
     public void atualizarNome(String numero, String nome) {
@@ -148,6 +168,7 @@ public class ConversationStateService {
         }
         aplicarNome(state, draft, nome);
         atualizarStep(state);
+        persistir(state);
     }
 
     public boolean deveContinuarFluxo(ConversationState state, String mensagem, IntentType intentType) {
@@ -277,7 +298,7 @@ public class ConversationStateService {
     }
 
     public void limparEstado(String numero) {
-        states.remove(chave(numero));
+        stateRepository.deleteByNumero(chave(numero));
     }
 
     public String listarAgendamentosPendentes(ConversationState state) {
