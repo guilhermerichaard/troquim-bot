@@ -73,11 +73,20 @@ public class ConversationService {
     }
 
     public String gerarResposta(String numero, String mensagem) {
+        return gerarResposta(numero, mensagem, null);
+    }
+
+    public String gerarResposta(String numero, String mensagem, com.troquim_bot.application.intent.IntentType v2IntentType) {
         if (mensagem == null || mensagem.isBlank()) {
             return "Não consegui entender sua mensagem. Pode me enviar novamente?";
         }
 
-        IntentType intentType = intentService.classificar(mensagem);
+        IntentType intentType;
+        if (v2IntentType != null) {
+            intentType = mapV2ToLegacyIntentType(v2IntentType);
+        } else {
+            intentType = intentService.classificar(mensagem);
+        }
         CustomerProfile customerProfile = conversationContextResolver.carregarPerfil(numero, intentType);
         String nomePreferido = customerProfileService.nomePreferido(customerProfile).orElse(null);
         ConversationState conversationState = conversationStateService.buscarPorNumero(numero, nomePreferido);
@@ -298,7 +307,27 @@ public class ConversationService {
         return resposta;
     }
 
-
-
+    private IntentType mapV2ToLegacyIntentType(com.troquim_bot.application.intent.IntentType v2Type) {
+        return switch (v2Type) {
+            case GREETING -> IntentType.SAUDACAO;
+            case BOOK_APPOINTMENT, RESCHEDULE_APPOINTMENT -> IntentType.AGENDAMENTO;
+            case CANCEL_APPOINTMENT -> IntentType.DESCONHECIDO; // Cancelamento não mapeia para intenção de agendamento
+            case CHECK_AVAILABILITY -> IntentType.DESCONHECIDO;
+            case ASK_SERVICES -> IntentType.CONSULTAR_SERVICOS;
+            case ASK_HOURS -> IntentType.CONSULTAR_HORARIOS;
+            case ASK_LOCATION -> IntentType.CONSULTAR_ENDERECO;
+            case ASK_WHO_ARE_YOU -> IntentType.CONSULTAR_QUEM_SOU;
+            case HUMAN_ATTENDANT -> IntentType.HUMANO;
+            case AGRADECIMENTO -> IntentType.AGRADECIMENTO;
+            case DESPEDIDA -> IntentType.DESPEDIDA;
+            case LEMBRAR_CLIENTE -> IntentType.LEMBRAR_CLIENTE;
+            case CONSULTAR_AGENDAMENTO -> IntentType.CONSULTAR_AGENDAMENTO;
+            case CONSULTAR_DIA_AGENDADO -> IntentType.CONSULTAR_DIA_AGENDADO;
+            case CONSULTAR_HORARIO_AGENDADO -> IntentType.CONSULTAR_HORARIO_AGENDADO;
+            case CONSULTAR_SERVICO_AGENDADO -> IntentType.CONSULTAR_SERVICO_AGENDADO;
+            case CONSULTAR_NOME -> IntentType.CONSULTAR_NOME;
+            case UNKNOWN -> IntentType.DESCONHECIDO;
+        };
+    }
 
 }
