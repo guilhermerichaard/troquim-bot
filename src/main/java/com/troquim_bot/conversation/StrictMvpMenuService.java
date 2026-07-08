@@ -42,15 +42,14 @@ public class StrictMvpMenuService {
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
 
-        // Se está em FINALIZADO ou INICIO, verificar se é uma escolha de menu ou fluxo natural
+        // STRICT_MVP: todo input passa pelo menu, não pelo fluxo livre
         if (step == ConversationStep.FINALIZADO || step == ConversationStep.INICIO) {
-            // Apenas intercepta se for uma escolha EXPLÍCITA do menu (1, 2, 3)
-            // ou se for uma pergunta de consulta/cancelamento
+            // Intercepta explicitamente: "1", "2", "3" ou tentativas em texto
             if (texto.matches("^[123]$")) {
                 return processarEscolhaMenuPrincipal(numero, texto);
             }
-            // Para outros textos (como "quero agendar unha"), deixa o fluxo normal continuar
-            return null;
+            // Qualquer outro texto redireciona para o menu — não deixa cair no fluxo livre
+            return menuPrincipal();
         }
 
         // Se está em fluxo de agendamento, processar conforme step
@@ -74,15 +73,17 @@ public class StrictMvpMenuService {
     }
 
     private String processarEscolhaMenuPrincipal(String numero, String texto) {
-        if (texto.contains("1") || texto.contains("agendar")) {
+        // Processa escolha do menu principal baseado em número ou texto equivalente
+        if (texto.contains("1") || texto.contains("agendar") || texto.contains("marcar") || texto.contains("novo")) {
             return iniciarNovoAgendamento(numero);
         }
-        if (texto.contains("2") || texto.contains("meus agendamento") || texto.contains("consultar")) {
+        if (texto.contains("2") || texto.contains("meus") || texto.contains("consultar") || texto.contains("agendamentos") || texto.contains("ver")) {
             return consultarAgendamentos(numero);
         }
-        if (texto.contains("3") || texto.contains("cancelar") || texto.contains("apagar")) {
+        if (texto.contains("3") || texto.contains("cancelar") || texto.contains("apagar") || texto.contains("remover") || texto.contains("desmarcar")) {
             return cancelarAgendamento(numero);
         }
+        // Fallback: reexibe o menu principal
         return menuPrincipal();
     }
 
