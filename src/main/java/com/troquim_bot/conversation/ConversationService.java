@@ -39,6 +39,7 @@ public class ConversationService {
     private final AppointmentApplicationService appointmentApplicationService;
     private final AppointmentBookingService appointmentBookingService;
     private final com.troquim_bot.application.availability.AvailabilityApplicationService availabilityApplicationService;
+    private final StrictMvpMenuService strictMvpMenuService;
     private final BookingQueryResponder bookingQueryResponder;
     private final ConversationContextResolver conversationContextResolver;
 
@@ -52,7 +53,8 @@ public class ConversationService {
                                CustomerProfileService customerProfileService,
                                AppointmentApplicationService appointmentApplicationService,
                                AppointmentBookingService appointmentBookingService,
-                               com.troquim_bot.application.availability.AvailabilityApplicationService availabilityApplicationService) {
+                               com.troquim_bot.application.availability.AvailabilityApplicationService availabilityApplicationService,
+                               StrictMvpMenuService strictMvpMenuService) {
         this.intentService = intentService;
         this.quickResponseService = quickResponseService;
         this.contextService = contextService;
@@ -64,6 +66,7 @@ public class ConversationService {
         this.appointmentApplicationService = appointmentApplicationService;
         this.appointmentBookingService = appointmentBookingService;
         this.availabilityApplicationService = availabilityApplicationService;
+        this.strictMvpMenuService = strictMvpMenuService;
         this.bookingQueryResponder = new BookingQueryResponder(
                 appointmentApplicationService,
                 availabilityApplicationService
@@ -81,6 +84,15 @@ public class ConversationService {
     public String gerarResposta(String numero, String mensagem, com.troquim_bot.application.intent.IntentType v2IntentType) {
         if (mensagem == null || mensagem.isBlank()) {
             return "Não consegui entender sua mensagem. Pode me enviar novamente?";
+        }
+
+        // STRICT_MVP: delegar ao menu numerado primeiro
+        if (strictMvpMenuService.isStrictMvpEnabled()) {
+            ConversationState state = conversationStateService.buscarPorNumero(numero);
+            String respostaMenu = strictMvpMenuService.processarMenu(numero, mensagem, state);
+            if (respostaMenu != null) {
+                return respostaMenu;
+            }
         }
 
         IntentType intentType;
@@ -173,6 +185,11 @@ public class ConversationService {
         // Verifica se é uma confirmação curta (como "ata", "certo", "beleza", etc.)
         if (intentType == IntentType.DESCONHECIDO && isConfirmacaoCurta(mensagem)) {
             return Optional.of("Certo.");
+        }
+
+        // Perguntas fora de escopo de agendamento: redireciona educadamente
+        if (intentType == IntentType.DESCONHECIDO && isOutOfScopeQuestion(mensagem)) {
+            return Optional.of("Posso te ajudar melhor com agendamentos. Qual serviço você deseja marcar?");
         }
 
         if (intentType == IntentType.LEMBRAR_CLIENTE) {
@@ -312,6 +329,21 @@ public class ConversationService {
         conversationMemory.addAssistantMessage(numero, resposta);
 
         return resposta;
+    }
+
+    private boolean isOutOfScopeQuestion(String mensagem) {
+        String texto = ConversationTextUtils.normalizar(mensagem);
+        // Detects non-appointment questions like "Corinthians ou Flamengo?"
+        if (!texto.contains("?")) {
+            return false;
+        }
+        // Verify it doesn't match any known appointment-related terms
+        boolean hasAppointmentTerms = ConversationTextUtils.contem(texto,
+                "servico", "servicos", "horario", "dia", "agenda", "agendamento",
+                "marcar", "unha", "cabelo", "corte", "manicure", "pedicure",
+                "disponivel", "disponibilidade", "cancelar", "nome",
+                "endereco", "localizacao", "preco", "valor", "orcamento");
+        return !hasAppointmentTerms;
     }
 
     private Optional<String> processarCancelamento(String numero) {

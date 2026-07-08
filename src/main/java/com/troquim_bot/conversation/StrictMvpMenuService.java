@@ -1,0 +1,393 @@
+package com.troquim_bot.conversation;
+
+import com.troquim_bot.application.availability.AvailabilityApplicationService;
+import com.troquim_bot.conversation.state.ConversationState;
+import com.troquim_bot.conversation.state.ConversationStateService;
+import com.troquim_bot.conversation.state.ConversationStep;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+@Service
+public class StrictMvpMenuService {
+
+    private static final Pattern HORARIO_PATTERN = Pattern.compile(
+            "(?iu)(?:\\b(?:as|às)\\s*(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})\\s*(?:h(?:oras?)?\\b)?)"
+    );
+
+    private final ConversationStateService conversationStateService;
+    private final AvailabilityApplicationService availabilityApplicationService;
+    private final boolean strictMvpEnabled;
+
+    public StrictMvpMenuService(ConversationStateService conversationStateService,
+                                AvailabilityApplicationService availabilityApplicationService,
+                                @Value("${conversation.mode:STRICT_MVP}") String conversationMode) {
+        this.conversationStateService = conversationStateService;
+        this.availabilityApplicationService = availabilityApplicationService;
+        this.strictMvpEnabled = "STRICT_MVP".equalsIgnoreCase(conversationMode);
+    }
+
+    public boolean isStrictMvpEnabled() {
+        return strictMvpEnabled;
+    }
+
+    public String processarMenu(String numero, String mensagem, ConversationState state) {
+        if (!strictMvpEnabled) {
+            return null;
+        }
+
+        String texto = normalizar(mensagem);
+        ConversationStep step = state.getStep();
+
+        // Se está em FINALIZADO ou INICIO, verificar se é uma escolha de menu ou fluxo natural
+        if (step == ConversationStep.FINALIZADO || step == ConversationStep.INICIO) {
+            // Apenas intercepta se for uma escolha EXPLÍCITA do menu (1, 2, 3)
+            // ou se for uma pergunta de consulta/cancelamento
+            if (texto.matches("^[123]$")) {
+                return processarEscolhaMenuPrincipal(numero, texto);
+            }
+            // Para outros textos (como "quero agendar unha"), deixa o fluxo normal continuar
+            return null;
+        }
+
+        // Se está em fluxo de agendamento, processar conforme step
+        if (step == ConversationStep.AGUARDANDO_SERVICO) {
+            return processarEscolhaServico(numero, texto, mensagem);
+        }
+        if (step == ConversationStep.AGUARDANDO_DIA) {
+            return processarEscolhaDia(numero, texto, mensagem);
+        }
+        if (step == ConversationStep.AGUARDANDO_HORARIO) {
+            return processarEscolhaHorario(numero, texto, mensagem);
+        }
+        if (step == ConversationStep.AGUARDANDO_NOME) {
+            return processarEscolhaNome(numero, mensagem);
+        }
+        if (step == ConversationStep.AGUARDANDO_CONFIRMACAO) {
+            return processarConfirmacao(numero, texto);
+        }
+
+        return null;
+    }
+
+    private String processarEscolhaMenuPrincipal(String numero, String texto) {
+        if (texto.contains("1") || texto.contains("agendar")) {
+            return iniciarNovoAgendamento(numero);
+        }
+        if (texto.contains("2") || texto.contains("meus agendamento") || texto.contains("consultar")) {
+            return consultarAgendamentos(numero);
+        }
+        if (texto.contains("3") || texto.contains("cancelar") || texto.contains("apagar")) {
+            return cancelarAgendamento(numero);
+        }
+        return menuPrincipal();
+    }
+
+    private String menuPrincipal() {
+        return "Olá! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
+               "1) Agendar\n" +
+               "2) Meus agendamentos\n" +
+               "3) Cancelar";
+    }
+
+    private String iniciarNovoAgendamento(String numero) {
+        conversationStateService.limparEstado(numero);
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        state.criarNovoDraft();
+        state.setStep(ConversationStep.AGUARDANDO_SERVICO);
+        conversationStateService.atualizarStep(state);
+        
+        return menuServicos();
+    }
+
+    private String menuServicos() {
+        return "Qual serviço você gostaria de agendar?\n\n" +
+               "1) Unha\n" +
+               "2) Cabelo\n" +
+               "3) Sobrancelha\n" +
+               "4) Cílios\n" +
+               "5) Pé e mão\n\n" +
+               "Digite o número ou o nome do serviço:";
+    }
+
+    private String processarEscolhaServico(String numero, String texto, String mensagemOriginal) {
+        String servico = null;
+
+        // Verifica se é número
+        if (texto.matches("^[1-5]$")) {
+            servico = switch (texto) {
+                case "1" -> "unha";
+                case "2" -> "cabelo";
+                case "3" -> "sobrancelha";
+                case "4" -> "cilios";
+                case "5" -> "pe e mao";
+                default -> null;
+            };
+        } else {
+            // Verifica por texto
+            if (texto.contains("unha") || texto.contains("manicure") || texto.contains("pedicure")) {
+                servico = "unha";
+            } else if (texto.contains("cabelo") || texto.contains("corte") || texto.contains("escova")) {
+                servico = "cabelo";
+            } else if (texto.contains("sobrancelha")) {
+                servico = "sobrancelha";
+            } else if (texto.contains("cilio") || texto.contains("cílio")) {
+                servico = "cilios";
+            } else if (texto.contains("pe") && texto.contains("mao")) {
+                servico = "pe e mao";
+            }
+        }
+
+        if (servico == null) {
+            return "Não entendi. Por favor, escolha um serviço:\n\n" +
+                   "1) Unha\n" +
+                   "2) Cabelo\n" +
+                   "3) Sobrancelha\n" +
+                   "4) Cílios\n" +
+                   "5) Pé e mão\n\n" +
+                   "Digite o número ou o nome:";
+        }
+
+        conversationStateService.atualizarServico(numero, servico);
+        return menuDias();
+    }
+
+    private String menuDias() {
+        return "Perfeito! Para qual dia você gostaria?\n\n" +
+               "1) Segunda\n" +
+               "2) Terça\n" +
+               "3) Quarta\n" +
+               "4) Quinta\n" +
+               "5) Sexta\n" +
+               "6) Sábado\n\n" +
+               "Digite o número ou o nome do dia:";
+    }
+
+    private String processarEscolhaDia(String numero, String texto, String mensagemOriginal) {
+        String dia = null;
+
+        // Verifica se é número
+        if (texto.matches("^[1-6]$")) {
+            dia = switch (texto) {
+                case "1" -> "segunda";
+                case "2" -> "terça";
+                case "3" -> "quarta";
+                case "4" -> "quinta";
+                case "5" -> "sexta";
+                case "6" -> "sábado";
+                default -> null;
+            };
+        } else {
+            // Verifica por texto
+            if (texto.contains("segunda")) dia = "segunda";
+            else if (texto.contains("terca") || texto.contains("terça")) dia = "terça";
+            else if (texto.contains("quarta")) dia = "quarta";
+            else if (texto.contains("quinta")) dia = "quinta";
+            else if (texto.contains("sexta")) dia = "sexta";
+            else if (texto.contains("sabado") || texto.contains("sábado")) dia = "sábado";
+        }
+
+        if (dia == null) {
+            return "Não entendi. Por favor, escolha um dia:\n\n" +
+                   "1) Segunda\n" +
+                   "2) Terça\n" +
+                   "3) Quarta\n" +
+                   "4) Quinta\n" +
+                   "5) Sexta\n" +
+                   "6) Sábado\n\n" +
+                   "Digite o número ou o nome:";
+        }
+
+        conversationStateService.atualizarDia(numero, dia);
+        return menuHorarios(numero);
+    }
+
+    private String menuHorarios(String numero) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        String dia = state.getDraftAtual().getDia();
+        
+        List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
+        if (horarios.isEmpty()) {
+            return "Não tenho horários disponíveis para " + dia + ". Por favor, escolha outro dia:\n\n" +
+                   "1) Segunda\n" +
+                   "2) Terça\n" +
+                   "3) Quarta\n" +
+                   "4) Quinta\n" +
+                   "5) Sexta\n" +
+                   "6) Sábado";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Horários disponíveis para ").append(dia).append(":\n\n");
+        
+        for (int i = 0; i < horarios.size(); i++) {
+            sb.append(i + 1).append(") ").append(horarios.get(i)).append("\n");
+        }
+        
+        sb.append("\nDigite o número ou o horário (ex: 13h):");
+        return sb.toString();
+    }
+
+    private String processarEscolhaHorario(String numero, String texto, String mensagemOriginal) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        String dia = state.getDraftAtual().getDia();
+        
+        List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
+        if (horarios.isEmpty()) {
+            return menuDias();
+        }
+
+        String horario = null;
+
+        // Verifica se é número
+        if (texto.matches("^\\d+$")) {
+            try {
+                int indice = Integer.parseInt(texto) - 1;
+                if (indice >= 0 && indice < horarios.size()) {
+                    horario = horarios.get(indice);
+                }
+            } catch (NumberFormatException e) {
+                // Ignora
+            }
+        }
+
+        // Se não encontrou por número, tenta extrair do texto
+        if (horario == null) {
+            Matcher matcher = HORARIO_PATTERN.matcher(mensagemOriginal);
+            if (matcher.find()) {
+                String hora = matcher.group(1);
+                String minuto = matcher.group(2);
+                if (hora != null) {
+                    horario = formatarHorario(hora, minuto);
+                }
+            }
+        }
+
+        if (horario == null) {
+            return "Não entendi. Por favor, escolha um horário:\n\n" +
+                   "Digite o número ou o horário (ex: 13h):";
+        }
+
+        conversationStateService.atualizarHorario(numero, horario);
+        return menuNome(numero);
+    }
+
+    private String menuNome(String numero) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        String nome = state.getNome();
+        
+        if (nome != null && !nome.isBlank()) {
+            return menuConfirmacao(numero);
+        }
+        
+        return "Perfeito! Qual é o seu nome?";
+    }
+
+    private String processarEscolhaNome(String numero, String mensagem) {
+        String nome = mensagem.trim();
+        if (nome.length() < 2 || nome.length() > 60) {
+            return "Por favor, digite um nome válido:";
+        }
+        
+        conversationStateService.atualizarNome(numero, nome);
+        return menuConfirmacao(numero);
+    }
+
+    private String menuConfirmacao(String numero) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        String resumo = state.getDraftAtual().getResumo();
+        
+        return "Perfeito! Vou confirmar seu agendamento:\n\n" +
+               resumo + "\n\n" +
+               "1) Confirmar\n" +
+               "2) Cancelar\n\n" +
+               "Digite 1 para confirmar ou 2 para cancelar:";
+    }
+
+    private String processarConfirmacao(String numero, String texto) {
+        if (texto.contains("1") || texto.contains("confirmar") || texto.contains("sim")) {
+            ConversationState state = conversationStateService.buscarPorNumero(numero);
+            var draft = state.getDraftAtual();
+            
+        if (draft != null && draft.isCompleto()) {
+            state.setStep(ConversationStep.AGUARDANDO_CONFIRMACAO);
+            conversationStateService.atualizarStep(state);
+            return "Seu agendamento foi registrado com sucesso! Em breve o salão confirmará a disponibilidade.\n\n" +
+                       "Deseja fazer algo mais?\n\n" +
+                       "1) Agendar\n" +
+                       "2) Meus agendamentos\n" +
+                       "3) Cancelar";
+            }
+        }
+        
+        if (texto.contains("2") || texto.contains("cancelar") || texto.contains("nao")) {
+            conversationStateService.limparEstado(numero);
+            return "Agendamento cancelado.\n\n" +
+                   "Deseja fazer algo mais?\n\n" +
+                   "1) Agendar\n" +
+                   "2) Meus agendamentos\n" +
+                   "3) Cancelar";
+        }
+        
+        return "Por favor, digite 1 para confirmar ou 2 para cancelar:";
+    }
+
+    private String consultarAgendamentos(String numero) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        var draft = state.getDraftAtual();
+        
+        if (draft != null && draft.isCompleto()) {
+            return "Você tem um agendamento pendente:\n\n" +
+                   draft.getResumo() + "\n\n" +
+                   "Aguardando confirmação do salão.\n\n" +
+                   "Deseja fazer algo mais?\n\n" +
+                   "1) Agendar\n" +
+                   "2) Meus agendamentos\n" +
+                   "3) Cancelar";
+        }
+        
+        return "Você ainda não tem agendamentos ativos.\n\n" +
+               "Deseja fazer algo mais?\n\n" +
+               "1) Agendar\n" +
+               "2) Meus agendamentos\n" +
+               "3) Cancelar";
+    }
+
+    private String cancelarAgendamento(String numero) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        var draft = state.getDraftAtual();
+        
+        if (draft != null && draft.isCompleto()) {
+            conversationStateService.limparEstado(numero);
+            return "Seu agendamento foi cancelado com sucesso.\n\n" +
+                   "Deseja fazer algo mais?\n\n" +
+                   "1) Agendar\n" +
+                   "2) Meus agendamentos\n" +
+                   "3) Cancelar";
+        }
+        
+        return "Você não tem agendamentos ativos para cancelar.\n\n" +
+               "Deseja fazer algo mais?\n\n" +
+               "1) Agendar\n" +
+               "2) Meus agendamentos\n" +
+               "3) Cancelar";
+    }
+
+    private String normalizar(String texto) {
+        if (texto == null) return "";
+        String semAcentos = java.text.Normalizer.normalize(texto, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        return semAcentos.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private String formatarHorario(String hora, String minuto) {
+        int horaInt = Integer.parseInt(hora);
+        if (minuto == null || minuto.isBlank()) {
+            return horaInt + "h";
+        }
+        return horaInt + ":" + minuto;
+    }
+}

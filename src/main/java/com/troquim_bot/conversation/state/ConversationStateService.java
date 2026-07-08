@@ -538,7 +538,7 @@ public class ConversationStateService {
         }
     }
 
-    private void atualizarStep(ConversationState state) {
+    public void atualizarStep(ConversationState state) {
         AppointmentDraft draftAtual = state.getDraftAtual();
         
         // Se não tem draft, cria um
@@ -746,10 +746,14 @@ public class ConversationStateService {
     }
 
     private boolean deveCriarNovoAgendamento(String texto) {
-        return contem(texto, "quero agendar", "quero marcar", "gostaria de agendar", 
+        if (contem(texto, "quero agendar", "quero marcar", "gostaria de agendar", 
                       "gostaria de marcar", "novo agendamento", "nova marcação",
                       "outro horario", "outra marcação", "outra marcacao", "posso agendar",
-                      "agendar outra coisa", "remarcar", "mudar");
+                      "agendar outra coisa", "remarcar", "mudar")) {
+            return true;
+        }
+        // "agendar unha", "marcar cabelo", etc. também devem criar novo draft
+        return contem(texto, "agendar", "marcar") && contemServico(texto);
     }
 
     public boolean isApenasAgradecimentoCurto(String mensagem) {

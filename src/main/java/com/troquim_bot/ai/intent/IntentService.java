@@ -19,7 +19,7 @@ public class IntentService {
             return IntentType.HUMANO;
         }
 
-        if (contem(texto, "cancelar", "excluir agendamento", "apagar agendamento", "desmarcar")) {
+        if (contem(texto, "cancelar", "excluir agendamento", "apagar agendamento", "desmarcar", "remover agendamento")) {
             return IntentType.CANCELAR_AGENDAMENTO;
         }
 

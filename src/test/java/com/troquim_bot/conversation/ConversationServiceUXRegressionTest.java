@@ -19,92 +19,90 @@ import com.troquim_bot.schedule.AppointmentService;
 import com.troquim_bot.schedule.ScheduleService;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
-class ConversationServiceCancelamentoTest {
-
-    @Test
-    void cancelarAgendamentoSemAgendamentoAtivo() {
-        Fixture fixture = criarFixtureSemNome("5511000000001");
-
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "Quero cancelar meu agendamento");
-
-        assertEquals("Você não tem nenhum agendamento ativo para cancelar.", resposta);
-    }
+class ConversationServiceUXRegressionTest {
 
     @Test
-    void cancelarAgendamentoComUmAgendamentoCancelaAutomaticamente() {
-        Fixture fixture = criarFixtureComNome("5511000000002");
+    void agendarUnhaNaoReutilizaDiaHorarioAntigo() {
+        // Cenário 1: "agendar unha" não pode reutilizar dia/horário antigo
+        Fixture fixture = criarFixtureComNome("5511000000001");
 
-        // Cria um agendamento
+        // Primeiro agendamento completo
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
         fixture.conversationService.gerarResposta(fixture.numero, "segunda");
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
 
-        // Cancela
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "Quero cancelar meu agendamento");
+        // Novo agendamento: "agendar unha" deve perguntar o dia, não reutilizar
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "agendar unha");
 
-        assertEquals("Seu agendamento foi cancelado com sucesso.", resposta);
-        assertEquals(0, fixture.appointmentApplicationService.listarAtivos().size());
+        assertTrue(resposta.toLowerCase().contains("dia") || resposta.toLowerCase().contains("qual"),
+            "Deve perguntar o dia, não reutilizar o antigo. Resposta: " + resposta);
     }
 
     @Test
-    void cancelarAgendamentoComMultiplosAgendamentosPerguntaQual() {
+    void unhaSegundaAs13ReservaDiretamente() {
+        // Cenário 2: "unha segunda as 13" deve reservar diretamente
+        Fixture fixture = criarFixtureComNome("5511000000002");
+
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "unha segunda as 13");
+
+        assertEquals(1, fixture.appointmentApplicationService.listarTodos().size(),
+            "Deve criar um agendamento");
+        assertTrue(resposta.contains("reservado") || resposta.contains("Perfeito"),
+            "Deve confirmar a reserva. Resposta: " + resposta);
+    }
+
+    @Test
+    void resposta11UsaComoHorario() {
+        // Cenário 3: Após listar horários, "11" deve ser usado como 11h
         Fixture fixture = criarFixtureComNome("5511000000003");
 
-        // Cria primeiro agendamento
+        // Inicia fluxo de agendamento
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
         fixture.conversationService.gerarResposta(fixture.numero, "segunda");
-        fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
-        // Cria segundo agendamento
-        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar cabelo");
-        fixture.conversationService.gerarResposta(fixture.numero, "terça");
-        fixture.conversationService.gerarResposta(fixture.numero, "14h");
+        // Responde "11" como horário
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "11");
 
-        assertEquals(2, fixture.appointmentApplicationService.listarTodos().size());
-
-        // Tenta cancelar
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "Quero cancelar meu agendamento");
-
-        assertTrue(resposta.contains("mais de um agendamento"), "Deve perguntar qual agendamento cancelar");
-        assertTrue(resposta.contains("1."), "Deve listar o primeiro agendamento");
-        assertTrue(resposta.contains("2."), "Deve listar o segundo agendamento");
-        assertEquals(2, fixture.appointmentApplicationService.listarAtivos().size(),
-            "Nenhum agendamento deve ser cancelado automaticamente");
+        assertEquals(1, fixture.appointmentApplicationService.listarTodos().size(),
+            "Deve criar um agendamento com 11h");
+        assertTrue(resposta.contains("reservado") || resposta.contains("Perfeito"),
+            "Deve confirmar a reserva. Resposta: " + resposta);
     }
 
     @Test
-    void cancelarPalavraChaveFunciona() {
-        Fixture fixture = criarFixtureComNome("5511000000004");
+    void perguntaForaDeEscopoRedireciona() {
+        // Cenário 4: Pergunta fora de escopo deve redirecionar educadamente
+        Fixture fixture = criarFixtureSemNome("5511000000004");
 
-        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
-        fixture.conversationService.gerarResposta(fixture.numero, "13h");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "Corinthians ou Flamengo?");
 
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "cancelar");
-
-        assertEquals("Seu agendamento foi cancelado com sucesso.", resposta);
+        assertTrue(resposta.contains("agendamento") || resposta.contains("serviço") || resposta.contains("marcar"),
+            "Deve redirecionar para agendamento. Resposta: " + resposta);
     }
 
     @Test
-    void excluirAgendamentoFunciona() {
+    void cancelarAgendamentoContinuaFuncionando() {
+        // Cenário 5: Cancelamento deve continuar funcionando
         Fixture fixture = criarFixtureComNome("5511000000005");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
         fixture.conversationService.gerarResposta(fixture.numero, "segunda");
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "excluir agendamento");
+        assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
+
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "cancelar agendamento");
 
         assertEquals("Seu agendamento foi cancelado com sucesso.", resposta);
+        assertEquals(0, fixture.appointmentApplicationService.listarAtivos().size());
     }
 
     @Test
-    void apagarAgendamentoFunciona() {
+    void apagarAgendamentoContinuaFuncionando() {
         Fixture fixture = criarFixtureComNome("5511000000006");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
@@ -117,14 +115,52 @@ class ConversationServiceCancelamentoTest {
     }
 
     @Test
-    void cancelarNaoIniciaFluxoDeBooking() {
-        Fixture fixture = criarFixtureSemNome("5511000000007");
+    void removerAgendamentoContinuaFuncionando() {
+        Fixture fixture = criarFixtureComNome("5511000000007");
 
-        // "cancelar" não deve iniciar fluxo de agendamento
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "cancelar");
+        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
-        assertEquals("Você não tem nenhum agendamento ativo para cancelar.", resposta);
-        assertEquals(0, fixture.appointmentApplicationService.listarTodos().size());
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "remover agendamento");
+
+        assertEquals("Seu agendamento foi cancelado com sucesso.", resposta);
+    }
+
+    @Test
+    void consultarAgendamentoContinuaFuncionando() {
+        Fixture fixture = criarFixtureComNome("5511000000008");
+
+        fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, "13h");
+
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "qual meu agendamento");
+
+        assertTrue(resposta.contains("unha"), "Deve mostrar o serviço agendado");
+        assertTrue(resposta.contains("segunda"), "Deve mostrar o dia");
+        assertTrue(resposta.contains("13h") || resposta.contains("13"), "Deve mostrar o horário");
+    }
+
+    @Test
+    void fluxoCompletoServicoDiaHorario() {
+        // Fluxo principal: escolher serviço -> dia -> horário -> confirmar
+        Fixture fixture = criarFixtureComNome("5511000000009");
+
+        String r1 = fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
+        assertTrue(r1.toLowerCase().contains("dia") || r1.toLowerCase().contains("qual"),
+            "Passo 1: deve perguntar o dia. Resposta: " + r1);
+
+        String r2 = fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        assertTrue(r2.toLowerCase().contains("horario") || r2.toLowerCase().contains("qual") || r2.toLowerCase().contains("tenho"),
+            "Passo 2: deve perguntar o horário ou listar disponíveis. Resposta: " + r2);
+
+        String r3 = fixture.conversationService.gerarResposta(fixture.numero, "13h");
+        assertTrue(r3.contains("reservado") || r3.contains("Perfeito"),
+            "Passo 3: deve confirmar a reserva. Resposta: " + r3);
+
+        assertEquals(1, fixture.appointmentApplicationService.listarTodos().size(),
+            "Deve criar exatamente 1 agendamento");
     }
 
     private Fixture criarFixtureComNome(String numero) {

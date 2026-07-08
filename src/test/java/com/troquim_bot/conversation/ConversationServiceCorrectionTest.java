@@ -201,7 +201,12 @@ class ConversationServiceCorrectionTest {
                         reservationApplicationService,
                         appointmentApplicationService
                 ),
-                availabilityApplicationService
+                availabilityApplicationService,
+                new StrictMvpMenuService(
+                        new ConversationStateService(new InMemoryConversationStateRepository()),
+                        availabilityApplicationService,
+                        "NORMAL"
+                )
         );
 
         return new Fixture(

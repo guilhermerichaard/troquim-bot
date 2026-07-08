@@ -138,7 +138,12 @@ class ConversationServiceRegressionTest {
                         reservationApplicationService,
                         appointmentApplicationService
                 ),
-                availabilityApplicationService
+                availabilityApplicationService,
+                new StrictMvpMenuService(
+                        conversationStateService,
+                        availabilityApplicationService,
+                        "NORMAL"
+                )
         );
 
         return new Fixture(

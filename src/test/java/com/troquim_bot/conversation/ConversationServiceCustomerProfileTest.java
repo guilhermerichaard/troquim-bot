@@ -338,7 +338,12 @@ class ConversationServiceCustomerProfileTest {
                 customerProfileService,
                 appointmentApplicationService,
                 appointmentBookingService,
-                availabilityApplicationService
+                availabilityApplicationService,
+                new StrictMvpMenuService(
+                        conversationStateService,
+                        availabilityApplicationService,
+                        "NORMAL"
+                )
         );
     }
 }
