@@ -1,102 +1,66 @@
-version: '3.8'
-
-services:
+﻿services:
   postgres:
     image: postgres:15-alpine
     container_name: evolution-postgres
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution
+      POSTGRES_DB: evolution_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - evolution-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: evolution-redis
     restart: always
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass evolution
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
       - evolution-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   evolution-api:
-    image: atendai/evolution-api:latest
+    image: evoapicloud/evolution-api:v2.3.7
     container_name: evolution-api
     restart: always
     environment:
-      - SERVER_PORT=${SERVER_PORT}
-      - AUTHENTICATION_API_KEY=${AUTHENTICATION_API_KEY}
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-      - DATABASE_SSL=false
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_SSL=false
-      - ENV=${ENV}
-      - LOG_LEVEL=${LOG_LEVEL}
+      - SERVER_PORT=8080
+      - AUTHENTICATION_API_KEY=troquim237
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:evolution@postgres:5432/evolution_db
+      - DATABASE_URL=postgresql://evolution:evolution@postgres:5432/evolution_db
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://:evolution@redis:6379/0
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - ENV=dev
+      - LOG_LEVEL=debug
     ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
+      - "8082:8080"
     volumes:
       - evolution_instances:/evolution/instances
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - evolution-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  evolution-manager:
-    image: atendai/evolution-manager:latest
-    container_name: evolution-manager
-    restart: always
-    environment:
-      - SERVER_PORT=${MANAGER_PORT}
-      - AUTHENTICATION_API_KEY=${AUTHENTICATION_API_KEY}
-      - EVOLUTION_API_URL=http://evolution-api:${SERVER_PORT}
-    ports:
-      - "${MANAGER_PORT}:${MANAGER_PORT}"
-    volumes:
-      - evolution_manager:/evolution-manager
-    depends_on:
-      evolution-api:
-        condition: service_healthy
+      - postgres
+      - redis
     networks:
       - evolution-network
 
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   evolution_instances:
-    driver: local
-  evolution_manager:
-    driver: local
 
 networks:
   evolution-network:
