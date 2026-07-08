@@ -3,7 +3,10 @@ package com.troquim_bot.application.conversation;
 import com.troquim_bot.application.intent.IntentEngine;
 import com.troquim_bot.application.intent.IntentResult;
 import com.troquim_bot.application.intent.IntentType;
+import com.troquim_bot.conversation.StrictMvpMenuService;
+import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.repository.InMemoryConversationRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -14,8 +17,20 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ConversationApplicationServiceWhatsAppTest {
+
+    private StrictMvpMenuService strictMvpMenuService;
+    private ConversationStateService conversationStateService;
+
+    @BeforeEach
+    void setUp() {
+        strictMvpMenuService = mock(StrictMvpMenuService.class);
+        when(strictMvpMenuService.isStrictMvpEnabled()).thenReturn(false);
+        conversationStateService = mock(ConversationStateService.class);
+    }
 
     @Test
     void deveReceberWebhookProcessarMensagemEEnviarRespostaPeloAdapter() throws Exception {
@@ -34,7 +49,7 @@ class ConversationApplicationServiceWhatsAppTest {
                 return new IntentResult(IntentType.UNKNOWN);
             }
         };
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine, strictMvpMenuService, conversationStateService);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,
@@ -60,7 +75,7 @@ class ConversationApplicationServiceWhatsAppTest {
                 return new IntentResult(IntentType.UNKNOWN);
             }
         };
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine, strictMvpMenuService, conversationStateService);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,
@@ -90,7 +105,7 @@ class ConversationApplicationServiceWhatsAppTest {
                 return new IntentResult(IntentType.UNKNOWN);
             }
         };
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine, strictMvpMenuService, conversationStateService);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,
@@ -114,7 +129,7 @@ class ConversationApplicationServiceWhatsAppTest {
                 return new IntentResult(IntentType.UNKNOWN);
             }
         };
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine, strictMvpMenuService, conversationStateService);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,
@@ -145,7 +160,7 @@ class ConversationApplicationServiceWhatsAppTest {
                 return new IntentResult(IntentType.UNKNOWN);
             }
         };
-        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine);
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(messageProcessor, whatsAppAdapter, intentEngine, strictMvpMenuService, conversationStateService);
         ConversationApplicationService applicationService = new ConversationApplicationService(
             new ConversationRegistry(new InMemoryConversationRepository()),
             orchestrator,

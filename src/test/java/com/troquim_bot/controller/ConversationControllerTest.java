@@ -9,6 +9,8 @@ import com.troquim_bot.application.conversation.ConversationOrchestrator;
 import com.troquim_bot.application.conversation.ConversationRegistry;
 import com.troquim_bot.application.conversation.WhatsAppAdapter;
 import com.troquim_bot.conversation.Conversation;
+import com.troquim_bot.conversation.StrictMvpMenuService;
+import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.repository.InMemoryConversationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,8 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItems;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -33,6 +37,8 @@ class ConversationControllerTest {
 
     private MockMvc mockMvc;
     private ConversationApplicationService conversationApplicationService;
+    private StrictMvpMenuService strictMvpMenuService;
+    private ConversationStateService conversationStateService;
 
     private String customerId;
     private String serviceId;
@@ -42,6 +48,9 @@ class ConversationControllerTest {
 
     @BeforeEach
     void setUp() {
+        strictMvpMenuService = mock(StrictMvpMenuService.class);
+        when(strictMvpMenuService.isStrictMvpEnabled()).thenReturn(false);
+        conversationStateService = mock(ConversationStateService.class);
         IntentEngine intentEngine = new IntentEngine() {
             @Override
             public IntentResult classify(String message) {
@@ -53,7 +62,9 @@ class ConversationControllerTest {
             new ConversationOrchestrator(
                 (numero, mensagem) -> "resposta",
                 new IgnoringWhatsAppAdapter(),
-                intentEngine
+                intentEngine,
+                strictMvpMenuService,
+                conversationStateService
             ),
             new ConversationInputMapper()
         );

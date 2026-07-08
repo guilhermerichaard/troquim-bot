@@ -7,6 +7,8 @@ import com.troquim_bot.conversation.Conversation;
 import com.troquim_bot.conversation.ConversationId;
 import com.troquim_bot.conversation.ConversationStatus;
 import com.troquim_bot.conversation.ConversationStep;
+import com.troquim_bot.conversation.StrictMvpMenuService;
+import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.repository.InMemoryConversationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,11 +26,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ConversationApplicationServiceTest {
 
     private ConversationApplicationService conversationApplicationService;
     private InMemoryConversationRepository conversationRepository;
+    private StrictMvpMenuService strictMvpMenuService;
+    private ConversationStateService conversationStateService;
 
     private String customerId;
     private String serviceId;
@@ -38,6 +44,9 @@ class ConversationApplicationServiceTest {
 
     @BeforeEach
     void setUp() {
+        strictMvpMenuService = mock(StrictMvpMenuService.class);
+        when(strictMvpMenuService.isStrictMvpEnabled()).thenReturn(false);
+        conversationStateService = mock(ConversationStateService.class);
         conversationRepository = new InMemoryConversationRepository();
         IntentEngine intentEngine = new IntentEngine() {
             @Override
@@ -50,7 +59,9 @@ class ConversationApplicationServiceTest {
             new ConversationOrchestrator(
                 (numero, mensagem) -> "resposta",
                 new IgnoringWhatsAppAdapter(),
-                intentEngine
+                intentEngine,
+                strictMvpMenuService,
+                conversationStateService
             ),
             new ConversationInputMapper()
         );

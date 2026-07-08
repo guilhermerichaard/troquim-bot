@@ -204,4 +204,33 @@ class DevConversationControllerTest {
             .andExpect(jsonPath("$.conversationState").value("INICIO"))
             .andExpect(jsonPath("$.debug.processingTimeMs").isNumber());
     }
+
+    @Test
+    void deveRetornarMenuPrincipalParaQuemSouEu() throws Exception {
+        String numero = "5511999999999";
+        String mensagem = "Quem sou eu";
+
+        when(conversationApplicationService.processarMensagem(numero, mensagem))
+            .thenReturn("Olá! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
+                "1) Agendar\n" +
+                "2) Meus agendamentos\n" +
+                "3) Cancelar");
+
+        ConversationState state = new ConversationState(numero);
+        state.setStep(ConversationStep.INICIO);
+        when(conversationStateService.buscarPorNumero(numero)).thenReturn(state);
+
+        String requestBody = "{\"number\":\"" + numero + "\",\"message\":\"" + mensagem + "\"}";
+
+        mockMvc.perform(post("/dev/conversation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reply").value("Olá! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
+                "1) Agendar\n" +
+                "2) Meus agendamentos\n" +
+                "3) Cancelar"))
+            .andExpect(jsonPath("$.conversationState").value("INICIO"))
+            .andExpect(jsonPath("$.debug.processingTimeMs").isNumber());
+    }
 }

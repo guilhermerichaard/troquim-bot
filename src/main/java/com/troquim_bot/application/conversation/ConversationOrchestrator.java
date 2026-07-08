@@ -10,6 +10,8 @@ import com.troquim_bot.application.conversation.engine.IntentDetectionStep;
 import com.troquim_bot.application.conversation.engine.LegacyConversationProcessorStep;
 import com.troquim_bot.application.conversation.engine.ResponseBuilder;
 import com.troquim_bot.application.intent.IntentEngine;
+import com.troquim_bot.conversation.StrictMvpMenuService;
+import com.troquim_bot.conversation.state.ConversationStateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,12 +30,16 @@ public class ConversationOrchestrator {
 
     private final ConversationPipeline conversationPipeline;
     private final WhatsAppAdapter whatsAppAdapter;
+    private final StrictMvpMenuService strictMvpMenuService;
+    private final ConversationStateService conversationStateService;
     private final Set<String> mensagensProcessadas = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<String, ReentrantLock> locksPorNumero = new ConcurrentHashMap<>();
 
     public ConversationOrchestrator(ConversationMessageProcessor conversationMessageProcessor,
                                     WhatsAppAdapter whatsAppAdapter,
-                                    IntentEngine intentEngine) {
+                                    IntentEngine intentEngine,
+                                    StrictMvpMenuService strictMvpMenuService,
+                                    ConversationStateService conversationStateService) {
         if (conversationMessageProcessor == null) {
             throw new IllegalArgumentException("ConversationMessageProcessor e obrigatorio");
         }
@@ -42,6 +48,12 @@ public class ConversationOrchestrator {
         }
         if (intentEngine == null) {
             throw new IllegalArgumentException("IntentEngine e obrigatorio");
+        }
+        if (strictMvpMenuService == null) {
+            throw new IllegalArgumentException("StrictMvpMenuService e obrigatorio");
+        }
+        if (conversationStateService == null) {
+            throw new IllegalArgumentException("ConversationStateService e obrigatorio");
         }
         this.conversationPipeline = new ConversationPipeline(List.of(
             new IntentDetectionStep(intentEngine),
@@ -52,9 +64,21 @@ public class ConversationOrchestrator {
             new LegacyConversationProcessorStep(conversationMessageProcessor)
         ));
         this.whatsAppAdapter = whatsAppAdapter;
+        this.strictMvpMenuService = strictMvpMenuService;
+        this.conversationStateService = conversationStateService;
     }
 
     public String processarMensagem(String numero, String mensagem) {
+        // STRICT_MVP: intercepta antes da pipeline para garantir que o menu guiado
+        // tenha prioridade sobre GREETING e outros flows que finalizam o contexto
+        if (strictMvpMenuService.isStrictMvpEnabled()) {
+            var state = conversationStateService.buscarPorNumero(numero);
+            String respostaMenu = strictMvpMenuService.processarMenu(numero, mensagem, state);
+            if (respostaMenu != null) {
+                return respostaMenu;
+            }
+        }
+
         return conversationPipeline.processar(numero, mensagem);
     }
 
