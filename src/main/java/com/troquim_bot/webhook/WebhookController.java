@@ -19,7 +19,17 @@ public class WebhookController {
 
     @PostMapping("/whatsapp")
     public ResponseEntity<String> receberWebhook(@RequestBody String payload) throws Exception {
-        conversationApplicationService.receberWebhookWhatsApp(payload);
+        processarPayload(payload);
         return ResponseEntity.ok("ok");
+    }
+
+    @PostMapping("/whatsapp/messages-upsert")
+    public ResponseEntity<String> receberWebhookMessagesUpsert(@RequestBody String payload) throws Exception {
+        processarPayload(payload);
+        return ResponseEntity.ok("ok");
+    }
+
+    private void processarPayload(String payload) throws Exception {
+        conversationApplicationService.receberWebhookWhatsApp(payload);
     }
 }
