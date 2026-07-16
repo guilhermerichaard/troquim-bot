@@ -1,0 +1,57 @@
+# Validação LOCAL do profile azure com PostgreSQL.
+# NÃO é o deploy do Azure — apenas reproduz o par app + Postgres em disco persistente.
+# Credenciais aqui são de desenvolvimento local (não são secrets reais).
+#
+# Uso:
+#   docker compose -f docker-compose.postgres.yml up --build
+#   docker compose -f docker-compose.postgres.yml down          (mantém o volume)
+#   docker compose -f docker-compose.postgres.yml down -v       (apaga o volume)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: troquim-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: troquim
+      POSTGRES_PASSWORD: troquim
+      POSTGRES_DB: troquimdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - troquim_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U troquim -d troquimdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - troquim-net
+
+  troquim-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: troquim-bot
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: azure
+      CONVERSATION_MODE: STRICT_MVP
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/troquimdb
+      SPRING_DATASOURCE_USERNAME: troquim
+      SPRING_DATASOURCE_PASSWORD: troquim
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - troquim-net
+
+volumes:
+  troquim_pgdata:
+
+networks:
+  troquim-net:
+    driver: bridge
