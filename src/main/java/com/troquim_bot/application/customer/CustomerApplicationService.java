@@ -5,7 +5,6 @@ import com.troquim_bot.common.valueobject.PhoneNumber;
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.repository.CustomerRepository;
-import com.troquim_bot.repository.InMemoryCustomerRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,14 +25,9 @@ public class CustomerApplicationService {
     private final CustomerRepository customerRepository;
 
     /**
-     * Construtor para MVP com repositório em memória.
-     */
-    public CustomerApplicationService() {
-        this(new InMemoryCustomerRepository());
-    }
-
-    /**
-     * Construtor com injeção de dependência (para testes ou futura implementação JPA).
+     * Construtor com injeção de dependência. Como é o único construtor,
+     * o Spring injeta o CustomerRepository @Primary (JPA) automaticamente —
+     * o mesmo repositório usado por CustomerProfileService.
      */
     public CustomerApplicationService(CustomerRepository customerRepository) {
         this.customerRepository = customerRepository;
