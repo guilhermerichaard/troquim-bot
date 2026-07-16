@@ -47,7 +47,7 @@ public class ConversationStateService {
         return processarMensagem(numero, mensagem, null);
     }
 
-    private void persistir(ConversationState state) {
+    public void persistir(ConversationState state) {
         stateRepository.save(state);
     }
 

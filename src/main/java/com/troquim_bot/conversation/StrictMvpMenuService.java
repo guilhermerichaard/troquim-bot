@@ -100,7 +100,8 @@ public class StrictMvpMenuService {
         state.criarNovoDraft();
         state.setStep(ConversationStep.AGUARDANDO_SERVICO);
         conversationStateService.atualizarStep(state);
-        
+        conversationStateService.persistir(state);
+
         return menuServicos();
     }
 
