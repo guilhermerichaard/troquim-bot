@@ -33,8 +33,8 @@ class ReservationApplicationServiceTest {
     private final ServiceId serviceId1 = ServiceId.from(UUID.randomUUID());
     private final AvailabilityId availabilityId1 = AvailabilityId.from(UUID.randomUUID());
 
-    private final LocalDate data = LocalDate.of(2026, 7, 10);
-    private final LocalDateTime expiresAt = LocalDateTime.of(2026, 7, 10, 23, 59);
+    private final LocalDate data = LocalDate.now().plusDays(30);
+    private final LocalDateTime expiresAt = LocalDateTime.of(data, LocalTime.of(23, 59));
 
     @BeforeEach
     void setUp() {
