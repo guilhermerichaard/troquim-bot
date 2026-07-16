@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+
+# IDE / editor
+.vscode
+.idea
+.agents
+
+# Build output (rebuilt inside the image)
+target/
+
+# Docs / misc — not needed at build or runtime
+docs/
+HELP.md
+*.md
+booking-query-responder.patch
+docker-compose.yml
+
+# Secrets — never send into the build context
+.env
+.env.*
+*.pem
+*.key
