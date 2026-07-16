@@ -7,6 +7,7 @@ import com.troquim_bot.ai.memory.ConversationMemory;
 import com.troquim_bot.ai.prompt.PromptService;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
+import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.conversation.state.AppointmentDraft;
 import com.troquim_bot.conversation.state.ConversationState;
@@ -342,6 +343,7 @@ class ConversationServiceCustomerProfileTest {
                 new StrictMvpMenuService(
                         conversationStateService,
                         availabilityApplicationService,
+                        new BookingApplicationService(),
                         "NORMAL"
                 )
         );

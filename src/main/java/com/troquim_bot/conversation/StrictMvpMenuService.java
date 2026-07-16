@@ -1,6 +1,8 @@
 package com.troquim_bot.conversation;
 
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
+import com.troquim_bot.application.booking.BookingApplicationService;
+import com.troquim_bot.application.booking.BookingResult;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
@@ -20,13 +22,16 @@ public class StrictMvpMenuService {
 
     private final ConversationStateService conversationStateService;
     private final AvailabilityApplicationService availabilityApplicationService;
+    private final BookingApplicationService bookingApplicationService;
     private final boolean strictMvpEnabled;
 
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
+                                BookingApplicationService bookingApplicationService,
                                 @Value("${conversation.mode:STRICT_MVP}") String conversationMode) {
         this.conversationStateService = conversationStateService;
         this.availabilityApplicationService = availabilityApplicationService;
+        this.bookingApplicationService = bookingApplicationService;
         this.strictMvpEnabled = "STRICT_MVP".equalsIgnoreCase(conversationMode);
     }
 
@@ -310,21 +315,6 @@ public class StrictMvpMenuService {
     }
 
     private String processarConfirmacao(String numero, String texto) {
-        if (texto.contains("1") || texto.contains("confirmar") || texto.contains("sim")) {
-            ConversationState state = conversationStateService.buscarPorNumero(numero);
-            var draft = state.getDraftAtual();
-            
-        if (draft != null && draft.isCompleto()) {
-            state.setStep(ConversationStep.AGUARDANDO_CONFIRMACAO);
-            conversationStateService.atualizarStep(state);
-            return "Seu agendamento foi registrado com sucesso! Em breve o salão confirmará a disponibilidade.\n\n" +
-                       "Deseja fazer algo mais?\n\n" +
-                       "1) Agendar\n" +
-                       "2) Meus agendamentos\n" +
-                       "3) Cancelar";
-            }
-        }
-        
         if (texto.contains("2") || texto.contains("cancelar") || texto.contains("nao")) {
             conversationStateService.limparEstado(numero);
             return "Agendamento cancelado.\n\n" +
@@ -333,7 +323,44 @@ public class StrictMvpMenuService {
                    "2) Meus agendamentos\n" +
                    "3) Cancelar";
         }
-        
+
+        if (texto.contains("1") || texto.contains("confirmar") || texto.contains("sim")) {
+            ConversationState state = conversationStateService.buscarPorNumero(numero);
+            var draft = state.getDraftAtual();
+
+            if (draft == null || !draft.isCompleto()) {
+                return menuPrincipal();
+            }
+
+            // Idempotência: se já foi registrado, não cria de novo.
+            if (draft.isConfirmado()) {
+                return "Seu agendamento já está registrado. Em breve o salão confirmará a disponibilidade.\n\n" +
+                       "Deseja fazer algo mais?\n\n" +
+                       "1) Agendar\n" +
+                       "2) Meus agendamentos\n" +
+                       "3) Cancelar";
+            }
+
+            BookingResult resultado = bookingApplicationService.confirmar(
+                    numero, state.getNome(), draft.getServico(), draft.getDia(), draft.getHorario());
+
+            if (!resultado.isConfirmado()) {
+                // Conflito/indisponibilidade: mantém em confirmação, sem dados parciais.
+                return resultado.mensagem() + "\n\n" +
+                       "Digite 2 para cancelar e escolher outro horário.";
+            }
+
+            draft.setConfirmado(true);
+            state.setStep(ConversationStep.FINALIZADO);
+            conversationStateService.persistir(state);
+
+            return "Seu agendamento foi registrado com sucesso! Em breve o salão confirmará a disponibilidade.\n\n" +
+                   "Deseja fazer algo mais?\n\n" +
+                   "1) Agendar\n" +
+                   "2) Meus agendamentos\n" +
+                   "3) Cancelar";
+        }
+
         return "Por favor, digite 1 para confirmar ou 2 para cancelar:";
     }
 

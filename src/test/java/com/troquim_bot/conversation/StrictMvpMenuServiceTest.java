@@ -1,6 +1,7 @@
 package com.troquim_bot.conversation;
 
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
+import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
@@ -21,6 +22,7 @@ class StrictMvpMenuServiceTest {
         StrictMvpMenuService strictMvpMenuService = new StrictMvpMenuService(
                 conversationStateService,
                 new AvailabilityApplicationService(),
+                new BookingApplicationService(),
                 "STRICT_MVP"
         );
 
