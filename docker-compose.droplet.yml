@@ -1,0 +1,53 @@
+# Serviço troquim-bot para a Droplet DigitalOcean (/opt/troquim).
+#
+# USO NA DROPLET (merge com o compose de infra existente que define
+# postgres/redis e a rede troquim-internal):
+#
+#   cd /opt/troquim
+#   docker compose -f docker-compose.yml -f docker-compose.droplet.yml up -d --build
+#
+# Pré-requisitos na Droplet:
+#   - rede externa `troquim-internal` já criada (postgres e redis conectados);
+#   - o compose de infra define o serviço `postgres` (container troquim-postgres)
+#     com healthcheck — `depends_on: service_healthy` depende disso;
+#   - /opt/troquim/.env com POSTGRES_USER e POSTGRES_PASSWORD (NUNCA commitado);
+#   - TROQUIM_BOT_SRC no .env apontando para o clone do repositório
+#     (ex: TROQUIM_BOT_SRC=/opt/troquim/troquim-bot). Default: diretório atual.
+#
+# Decisão build local vs GHCR: build local do repositório — não exige registry,
+# autenticação nem push de imagem; a Droplet já tem o Dockerfile no clone.
+#
+# A porta 8080 publicada é TEMPORÁRIA, apenas para validação inicial.
+# Remover o bloco `ports` depois que o reverse proxy/domínio assumir.
+
+services:
+  troquim-bot:
+    build:
+      context: ${TROQUIM_BOT_SRC:-.}
+      dockerfile: Dockerfile
+    container_name: troquim-bot
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: azure
+      CONVERSATION_MODE: STRICT_MVP
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/troquim
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "8080:8080"   # TEMPORÁRIO — remover após validação
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # curl presente na imagem runtime (eclipse-temurin:21-jre / Ubuntu)
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - troquim-internal
+
+networks:
+  troquim-internal:
+    external: true
