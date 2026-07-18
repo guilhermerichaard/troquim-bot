@@ -206,7 +206,10 @@ class ConversationServiceCorrectionTest {
                 new StrictMvpMenuService(
                         new ConversationStateService(new InMemoryConversationStateRepository()),
                         availabilityApplicationService,
-                        new BookingApplicationService(),
+                        new BookingApplicationService(
+                                new ReservationApplicationService(new InMemoryReservationRepository()),
+                                new AppointmentApplicationService(),
+                                new CustomerProfileService(new InMemoryCustomerRepository())),
                         "NORMAL"
                 )
         );

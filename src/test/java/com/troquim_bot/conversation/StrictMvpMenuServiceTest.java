@@ -1,7 +1,12 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.booking.BookingApplicationService;
+import com.troquim_bot.application.reservation.ReservationApplicationService;
+import com.troquim_bot.customer.CustomerProfileService;
+import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
@@ -22,7 +27,10 @@ class StrictMvpMenuServiceTest {
         StrictMvpMenuService strictMvpMenuService = new StrictMvpMenuService(
                 conversationStateService,
                 new AvailabilityApplicationService(),
-                new BookingApplicationService(),
+                new BookingApplicationService(
+                        new ReservationApplicationService(new InMemoryReservationRepository()),
+                        new AppointmentApplicationService(),
+                        new CustomerProfileService(new InMemoryCustomerRepository())),
                 "STRICT_MVP"
         );
 

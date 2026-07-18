@@ -143,7 +143,10 @@ class ConversationServiceRegressionTest {
                 new StrictMvpMenuService(
                         conversationStateService,
                         availabilityApplicationService,
-                        new BookingApplicationService(),
+                        new BookingApplicationService(
+                                new ReservationApplicationService(new InMemoryReservationRepository()),
+                                new AppointmentApplicationService(),
+                                new CustomerProfileService(new InMemoryCustomerRepository())),
                         "NORMAL"
                 )
         );

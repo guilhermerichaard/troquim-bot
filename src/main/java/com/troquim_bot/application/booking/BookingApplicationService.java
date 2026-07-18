@@ -6,8 +6,6 @@ import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.professional.ProfessionalId;
-import com.troquim_bot.repository.InMemoryCustomerRepository;
-import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.reservation.Reservation;
 import com.troquim_bot.service.ServiceId;
 
@@ -56,16 +54,6 @@ public class BookingApplicationService {
         this.reservationApplicationService = reservationApplicationService;
         this.appointmentApplicationService = appointmentApplicationService;
         this.customerProfileService = customerProfileService;
-    }
-
-    /**
-     * Construtor de conveniência para MVP/testes com repositórios em memória,
-     * seguindo o mesmo padrão dos demais Application Services.
-     */
-    public BookingApplicationService() {
-        this(new ReservationApplicationService(new InMemoryReservationRepository()),
-             new AppointmentApplicationService(),
-             new CustomerProfileService(new InMemoryCustomerRepository()));
     }
 
     /**

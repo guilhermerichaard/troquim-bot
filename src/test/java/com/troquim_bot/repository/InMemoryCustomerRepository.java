@@ -2,8 +2,6 @@ package com.troquim_bot.repository;
 
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
-import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,11 +9,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Implementação em memória do CustomerRepository.
- * Ativado apenas nos profiles "test" e "inmemory".
+ * Fake em memória de {@link CustomerRepository} para uso EXCLUSIVO em testes.
+ *
+ * Não é um componente Spring (sem @Repository/@Profile) e vive em src/test:
+ * nenhum código de produção depende dele. Em produção o único CustomerRepository
+ * é o JpaCustomerRepository (@Primary). Os testes o instanciam diretamente.
  */
-@Repository
-@Profile({"test", "inmemory"})
 public class InMemoryCustomerRepository implements CustomerRepository {
 
     private final ConcurrentMap<CustomerId, Customer> customers = new ConcurrentHashMap<>();
