@@ -9,7 +9,7 @@ import java.util.UUID;
  *
  * O tipo {@link UUID} dá fail-fast tipado: um valor não-UUID em
  * {@code troquim.tenant.pilot-business-id} faz o bind falhar no startup.
- * A obrigatoriedade em produção é garantida pelos profiles azure/prod, que
+ * A obrigatoriedade no Azure é garantida pelo profile azure, que
  * definem a propriedade a partir da variável de ambiente TROQUIM_PILOT_BUSINESS_ID
  * sem default (placeholder não resolvido → startup falha).
  */

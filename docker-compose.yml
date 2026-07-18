@@ -32,7 +32,7 @@
     restart: always
     environment:
       - SERVER_PORT=8080
-      - AUTHENTICATION_API_KEY=troquim237
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://evolution:evolution@postgres:5432/evolution_db
       - DATABASE_URL=postgresql://evolution:evolution@postgres:5432/evolution_db

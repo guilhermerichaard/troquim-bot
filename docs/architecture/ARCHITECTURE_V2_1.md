@@ -152,7 +152,7 @@ Separar `CommandId` (idempotência) de exclusion constraint (conflito) é o que 
 
 # C6. Segurança do MVP (substitui V2 §21 item de segurança — agora requisito ATUAL)
 
-Evidência: `SecurityConfig.anyRequest().permitAll()` + CSRF off; e **em produção, na internet**, estão abertos `/dev/conversation`, `/customers`, `/appointments`, `/business`, `/professionals`, `/services`, `/availability`, `/reservations`, `/conversations`, `/clientes`, `/ordens`. Isto é CRUD administrativo e injeção de conversa **públicos**. **Não é risco futuro; é exposição atual.**
+Evidência histórica: a configuração anterior liberava globalmente as requisições com CSRF desligado, expondo `/dev/conversation`, `/customers`, `/appointments`, `/business`, `/professionals`, `/services`, `/availability`, `/reservations`, `/conversations`, `/clientes`, `/ordens`. A integração de segurança substituiu essa exposição por allowlist pública explícita e default-deny.
 
 ### Norma mínima (sem IAM complexo)
 - **Padrão default-deny:** `anyRequest().authenticated()`. Substitui `permitAll()`. *Allowlist* explícita apenas para o que é público.

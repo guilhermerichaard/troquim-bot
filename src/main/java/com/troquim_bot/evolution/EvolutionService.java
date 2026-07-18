@@ -18,7 +18,7 @@ public class EvolutionService {
     @Value("${evolution.api.instance-name:troquim-dev}")
     private String instanceName;
 
-    @Value("${evolution.api.api-key:troquim237}")
+    @Value("${evolution.api.api-key:}")
     private String apiKey;
   
 

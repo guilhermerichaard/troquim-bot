@@ -49,7 +49,9 @@ class CustomerPostgresPersistenceTest {
                         "spring.datasource.password=" + POSTGRES.getPassword(),
                         // azure exige TROQUIM_PILOT_BUSINESS_ID (sem default); fornecido aqui como
                         // a variável que o profile referencia (resolve o tenant e o placeholder Flyway).
-                        "TROQUIM_PILOT_BUSINESS_ID=11111111-1111-1111-1111-111111111111")
+                        "TROQUIM_PILOT_BUSINESS_ID=11111111-1111-1111-1111-111111111111",
+                        // azure também exige a chave administrativa sem default.
+                        "TROQUIM_ADMIN_API_KEY=test-admin-key-for-azure")
                 .run();
     }
 

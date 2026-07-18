@@ -10,8 +10,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Config tipada de tenancy (fonte única do BusinessId do piloto):
  * UUID válido faz bind; UUID inválido faz o contexto falhar (fail-fast) — o mesmo
- * mecanismo que protege azure/prod. A obrigatoriedade em produção (variável
- * ausente) é garantida pelo placeholder sem default em application-azure/prod,
+ * mecanismo que protege azure. A obrigatoriedade no Azure (variável
+ * ausente) é garantida pelo placeholder sem default em application-azure,
  * exercitado pelos testes Testcontainers com o profile azure.
  */
 class TenantPropertiesTest {

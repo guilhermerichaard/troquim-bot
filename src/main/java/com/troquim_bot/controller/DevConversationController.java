@@ -6,6 +6,7 @@ import com.troquim_bot.controller.dto.DevConversationResponse;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/dev/conversation")
+@Profile("dev")
 public class DevConversationController {
 
     private final ConversationApplicationService conversationApplicationService;
