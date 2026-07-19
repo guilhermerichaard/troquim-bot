@@ -165,7 +165,8 @@ class ConversationServiceCancelamentoTest {
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
-                        appointmentApplicationService
+                        appointmentApplicationService,
+                        customerProfileService
                 ),
                 availabilityApplicationService,
                 new StrictMvpMenuService(

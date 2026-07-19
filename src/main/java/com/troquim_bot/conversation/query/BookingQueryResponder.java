@@ -7,7 +7,7 @@ import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.conversation.language.ConversationTextUtils;
 import com.troquim_bot.conversation.state.AppointmentDraft;
 import com.troquim_bot.conversation.state.ConversationState;
-import com.troquim_bot.customer.CustomerId;
+import com.troquim_bot.customer.CustomerProfileService;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,11 +23,14 @@ public class BookingQueryResponder {
 
     private final AppointmentApplicationService appointmentApplicationService;
     private final AvailabilityApplicationService availabilityApplicationService;
+    private final CustomerProfileService customerProfileService;
 
     public BookingQueryResponder(AppointmentApplicationService appointmentApplicationService,
-                                 AvailabilityApplicationService availabilityApplicationService) {
+                                 AvailabilityApplicationService availabilityApplicationService,
+                                 CustomerProfileService customerProfileService) {
         this.appointmentApplicationService = appointmentApplicationService;
         this.availabilityApplicationService = availabilityApplicationService;
+        this.customerProfileService = customerProfileService;
     }
 
     public Optional<String> responderConsultaAgendamento(String numero,
@@ -38,8 +41,10 @@ public class BookingQueryResponder {
             return Optional.empty();
         }
 
-        CustomerId customerId = CustomerId.fromPhone(numero);
-        Optional<Appointment> appointment = appointmentApplicationService.buscarAtivoPorCliente(customerId);
+        // Consulta pela identidade oficial, sem criar Customer nem derivar id por telefone.
+        // Sem Customer → sem agendamentos a exibir.
+        Optional<Appointment> appointment = customerProfileService.localizarIdOficial(numero)
+                .flatMap(appointmentApplicationService::buscarAtivoPorCliente);
 
         return Optional.of(appointment
                 .map(a -> montarResumoAgendamento(a, conversationState))

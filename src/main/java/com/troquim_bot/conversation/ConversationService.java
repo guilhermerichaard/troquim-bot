@@ -20,7 +20,6 @@ import org.springframework.stereotype.Service;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.conversation.language.ConversationTextUtils;
 import com.troquim_bot.conversation.query.BookingQueryResponder;
-import com.troquim_bot.customer.CustomerId;
 
 import java.util.List;
 import java.util.Optional;
@@ -69,7 +68,8 @@ public class ConversationService {
         this.strictMvpMenuService = strictMvpMenuService;
         this.bookingQueryResponder = new BookingQueryResponder(
                 appointmentApplicationService,
-                availabilityApplicationService
+                availabilityApplicationService,
+                customerProfileService
         );
         this.conversationContextResolver = new ConversationContextResolver(
                 conversationStateService,
@@ -347,8 +347,10 @@ public class ConversationService {
     }
 
     private Optional<String> processarCancelamento(String numero) {
-        CustomerId customerId = CustomerId.fromPhone(numero);
-        List<Appointment> ativos = appointmentApplicationService.listarAtivosPorCliente(customerId);
+        // Identidade oficial, sem criar Customer nem derivar id por telefone.
+        List<Appointment> ativos = customerProfileService.localizarIdOficial(numero)
+                .map(appointmentApplicationService::listarAtivosPorCliente)
+                .orElse(List.of());
 
         if (ativos.isEmpty()) {
             return Optional.of("Você não tem nenhum agendamento ativo para cancelar.");

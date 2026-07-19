@@ -4,10 +4,13 @@ import com.troquim_bot.ai.intent.IntentType;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.conversation.state.ConversationState;
+import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
 import com.troquim_bot.repository.InMemoryAvailabilityRepository;
+import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.schedule.ScheduleService;
+import com.troquim_bot.support.TestTenants;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -56,7 +59,8 @@ class BookingQueryResponderTest {
                 new AvailabilityApplicationService(
                         new InMemoryAvailabilityRepository(),
                         scheduleService
-                )
+                ),
+                new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())
         );
     }
 }

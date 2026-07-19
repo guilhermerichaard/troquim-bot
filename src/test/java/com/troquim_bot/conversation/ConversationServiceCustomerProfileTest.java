@@ -92,7 +92,8 @@ class ConversationServiceCustomerProfileTest {
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
-                        appointmentApplicationService
+                        appointmentApplicationService,
+                        customerProfileService
                 )
         );
 
@@ -138,7 +139,8 @@ class ConversationServiceCustomerProfileTest {
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
-                        appointmentApplicationService
+                        appointmentApplicationService,
+                        customerProfileService
                 )
         );
 
@@ -187,7 +189,8 @@ class ConversationServiceCustomerProfileTest {
                         scheduleService,
                         appointmentService,
                         rsv,
-                        aas
+                        aas,
+                        customerProfileService
                 )
         );
 
@@ -295,7 +298,8 @@ class ConversationServiceCustomerProfileTest {
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
-                        appointmentApplicationService
+                        appointmentApplicationService,
+                        customerProfileService
                 )
         );
     }

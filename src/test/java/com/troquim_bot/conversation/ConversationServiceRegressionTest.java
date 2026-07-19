@@ -138,7 +138,8 @@ class ConversationServiceRegressionTest {
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
-                        appointmentApplicationService
+                        appointmentApplicationService,
+                        customerProfileService
                 ),
                 availabilityApplicationService,
                 new StrictMvpMenuService(

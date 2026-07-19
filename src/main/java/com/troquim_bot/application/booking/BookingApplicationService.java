@@ -3,6 +3,7 @@ package com.troquim_bot.application.booking;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.professional.ProfessionalId;
@@ -11,6 +12,7 @@ import com.troquim_bot.service.ServiceId;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
@@ -64,7 +66,15 @@ public class BookingApplicationService {
      * criada após passar na verificação, o Customer só é persistido após o
      * agendamento concluir, e uma falha ao criar o Appointment cancela a
      * reserva recém-criada (compensação).
+     *
+     * Fronteira transacional da Application (ARCHITECTURE_V2_1 §C10): Reservation,
+     * Appointment e Customer são persistidos numa ÚNICA transação Spring/JPA. Se a
+     * persistência do Customer (ou qualquer escrita) lançar RuntimeException não
+     * tratada, a transação sofre rollback e nenhum Reservation/Appointment órfão
+     * permanece. A ordem funcional já validada é preservada; o caminho de conflito
+     * retorna sem exceção (commit sem Customer persistido).
      */
+    @Transactional
     public BookingResult confirmar(String telefone, String nomeCliente,
                                    String servico, String dia, String horario) {
         final LocalDate data;
@@ -78,7 +88,11 @@ public class BookingApplicationService {
             return BookingResult.invalido("Não consegui interpretar a data ou o horário informado.");
         }
 
-        CustomerId customerId = CustomerId.fromPhone(telefone);
+        // Autoridade única de identidade: resolve/cria o Customer UMA vez e usa o
+        // CustomerId oficial surrogate. O cliente é persistido só no sucesso (persistir),
+        // para não deixar Customer órfão quando o horário estiver ocupado.
+        Customer customer = customerProfileService.resolverOuConstruir(telefone, nomeCliente);
+        CustomerId customerId = customer.getId();
         ServiceId serviceId = ServiceId.from(uuidDeterministico("service:" + normalizar(servico)));
         AvailabilityId availabilityId = AvailabilityId.from(uuidDeterministico(
                 "availability:" + PROFISSIONAL_PADRAO + ":" + normalizar(dia) + ":" + inicio));
@@ -103,9 +117,9 @@ public class BookingApplicationService {
             return BookingResult.indisponivel("Esse horário já está ocupado.");
         }
 
-        // Só persiste o cliente depois que a reserva e o agendamento deram certo,
-        // para não deixar Customer criado quando o horário estava indisponível.
-        customerProfileService.salvarNome(telefone, nomeCliente);
+        // Reserva e agendamento concluídos: persiste o Customer oficial uma única vez.
+        // O mesmo customerId já foi gravado em Reservation e Appointment.
+        customerProfileService.persistir(customer);
 
         return BookingResult.confirmado(servico, dia, horario, nomeCliente);
     }

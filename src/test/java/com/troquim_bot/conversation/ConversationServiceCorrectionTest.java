@@ -201,7 +201,8 @@ class ConversationServiceCorrectionTest {
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
-                        appointmentApplicationService
+                        appointmentApplicationService,
+                        customerProfileService
                 ),
                 availabilityApplicationService,
                 new StrictMvpMenuService(

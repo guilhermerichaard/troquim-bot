@@ -4,9 +4,8 @@ import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.customer.CustomerId;
+import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.professional.ProfessionalId;
-import com.troquim_bot.repository.InMemoryAppointmentRepository;
-import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.reservation.Reservation;
 import com.troquim_bot.service.ServiceId;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,32 +33,19 @@ public class AppointmentBookingService {
     private final AppointmentService appointmentService;
     private final ReservationApplicationService reservationApplicationService;
     private final AppointmentApplicationService appointmentApplicationService;
+    private final CustomerProfileService customerProfileService;
 
     @Autowired
     public AppointmentBookingService(ScheduleService scheduleService,
                                      AppointmentService appointmentService,
                                      ReservationApplicationService reservationApplicationService,
-                                     AppointmentApplicationService appointmentApplicationService) {
+                                     AppointmentApplicationService appointmentApplicationService,
+                                     CustomerProfileService customerProfileService) {
         this.scheduleService = scheduleService;
         this.appointmentService = appointmentService;
         this.reservationApplicationService = reservationApplicationService;
         this.appointmentApplicationService = appointmentApplicationService;
-    }
-
-    public AppointmentBookingService(ScheduleService scheduleService, AppointmentService appointmentService) {
-        this(scheduleService, appointmentService, new InMemoryReservationRepository(), new InMemoryAppointmentRepository());
-    }
-
-    private AppointmentBookingService(ScheduleService scheduleService,
-                                      AppointmentService appointmentService,
-                                      InMemoryReservationRepository reservationRepository,
-                                      InMemoryAppointmentRepository appointmentRepository) {
-        this(
-                scheduleService,
-                appointmentService,
-                new ReservationApplicationService(reservationRepository),
-                new AppointmentApplicationService(appointmentRepository, reservationRepository)
-        );
+        this.customerProfileService = customerProfileService;
     }
 
     public boolean isAvailable(String day, String time) {
@@ -99,8 +85,12 @@ public class AppointmentBookingService {
         LocalTime startTime = LocalTime.parse(normalizedTime);
         LocalTime endTime = startTime.plusHours(1);
 
+        // Identidade oficial: resolve/cria o Customer e usa o CustomerId surrogate
+        // persistido — nunca CustomerId.fromPhone.
+        CustomerId customerId = customerProfileService.resolverIdOficial(customerNumber);
+
         Reservation reservation = reservationApplicationService.criarReserva(
-                CustomerId.fromPhone(customerNumber),
+                customerId,
                 DEFAULT_PROFESSIONAL_ID,
                 ServiceId.from(stableUuid("service:" + valorSeguro(service))),
                 AvailabilityId.from(stableUuid("availability:" + normalizarTexto(day) + ":" + normalizedTime)),

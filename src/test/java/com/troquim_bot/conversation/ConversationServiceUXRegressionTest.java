@@ -201,7 +201,8 @@ class ConversationServiceUXRegressionTest {
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
-                        appointmentApplicationService
+                        appointmentApplicationService,
+                        customerProfileService
                 ),
                 availabilityApplicationService,
                 new StrictMvpMenuService(

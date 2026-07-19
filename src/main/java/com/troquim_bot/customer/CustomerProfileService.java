@@ -78,6 +78,63 @@ public class CustomerProfileService {
         return salvarNome(numero, nome);
     }
 
+    // ==================== IDENTIDADE OFICIAL (ARCHITECTURE_V2_1 §C7/§C8) ====================
+    //
+    // Autoridade única de identidade do cliente. O CustomerId oficial é o surrogate
+    // persistido do agregado Customer, resolvido por (BusinessId, phone E.164). Appointment,
+    // Reservation e Conversation recebem SEMPRE este id — nunca CustomerId.fromPhone.
+
+    /**
+     * Resolve o Customer do tenant corrente pela chave lógica (BusinessId, phone E.164),
+     * ou CONSTRÓI um novo (ainda não persistido) com o nome informado. Não persiste.
+     *
+     * O {@code CustomerId} do resultado é o id oficial surrogate — já persistido se o
+     * cliente existir, ou o que será persistido por {@link #persistir(Customer)} caso o
+     * fluxo de confirmação conclua sem conflito. Isto permite ao caso de uso reservar a
+     * identidade oficial antes da checagem de conflito sem deixar Customer órfão quando o
+     * horário está ocupado.
+     */
+    public Customer resolverOuConstruir(String numero, String nome) {
+        Customer existente = resolver(numero).orElse(null);
+        if (existente != null) {
+            if (temValor(nome)) {
+                existente.atualizarNome(criarCustomerName(nome.trim()));
+            }
+            return existente;
+        }
+        CustomerName name = temValor(nome)
+                ? criarCustomerName(nome.trim())
+                : nomeGenerico(numero);
+        return new Customer(CustomerId.generate(), tenantProvider.currentBusinessId(),
+                name, new PhoneNumber(numero), null);
+    }
+
+    /**
+     * Persiste (cria ou atualiza) o Customer resolvido/construído. Chamado uma única vez,
+     * após o sucesso do agendamento.
+     */
+    public Customer persistir(Customer customer) {
+        return customerRepository.save(customer);
+    }
+
+    /**
+     * Resolve-or-create do Customer do tenant corrente e devolve o {@code CustomerId}
+     * oficial surrogate (persistindo o cliente se ainda não existir). É idempotente:
+     * mesmo (BusinessId, phone) → mesmo id.
+     */
+    public CustomerId resolverIdOficial(String numero) {
+        return persistir(resolverOuConstruir(numero, null)).getId();
+    }
+
+    /**
+     * Localiza o {@code CustomerId} oficial de um telefone SEM criar Customer. Usado nos
+     * caminhos de leitura/consulta/cancelamento da Conversation: se o cliente não existe,
+     * também não há agendamentos a listar. A Conversation nunca cria nem deriva id.
+     */
+    public Optional<CustomerId> localizarIdOficial(String numero) {
+        return resolver(numero).map(Customer::getId);
+    }
+
     public Optional<String> nomePreferido(CustomerProfile profile) {
         if (profile == null) {
             return Optional.empty();
@@ -120,11 +177,14 @@ public class CustomerProfileService {
 
     private Customer criarCliente(String numero) {
         PhoneNumber phone = new PhoneNumber(numero);
-        // Nome genérico que será ignorado pelo nomePreferido
-        CustomerName name = new CustomerName("Cliente", phone.getDdd());
         Customer customer = new Customer(CustomerId.generate(), tenantProvider.currentBusinessId(),
-                name, phone, null);
+                nomeGenerico(numero), phone, null);
         return customerRepository.save(customer);
+    }
+
+    /** Nome genérico (ignorado por {@link #nomePreferido(CustomerProfile)}) para clientes sem nome. */
+    private CustomerName nomeGenerico(String numero) {
+        return new CustomerName("Cliente", new PhoneNumber(numero).getDdd());
     }
 
     private boolean temValor(String valor) {

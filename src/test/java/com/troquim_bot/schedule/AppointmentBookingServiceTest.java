@@ -2,9 +2,12 @@ package com.troquim_bot.schedule;
 
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
+import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
+import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.reservation.Reservation;
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.reservation.ReservationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,7 @@ class AppointmentBookingServiceTest {
     private InMemoryAppointmentRepository appointmentRepository;
     private ReservationApplicationService reservationApplicationService;
     private AppointmentApplicationService appointmentApplicationService;
+    private CustomerProfileService customerProfileService;
 
     @BeforeEach
     void setUp() {
@@ -34,11 +38,13 @@ class AppointmentBookingServiceTest {
                 appointmentRepository,
                 reservationRepository
         );
+        customerProfileService = new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot());
         bookingService = new AppointmentBookingService(
                 scheduleService,
                 appointmentService,
                 reservationApplicationService,
-                appointmentApplicationService
+                appointmentApplicationService,
+                customerProfileService
         );
     }
 
@@ -103,7 +109,8 @@ class AppointmentBookingServiceTest {
                 scheduleService,
                 appointmentService,
                 reservationApplicationService,
-                appointmentApplicationService
+                appointmentApplicationService,
+                customerProfileService
         );
 
         String resultado = bookingService.bookIfAvailable(
@@ -138,7 +145,8 @@ class AppointmentBookingServiceTest {
                 scheduleService,
                 appointmentService,
                 reservationApplicationService,
-                appointmentApplicationService
+                appointmentApplicationService,
+                customerProfileService
         );
         scheduleService.reservarHorario("segunda", "10:00", "5511888888888");
 
