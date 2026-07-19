@@ -1,5 +1,6 @@
 package com.troquim_bot.customer;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.common.valueobject.CustomerName;
 import com.troquim_bot.common.valueobject.PhoneNumber;
 
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 public class Customer {
 
     private final CustomerId id;
+    private final BusinessId businessId;
     private CustomerName name;
     private String apelido;
     private PhoneNumber phone;
@@ -32,9 +34,12 @@ public class Customer {
      * Construtor para criação de novo Customer.
      * Inicia com status ATIVO.
      */
-    public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes) {
+    public Customer(CustomerId id, BusinessId businessId, CustomerName name, PhoneNumber phone, String notes) {
         if (id == null) {
             throw new IllegalArgumentException("CustomerId é obrigatório");
+        }
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
         }
         if (name == null) {
             throw new IllegalArgumentException("Nome do cliente é obrigatório");
@@ -44,6 +49,7 @@ public class Customer {
         }
 
         this.id = id;
+        this.businessId = businessId;
         this.name = name;
         this.phone = phone;
         this.notes = notes != null ? notes.trim() : null;
@@ -57,30 +63,33 @@ public class Customer {
      * Construtor para reconstituição de Customer existente (ex: do banco de dados).
      * Usado apenas pela infraestrutura.
      */
-    public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes,
+    public Customer(CustomerId id, BusinessId businessId, CustomerName name, PhoneNumber phone, String notes,
                      CustomerStatus status, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
-        this(id, name, phone, notes, null, status, 0, null, criadoEm, atualizadoEm);
+        this(id, businessId, name, phone, notes, null, status, 0, null, criadoEm, atualizadoEm);
     }
 
     /**
      * Construtor completo para reconstituição de Customer existente.
      * Usado apenas pela infraestrutura.
      */
-    public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes,
+    public Customer(CustomerId id, BusinessId businessId, CustomerName name, PhoneNumber phone, String notes,
                      CustomerStatus status, int totalAtendimentos, LocalDateTime ultimoAtendimento,
                      LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
-        this(id, name, phone, notes, null, status, totalAtendimentos, ultimoAtendimento, criadoEm, atualizadoEm);
+        this(id, businessId, name, phone, notes, null, status, totalAtendimentos, ultimoAtendimento, criadoEm, atualizadoEm);
     }
 
     /**
      * Construtor completo para reconstituição de Customer existente, incluindo apelido.
      * Usado apenas pela infraestrutura.
      */
-    public Customer(CustomerId id, CustomerName name, PhoneNumber phone, String notes,
+    public Customer(CustomerId id, BusinessId businessId, CustomerName name, PhoneNumber phone, String notes,
                      String apelido, CustomerStatus status, int totalAtendimentos, LocalDateTime ultimoAtendimento,
                      LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         if (id == null) {
             throw new IllegalArgumentException("CustomerId é obrigatório");
+        }
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
         }
         if (name == null) {
             throw new IllegalArgumentException("Nome do cliente é obrigatório");
@@ -90,6 +99,7 @@ public class Customer {
         }
 
         this.id = id;
+        this.businessId = businessId;
         this.name = name;
         this.phone = phone;
         this.notes = notes != null ? notes.trim() : null;
@@ -105,6 +115,10 @@ public class Customer {
 
     public CustomerId getId() {
         return id;
+    }
+
+    public BusinessId getBusinessId() {
+        return businessId;
     }
 
     public CustomerName getName() {

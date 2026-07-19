@@ -6,6 +6,7 @@ import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
@@ -30,7 +31,7 @@ class StrictMvpMenuServiceTest {
                 new BookingApplicationService(
                         new ReservationApplicationService(new InMemoryReservationRepository()),
                         new AppointmentApplicationService(),
-                        new CustomerProfileService(new InMemoryCustomerRepository())),
+                        new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())),
                 "STRICT_MVP"
         );
 

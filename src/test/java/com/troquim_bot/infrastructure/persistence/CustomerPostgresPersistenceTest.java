@@ -3,6 +3,7 @@ package com.troquim_bot.infrastructure.persistence;
 import com.troquim_bot.TroquimBotApplication;
 import com.troquim_bot.application.customer.CustomerApplicationService;
 import com.troquim_bot.customer.Customer;
+import com.troquim_bot.support.TestTenants;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -45,7 +46,10 @@ class CustomerPostgresPersistenceTest {
                 .properties(
                         "spring.datasource.url=" + POSTGRES.getJdbcUrl(),
                         "spring.datasource.username=" + POSTGRES.getUsername(),
-                        "spring.datasource.password=" + POSTGRES.getPassword())
+                        "spring.datasource.password=" + POSTGRES.getPassword(),
+                        // azure exige TROQUIM_PILOT_BUSINESS_ID (sem default); fornecido aqui como
+                        // a variável que o profile referencia (resolve o tenant e o placeholder Flyway).
+                        "TROQUIM_PILOT_BUSINESS_ID=11111111-1111-1111-1111-111111111111")
                 .run();
     }
 
@@ -57,19 +61,22 @@ class CustomerPostgresPersistenceTest {
         // Contexto A: cria o Customer (caso de uso de POST /customers) e encerra.
         try (ConfigurableApplicationContext ctxA = startContext()) {
             CustomerApplicationService svcA = ctxA.getBean(CustomerApplicationService.class);
-            svcA.criarCliente(nome, phone, null);
-            assertEquals(1, svcA.listarTodos().size(),
+            svcA.criarCliente(TestTenants.PILOT, nome, phone, null);
+            assertEquals(1, svcA.listarTodos(TestTenants.PILOT).size(),
                     "O container começa vazio; após criar, deve haver exatamente 1 Customer no contexto A");
         }
 
-        // Contexto B: novo contexto, MESMO banco → o Customer deve permanecer.
+        // Contexto B: novo contexto, MESMO banco → o Customer e seu BusinessId devem permanecer.
         try (ConfigurableApplicationContext ctxB = startContext()) {
             CustomerApplicationService svcB = ctxB.getBean(CustomerApplicationService.class);
-            List<Customer> todos = svcB.listarTodos();
+            List<Customer> todos = svcB.listarTodos(TestTenants.PILOT);
             assertEquals(1, todos.size(),
                     "Após reiniciar o contexto contra o mesmo PostgreSQL, o Customer deve persistir");
-            assertTrue(todos.stream().anyMatch(c -> nome.equals(c.getName().getFullName())),
+            Customer preservado = todos.get(0);
+            assertTrue(nome.equals(preservado.getName().getFullName()),
                     "O Customer criado no contexto A deve reaparecer no contexto B (mesmo nome)");
+            assertEquals(TestTenants.PILOT, preservado.getBusinessId(),
+                    "O BusinessId deve ser preservado entre reinícios");
         }
     }
 }

@@ -14,6 +14,7 @@ import com.troquim_bot.repository.InMemoryConversationStateRepository;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.schedule.AppointmentBookingService;
 import com.troquim_bot.schedule.AppointmentService;
@@ -171,7 +172,7 @@ class ConversationServiceUXRegressionTest {
     }
 
     private Fixture criarFixtureSemNome(String numero) {
-        CustomerProfileService customerProfileService = new CustomerProfileService(new InMemoryCustomerRepository());
+        CustomerProfileService customerProfileService = new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot());
         AppointmentService appointmentService = new AppointmentService();
         ScheduleService scheduleService = new ScheduleService();
         InMemoryReservationRepository reservationRepository = new InMemoryReservationRepository();
@@ -209,7 +210,7 @@ class ConversationServiceUXRegressionTest {
                         new BookingApplicationService(
                                 new ReservationApplicationService(new InMemoryReservationRepository()),
                                 new AppointmentApplicationService(),
-                                new CustomerProfileService(new InMemoryCustomerRepository())),
+                                new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())),
                         "NORMAL"
                 )
         );

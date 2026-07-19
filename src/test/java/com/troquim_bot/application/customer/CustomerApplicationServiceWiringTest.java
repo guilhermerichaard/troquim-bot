@@ -1,16 +1,17 @@
 package com.troquim_bot.application.customer;
 
 import com.troquim_bot.customer.Customer;
-import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.infrastructure.persistence.JpaCustomerRepository;
 import com.troquim_bot.repository.CustomerRepository;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.support.TestTenants;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -26,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @SpringBootTest
 @ActiveProfiles("test")
+@Transactional
 class CustomerApplicationServiceWiringTest {
 
     @Autowired
@@ -61,11 +63,12 @@ class CustomerApplicationServiceWiringTest {
 
         customerProfileService.salvarNome(telefone, "Cliente Wiring");
 
-        CustomerId esperado = CustomerId.fromPhone(telefone);
-        List<Customer> todos = customerApplicationService.listarTodos();
+        // Identidade é surrogate; casa pela chave lógica (tenant + telefone/nome),
+        // não por um id derivado do telefone.
+        List<Customer> todos = customerApplicationService.listarTodos(TestTenants.PILOT);
 
-        assertTrue(todos.stream().anyMatch(c -> c.getId().equals(esperado)),
+        assertTrue(todos.stream().anyMatch(c -> "Cliente Wiring".equals(c.getName().getFullName())),
                 "O cliente salvo pelo CustomerProfileService deveria aparecer no "
-                + "CustomerApplicationService — ambos devem compartilhar o mesmo repositório");
+                + "CustomerApplicationService — ambos compartilham o mesmo repositório e tenant");
     }
 }

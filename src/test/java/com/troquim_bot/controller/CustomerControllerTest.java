@@ -4,6 +4,7 @@ import com.troquim_bot.controller.dto.CreateCustomerRequest;
 import com.troquim_bot.controller.dto.UpdateCustomerRequest;
 import com.troquim_bot.application.customer.CustomerApplicationService;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerStatus;
@@ -34,7 +35,7 @@ class CustomerControllerTest {
     void setUp() {
         customerRepository = new InMemoryCustomerRepository();
         customerApplicationService = new CustomerApplicationService(customerRepository);
-        CustomerController customerController = new CustomerController(customerApplicationService);
+        CustomerController customerController = new CustomerController(customerApplicationService, TestTenants.pilot());
         mockMvc = MockMvcBuilders.standaloneSetup(customerController).build();
     }
 
@@ -43,8 +44,8 @@ class CustomerControllerTest {
     @Test
     void deveRetornar200QuandoListarTodos() throws Exception {
         // Cria alguns clientes
-        customerApplicationService.criarCliente("João Silva", "+5511999999999", "Cliente VIP");
-        customerApplicationService.criarCliente("Maria Souza", "+5511988888888", null);
+        customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", "Cliente VIP");
+        customerApplicationService.criarCliente(TestTenants.PILOT,"Maria Souza", "+5511988888888", null);
 
         // Testa GET /customers
         mockMvc.perform(get("/customers"))
@@ -65,12 +66,25 @@ class CustomerControllerTest {
             .andExpect(jsonPath("$.length()").value(0));
     }
 
+    @Test
+    void getCustomersRetornaSomenteDoTenantCorrente() throws Exception {
+        // O controller resolve o tenant como PILOT (TestTenants.pilot()).
+        customerApplicationService.criarCliente(TestTenants.PILOT, "Ana Pilot", "5511900000010", null);
+        // Cliente de OUTRO tenant não pode aparecer no GET /customers.
+        customerApplicationService.criarCliente(TestTenants.OUTRO, "Bruno Outro", "5511900000011", null);
+
+        mockMvc.perform(get("/customers"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].name").value("Ana Pilot"));
+    }
+
     // ==================== GET /customers/{id} ====================
 
     @Test
     void deveRetornar200QuandoBuscarPorIdExistente() throws Exception {
         // Cria um cliente
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", "Cliente VIP");
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", "Cliente VIP");
         String customerId = customer.getId().getValue().toString();
 
         // Testa GET /customers/{id}
@@ -173,7 +187,7 @@ class CustomerControllerTest {
     @Test
     void deveAtualizarNome() throws Exception {
         // Cria um cliente
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", "Original");
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", "Original");
         String customerId = customer.getId().getValue().toString();
 
         // Atualiza apenas o nome
@@ -191,7 +205,7 @@ class CustomerControllerTest {
     @Test
     void deveAtualizarTelefone() throws Exception {
         // Cria um cliente
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
         String customerId = customer.getId().getValue().toString();
 
         // Atualiza apenas o telefone
@@ -208,7 +222,7 @@ class CustomerControllerTest {
     @Test
     void deveAtualizarObservacoes() throws Exception {
         // Cria um cliente
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", "Original");
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", "Original");
         String customerId = customer.getId().getValue().toString();
 
         // Atualiza apenas as observações
@@ -224,7 +238,7 @@ class CustomerControllerTest {
     @Test
     void deveAtualizarTodosOsCampos() throws Exception {
         // Cria um cliente
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", "Original");
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", "Original");
         String customerId = customer.getId().getValue().toString();
 
         // Atualiza todos os campos
@@ -255,7 +269,7 @@ class CustomerControllerTest {
     @Test
     void deveInativarClienteERetornar204() throws Exception {
         // Cria um cliente
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
         String customerId = customer.getId().getValue().toString();
 
         // Verifica que está ativo
@@ -290,8 +304,8 @@ class CustomerControllerTest {
     @Test
     void clienteInativadoNaoApareceNaListaDeAtivos() throws Exception {
         // Cria dois clientes
-        Customer customer1 = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
-        Customer customer2 = customerApplicationService.criarCliente("Maria Souza", "+5511988888888", null);
+        Customer customer1 = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
+        Customer customer2 = customerApplicationService.criarCliente(TestTenants.PILOT,"Maria Souza", "+5511988888888", null);
 
         // Inativa o segundo cliente
         customerApplicationService.inativarCliente(customer2.getId());

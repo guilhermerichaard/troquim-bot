@@ -45,6 +45,19 @@ public class PhoneNumber {
     }
 
     /**
+     * Retorna a forma canônica E.164 do número: sempre com prefixo "+".
+     *
+     * Assume que os dígitos já incluem o código do país (caso dos números
+     * vindos do WhatsApp, ex.: "5511999990001" → "+5511999990001"). NÃO infere
+     * um DDI ausente — um número sem código de país vira apenas "+<digitos>",
+     * e telefones inválidos são detectados/rejeitados na borda e na migração,
+     * nunca "corrigidos" silenciosamente.
+     */
+    public String getE164() {
+        return value.startsWith("+") ? value : "+" + value;
+    }
+
+    /**
      * Retorna o número formatado para exibição: (11) 99999-9999
      */
     public String getFormatted() {

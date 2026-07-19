@@ -1,5 +1,7 @@
 package com.troquim_bot.customer;
 
+import com.troquim_bot.business.BusinessId;
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.common.valueobject.CustomerName;
 import com.troquim_bot.common.valueobject.PhoneNumber;
 import com.troquim_bot.repository.CustomerRepository;
@@ -10,44 +12,37 @@ import java.util.Optional;
 
 /**
  * Serviço de perfil do cliente.
- * 
- * Customer é a única fonte da verdade do cliente.
- * CustomerProfileService usa CustomerRepository como camada de persistência.
- * 
- * Mantém o contrato público para compatibilidade com ConversationService
- * e ConversationContextResolver, que usam CustomerProfile como DTO.
+ *
+ * Customer é a única fonte da verdade do cliente. Este é o write-path usado pelo
+ * fluxo de conversa/booking. A identidade do Customer é surrogate; o
+ * resolve-or-create é por (BusinessId, phone E.164), NUNCA por id derivado do
+ * telefone. As assinaturas públicas (baseadas em {@code numero}) são preservadas
+ * para não alterar a camada de Conversation — o tenant é resolvido internamente
+ * pelo {@link TenantProvider} centralizado.
  */
 @Service
 public class CustomerProfileService {
 
     private final CustomerRepository customerRepository;
+    private final TenantProvider tenantProvider;
 
-    public CustomerProfileService(CustomerRepository customerRepository) {
+    public CustomerProfileService(CustomerRepository customerRepository, TenantProvider tenantProvider) {
         this.customerRepository = customerRepository;
+        this.tenantProvider = tenantProvider;
     }
 
     public Optional<CustomerProfile> localizarPorTelefone(String numero) {
-        CustomerId id = CustomerId.fromPhone(numero);
-        Customer customer = customerRepository.findById(id);
-        return Optional.ofNullable(customer)
+        return resolver(numero)
                 .map(c -> CustomerProfile.fromCustomer(c, numero));
     }
 
     public CustomerProfile buscarOuCriar(String numero) {
-        CustomerId id = CustomerId.fromPhone(numero);
-        Customer customer = customerRepository.findById(id);
-        if (customer == null) {
-            customer = criarCliente(numero);
-        }
+        Customer customer = resolver(numero).orElseGet(() -> criarCliente(numero));
         return CustomerProfile.fromCustomer(customer, numero);
     }
 
     public CustomerProfile iniciarAtendimento(String numero) {
-        CustomerId id = CustomerId.fromPhone(numero);
-        Customer customer = customerRepository.findById(id);
-        if (customer == null) {
-            customer = criarCliente(numero);
-        }
+        Customer customer = resolver(numero).orElseGet(() -> criarCliente(numero));
         customer.registrarAtendimento();
         customerRepository.save(customer);
         return CustomerProfile.fromCustomer(customer, numero);
@@ -58,12 +53,11 @@ public class CustomerProfileService {
             return buscarOuCriar(numero);
         }
 
-        CustomerId id = CustomerId.fromPhone(numero);
-        Customer customer = customerRepository.findById(id);
         CustomerName customerName = criarCustomerName(nome.trim());
+        Customer customer = resolver(numero).orElse(null);
         if (customer == null) {
-            PhoneNumber phone = new PhoneNumber(numero);
-            customer = new Customer(id, customerName, phone, null);
+            customer = new Customer(CustomerId.generate(), tenantProvider.currentBusinessId(),
+                    customerName, new PhoneNumber(numero), null);
         } else {
             customer.atualizarNome(customerName);
         }
@@ -110,22 +104,26 @@ public class CustomerProfileService {
     }
 
     public CustomerProfile atualizarUltimoAtendimento(String numero) {
-        CustomerId id = CustomerId.fromPhone(numero);
-        Customer customer = customerRepository.findById(id);
-        if (customer == null) {
-            customer = criarCliente(numero);
-        }
+        Customer customer = resolver(numero).orElseGet(() -> criarCliente(numero));
         customer.atualizarUltimoAtendimento();
         customerRepository.save(customer);
         return CustomerProfile.fromCustomer(customer, numero);
     }
 
+    /**
+     * Resolve o Customer do tenant corrente pelo telefone (chave lógica).
+     */
+    private Optional<Customer> resolver(String numero) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        return customerRepository.findByBusinessAndPhone(businessId, new PhoneNumber(numero));
+    }
+
     private Customer criarCliente(String numero) {
-        CustomerId id = CustomerId.fromPhone(numero);
         PhoneNumber phone = new PhoneNumber(numero);
         // Nome genérico que será ignorado pelo nomePreferido
         CustomerName name = new CustomerName("Cliente", phone.getDdd());
-        Customer customer = new Customer(id, name, phone, null);
+        Customer customer = new Customer(CustomerId.generate(), tenantProvider.currentBusinessId(),
+                name, phone, null);
         return customerRepository.save(customer);
     }
 

@@ -15,6 +15,7 @@ import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.CustomerRepository;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.schedule.AppointmentBookingService;
 import com.troquim_bot.schedule.AppointmentService;
@@ -146,7 +147,7 @@ class ConversationServiceRegressionTest {
                         new BookingApplicationService(
                                 new ReservationApplicationService(new InMemoryReservationRepository()),
                                 new AppointmentApplicationService(),
-                                new CustomerProfileService(new InMemoryCustomerRepository())),
+                                new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())),
                         "NORMAL"
                 )
         );
@@ -161,7 +162,7 @@ class ConversationServiceRegressionTest {
 
     private Fixture criarFixtureComNome(String numero, String nome) {
         CustomerRepository repository = new InMemoryCustomerRepository();
-        Fixture fixture = criarConversationServiceCompleto(new CustomerProfileService(repository));
+        Fixture fixture = criarConversationServiceCompleto(new CustomerProfileService(repository, TestTenants.pilot()));
         fixture.customerProfileService.salvarNome(numero, nome);
         return new Fixture(
                 numero,
@@ -175,9 +176,9 @@ class ConversationServiceRegressionTest {
         CustomerRepository repository = new InMemoryCustomerRepository();
         return new Fixture(
                 numero,
-                criarConversationServiceCompleto(new CustomerProfileService(repository)).conversationService(),
-                new CustomerProfileService(repository),
-                criarConversationServiceCompleto(new CustomerProfileService(new InMemoryCustomerRepository())).appointmentApplicationService()
+                criarConversationServiceCompleto(new CustomerProfileService(repository, TestTenants.pilot())).conversationService(),
+                new CustomerProfileService(repository, TestTenants.pilot()),
+                criarConversationServiceCompleto(new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())).appointmentApplicationService()
         );
     }
 

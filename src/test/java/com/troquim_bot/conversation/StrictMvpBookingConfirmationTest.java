@@ -7,12 +7,13 @@ import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
-import com.troquim_bot.customer.CustomerId;
+import com.troquim_bot.common.valueobject.PhoneNumber;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.repository.CustomerRepository;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
 import com.troquim_bot.repository.InMemoryConversationStateRepository;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.repository.ReservationRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +42,7 @@ class StrictMvpBookingConfirmationTest {
         appointmentApp = new AppointmentApplicationService(
                 new InMemoryAppointmentRepository(), reservationRepository);
         customerRepository = new InMemoryCustomerRepository();
-        CustomerProfileService customerProfileService = new CustomerProfileService(customerRepository);
+        CustomerProfileService customerProfileService = new CustomerProfileService(customerRepository, TestTenants.pilot());
 
         BookingApplicationService booking = new BookingApplicationService(
                 reservationApp, appointmentApp, customerProfileService);
@@ -87,10 +88,10 @@ class StrictMvpBookingConfirmationTest {
         // Appointment criado
         assertEquals(1, appointmentApp.listarTodos().size(), "Deveria haver 1 agendamento");
 
-        // Customer criado, identificado pelo telefone
-        assertNotNull(customerRepository.findById(CustomerId.fromPhone(numero)),
+        // Customer criado, identificado pela chave lógica (tenant + telefone)
+        assertTrue(customerRepository.findByBusinessAndPhone(TestTenants.PILOT, new PhoneNumber(numero)).isPresent(),
                 "O cliente deveria ter sido criado");
-        assertEquals(1, customerRepository.findAll().size());
+        assertEquals(1, customerRepository.findByBusinessId(TestTenants.PILOT).size());
 
         // Estado finalizado
         ConversationState estadoFinal = conversationStateService.buscarPorNumero(numero);
@@ -140,7 +141,7 @@ class StrictMvpBookingConfirmationTest {
         // Nenhum dado parcial para o segundo cliente
         assertEquals(1, reservationApp.listarAtivos().size(), "Só a reserva do primeiro cliente pode estar ativa");
         assertEquals(1, appointmentApp.listarTodos().size(), "Não pode criar agendamento para o horário ocupado");
-        assertEquals(1, customerRepository.findAll().size(), "Cliente do horário ocupado não deve ser persistido");
+        assertEquals(1, customerRepository.findByBusinessId(TestTenants.PILOT).size(), "Cliente do horário ocupado não deve ser persistido");
 
         // Estado do segundo cliente permanece em confirmação (não finaliza)
         ConversationState estadoSegundo = conversationStateService.buscarPorNumero(segundo);

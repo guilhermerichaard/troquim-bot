@@ -1,5 +1,6 @@
 package com.troquim_bot.application.customer;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.common.valueobject.CustomerName;
 import com.troquim_bot.common.valueobject.PhoneNumber;
 import com.troquim_bot.customer.Customer;
@@ -11,37 +12,32 @@ import java.util.Optional;
 
 /**
  * Application Service para gerenciar Customers.
- * 
- * Responsabilidades:
- * - Criar clientes
- * - Listar clientes
- * - Buscar clientes
- * - Atualizar clientes
- * - Inativar clientes
+ *
+ * Isolamento por tenant: as operações de criação/listagem/busca-por-telefone
+ * recebem um {@link BusinessId} explícito. O {@code CustomerId} é surrogate;
+ * a identidade lógica do cliente é (BusinessId, phone E.164). Não há listagem
+ * global.
  */
 @org.springframework.stereotype.Service
 public class CustomerApplicationService {
 
     private final CustomerRepository customerRepository;
 
-    /**
-     * Construtor com injeção de dependência. Como é o único construtor,
-     * o Spring injeta o CustomerRepository @Primary (JPA) automaticamente —
-     * o mesmo repositório usado por CustomerProfileService.
-     */
     public CustomerApplicationService(CustomerRepository customerRepository) {
         this.customerRepository = customerRepository;
     }
 
     /**
-     * Cria um novo cliente.
-     * 
-     * @param name Nome completo do cliente
-     * @param phone Telefone do cliente
-     * @param notes Observações (opcional)
-     * @return Customer criado com status ATIVO
+     * Cria um novo cliente no tenant informado.
+     *
+     * O id é surrogate (gerado). O telefone é normalizado para E.164. Se já
+     * existir um cliente com o mesmo (BusinessId, phoneE164), NÃO cria duplicata:
+     * lança IllegalArgumentException (a unique constraint é a rede final no banco).
      */
-    public Customer criarCliente(String name, String phone, String notes) {
+    public Customer criarCliente(BusinessId businessId, String name, String phone, String notes) {
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         if (name == null || name.trim().isEmpty()) {
             throw new IllegalArgumentException("Nome do cliente é obrigatório");
         }
@@ -49,20 +45,22 @@ public class CustomerApplicationService {
             throw new IllegalArgumentException("Telefone é obrigatório");
         }
 
-        CustomerId id = CustomerId.generate();
-        CustomerName customerName = CustomerName.of(name.trim());
         PhoneNumber phoneNumber = new PhoneNumber(phone.trim());
 
-        Customer customer = new Customer(id, customerName, phoneNumber, notes);
+        if (customerRepository.findByBusinessAndPhone(businessId, phoneNumber).isPresent()) {
+            throw new IllegalArgumentException(
+                    "Já existe um cliente com este telefone neste negócio");
+        }
+
+        CustomerId id = CustomerId.generate();
+        CustomerName customerName = CustomerName.of(name.trim());
+        Customer customer = new Customer(id, businessId, customerName, phoneNumber, notes);
 
         return customerRepository.save(customer);
     }
 
     /**
-     * Busca cliente por ID.
-     * 
-     * @param id ID do cliente
-     * @return Optional com o Customer se encontrado
+     * Busca cliente pelo id surrogate (globalmente único).
      */
     public Optional<Customer> buscarPorId(CustomerId id) {
         if (id == null) {
@@ -72,32 +70,31 @@ public class CustomerApplicationService {
     }
 
     /**
-     * Lista todos os clientes.
-     * 
-     * @return Lista de todos os customers
+     * Busca o cliente de um tenant pelo telefone (chave lógica).
      */
-    public List<Customer> listarTodos() {
-        return customerRepository.findAll();
+    public Optional<Customer> buscarPorTelefone(BusinessId businessId, PhoneNumber phone) {
+        if (businessId == null || phone == null) {
+            return Optional.empty();
+        }
+        return customerRepository.findByBusinessAndPhone(businessId, phone);
     }
 
     /**
-     * Lista apenas clientes ativos.
-     * 
-     * @return Lista de customers ativos
+     * Lista os clientes do tenant informado.
      */
-    public List<Customer> listarAtivos() {
-        return customerRepository.findAll().stream()
-            .filter(Customer::isAtivo)
-            .toList();
+    public List<Customer> listarTodos(BusinessId businessId) {
+        return customerRepository.findByBusinessId(businessId);
     }
 
     /**
-     * Atualiza o nome do cliente.
-     * 
-     * @param id ID do cliente
-     * @param novoNome Novo nome
-     * @return Customer atualizado
+     * Lista apenas os clientes ativos do tenant informado.
      */
+    public List<Customer> listarAtivos(BusinessId businessId) {
+        return customerRepository.findByBusinessId(businessId).stream()
+                .filter(Customer::isAtivo)
+                .toList();
+    }
+
     public Customer atualizarNome(CustomerId id, String novoNome) {
         Customer customer = getCustomerOrThrow(id);
         CustomerName customerName = CustomerName.of(novoNome.trim());
@@ -105,13 +102,6 @@ public class CustomerApplicationService {
         return customerRepository.save(customer);
     }
 
-    /**
-     * Atualiza o telefone do cliente.
-     * 
-     * @param id ID do cliente
-     * @param novoTelefone Novo telefone
-     * @return Customer atualizado
-     */
     public Customer atualizarTelefone(CustomerId id, String novoTelefone) {
         Customer customer = getCustomerOrThrow(id);
         PhoneNumber phoneNumber = new PhoneNumber(novoTelefone.trim());
@@ -119,49 +109,24 @@ public class CustomerApplicationService {
         return customerRepository.save(customer);
     }
 
-    /**
-     * Atualiza as observações do cliente.
-     * 
-     * @param id ID do cliente
-     * @param novasObservacoes Novas observações
-     * @return Customer atualizado
-     */
     public Customer atualizarObservacoes(CustomerId id, String novasObservacoes) {
         Customer customer = getCustomerOrThrow(id);
         customer.atualizarObservacoes(novasObservacoes);
         return customerRepository.save(customer);
     }
 
-    /**
-     * Inativa um cliente.
-     * 
-     * @param id ID do cliente
-     * @return Customer inativado
-     */
     public Customer inativarCliente(CustomerId id) {
         Customer customer = getCustomerOrThrow(id);
         customer.inativar();
         return customerRepository.save(customer);
     }
 
-    /**
-     * Ativa um cliente.
-     * 
-     * @param id ID do cliente
-     * @return Customer ativado
-     */
     public Customer ativarCliente(CustomerId id) {
         Customer customer = getCustomerOrThrow(id);
         customer.ativar();
         return customerRepository.save(customer);
     }
 
-    /**
-     * Verifica se um cliente existe.
-     * 
-     * @param id ID do cliente
-     * @return true se existe
-     */
     public boolean existe(CustomerId id) {
         if (id == null) {
             return false;

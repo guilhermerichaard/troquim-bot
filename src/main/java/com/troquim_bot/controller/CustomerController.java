@@ -4,6 +4,8 @@ import com.troquim_bot.controller.dto.CreateCustomerRequest;
 import com.troquim_bot.controller.dto.CustomerResponse;
 import com.troquim_bot.controller.dto.UpdateCustomerRequest;
 import com.troquim_bot.application.customer.CustomerApplicationService;
+import com.troquim_bot.business.BusinessId;
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 
@@ -29,18 +31,22 @@ import java.util.UUID;
 public class CustomerController {
 
     private final CustomerApplicationService customerApplicationService;
+    private final TenantProvider tenantProvider;
 
-    public CustomerController(CustomerApplicationService customerApplicationService) {
+    public CustomerController(CustomerApplicationService customerApplicationService,
+                             TenantProvider tenantProvider) {
         this.customerApplicationService = customerApplicationService;
+        this.tenantProvider = tenantProvider;
     }
 
     /**
      * GET /customers
-     * Lista todos os clientes.
+     * Lista os clientes SOMENTE do tenant corrente (resolvido pela porta).
      */
     @GetMapping
     public ResponseEntity<List<CustomerResponse>> listarTodos() {
-        List<Customer> customers = customerApplicationService.listarTodos();
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        List<Customer> customers = customerApplicationService.listarTodos(businessId);
         List<CustomerResponse> response = customers.stream()
             .map(CustomerResponse::from)
             .toList();
@@ -49,7 +55,7 @@ public class CustomerController {
 
     /**
      * GET /customers/{id}
-     * Busca um cliente por ID.
+     * Busca um cliente por ID, restrito ao tenant corrente.
      */
     @GetMapping("/{id}")
     public ResponseEntity<CustomerResponse> buscarPorId(@PathVariable String id) {
@@ -58,7 +64,7 @@ public class CustomerController {
             Customer customer = customerApplicationService.buscarPorId(CustomerId.from(uuid))
                 .orElse(null);
 
-            if (customer == null) {
+            if (customer == null || !customer.getBusinessId().equals(tenantProvider.currentBusinessId())) {
                 return ResponseEntity.notFound().build();
             }
 
@@ -70,7 +76,7 @@ public class CustomerController {
 
     /**
      * POST /customers
-     * Cria um novo cliente.
+     * Cria um novo cliente no tenant corrente.
      */
     @PostMapping
     public ResponseEntity<CustomerResponse> criar(@RequestBody CreateCustomerRequest request) {
@@ -80,6 +86,7 @@ public class CustomerController {
 
         try {
             Customer customer = customerApplicationService.criarCliente(
+                tenantProvider.currentBusinessId(),
                 request.getName(),
                 request.getPhone(),
                 request.getNotes()

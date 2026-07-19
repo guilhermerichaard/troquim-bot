@@ -68,6 +68,18 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Módulo de auto-configuração do Flyway (Spring Boot 4.x é modular;
+		     flyway-core sozinho não ativa a auto-config). Traz flyway-core. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-flyway</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>jakarta.servlet</groupId>
 			<artifactId>jakarta.servlet-api</artifactId>

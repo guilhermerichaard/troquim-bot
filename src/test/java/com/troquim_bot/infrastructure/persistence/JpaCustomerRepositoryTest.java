@@ -6,23 +6,28 @@ import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerStatus;
 import com.troquim_bot.repository.CustomerRepository;
+import com.troquim_bot.support.TestTenants;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Teste de integração que prova que Customer persiste e sobrevive a restart.
- * 
- * Usa o adapter JPA real (JpaCustomerRepository) com banco H2.
+ * Teste de integração do adapter JPA real (JpaCustomerRepository) com H2.
+ *
+ * @Transactional isola cada método (rollback), evitando acúmulo no H2 in-memory
+ * compartilhado entre @SpringBootTest — relevante agora que há UNIQUE
+ * (business_id, phone_e164). A prova de persistência real entre reinícios está
+ * em CustomerPostgresPersistenceTest (PostgreSQL/Testcontainers).
  */
 @SpringBootTest
 @ActiveProfiles("test")
+@Transactional
 class JpaCustomerRepositoryTest {
 
     @Autowired
@@ -30,16 +35,17 @@ class JpaCustomerRepositoryTest {
 
     @Test
     void salvaEBuscaCustomerPorId() {
-        CustomerId id = CustomerId.fromPhone("5511999999999");
+        CustomerId id = CustomerId.generate();
         PhoneNumber phone = new PhoneNumber("5511999999999");
         CustomerName name = new CustomerName("Maria", "Silva");
-        Customer customer = new Customer(id, name, phone, "Cliente VIP");
+        Customer customer = new Customer(id, TestTenants.PILOT, name, phone, "Cliente VIP");
 
         customerRepository.save(customer);
 
         Customer found = customerRepository.findById(id);
         assertNotNull(found);
         assertEquals(id, found.getId());
+        assertEquals(TestTenants.PILOT, found.getBusinessId());
         assertEquals("Maria", found.getName().getFirstName());
         assertEquals("Silva", found.getName().getLastName());
         assertEquals("5511999999999", found.getPhone().getValue());
@@ -53,10 +59,10 @@ class JpaCustomerRepositoryTest {
 
     @Test
     void salvaEBuscaCustomerComApelidoEAtendimentos() {
-        CustomerId id = CustomerId.fromPhone("5511888888888");
+        CustomerId id = CustomerId.generate();
         PhoneNumber phone = new PhoneNumber("5511888888888");
         CustomerName name = new CustomerName("João", "Santos");
-        Customer customer = new Customer(id, name, phone, null);
+        Customer customer = new Customer(id, TestTenants.PILOT, name, phone, null);
         customer.definirApelido("Joãozinho");
         customer.registrarAtendimento();
         customer.registrarAtendimento();
@@ -72,10 +78,10 @@ class JpaCustomerRepositoryTest {
 
     @Test
     void atualizaCustomerExistente() {
-        CustomerId id = CustomerId.fromPhone("5511777777777");
+        CustomerId id = CustomerId.generate();
         PhoneNumber phone = new PhoneNumber("5511777777777");
         CustomerName name = new CustomerName("Ana", "Costa");
-        Customer customer = new Customer(id, name, phone, null);
+        Customer customer = new Customer(id, TestTenants.PILOT, name, phone, null);
 
         customerRepository.save(customer);
 
@@ -94,39 +100,37 @@ class JpaCustomerRepositoryTest {
 
     @Test
     void existsRetornaTrueParaCustomerExistente() {
-        CustomerId id = CustomerId.fromPhone("5511666666666");
+        CustomerId id = CustomerId.generate();
         PhoneNumber phone = new PhoneNumber("5511666666666");
         CustomerName name = new CustomerName("Pedro", "Alves");
-        Customer customer = new Customer(id, name, phone, null);
+        Customer customer = new Customer(id, TestTenants.PILOT, name, phone, null);
 
         customerRepository.save(customer);
 
         assertTrue(customerRepository.exists(id));
-        assertFalse(customerRepository.exists(CustomerId.fromPhone("5511000000000")));
+        assertFalse(customerRepository.exists(CustomerId.generate()));
     }
 
     @Test
-    void findAllRetornaTodosCustomers() {
-        CustomerId id1 = CustomerId.fromPhone("5511555555555");
-        CustomerId id2 = CustomerId.fromPhone("5511444444444");
-        PhoneNumber phone1 = new PhoneNumber("5511555555555");
-        PhoneNumber phone2 = new PhoneNumber("5511444444444");
-        CustomerName name1 = new CustomerName("Carla", "Lima");
-        CustomerName name2 = new CustomerName("Paulo", "Souza");
+    void findByBusinessIdRetornaClientesDoTenant() {
+        Customer c1 = new Customer(CustomerId.generate(), TestTenants.PILOT,
+                new CustomerName("Carla", "Lima"), new PhoneNumber("5511555555555"), null);
+        Customer c2 = new Customer(CustomerId.generate(), TestTenants.PILOT,
+                new CustomerName("Paulo", "Souza"), new PhoneNumber("5511444444444"), null);
 
-        customerRepository.save(new Customer(id1, name1, phone1, null));
-        customerRepository.save(new Customer(id2, name2, phone2, null));
+        customerRepository.save(c1);
+        customerRepository.save(c2);
 
-        List<Customer> all = customerRepository.findAll();
-        assertTrue(all.size() >= 2);
+        List<Customer> doTenant = customerRepository.findByBusinessId(TestTenants.PILOT);
+        assertEquals(2, doTenant.size());
     }
 
     @Test
     void deleteRemoveCustomer() {
-        CustomerId id = CustomerId.fromPhone("5511333333333");
+        CustomerId id = CustomerId.generate();
         PhoneNumber phone = new PhoneNumber("5511333333333");
         CustomerName name = new CustomerName("Teste", "Delete");
-        Customer customer = new Customer(id, name, phone, null);
+        Customer customer = new Customer(id, TestTenants.PILOT, name, phone, null);
 
         customerRepository.save(customer);
         assertTrue(customerRepository.exists(id));
@@ -137,11 +141,10 @@ class JpaCustomerRepositoryTest {
 
     @Test
     void dadosSobrevivemASalvarEBuscar() {
-        // Simula o ciclo: criar -> salvar -> buscar (como se fosse restart)
-        CustomerId id = CustomerId.fromPhone("5511222222222");
+        CustomerId id = CustomerId.generate();
         PhoneNumber phone = new PhoneNumber("5511222222222");
         CustomerName name = new CustomerName("Lucas", "Pereira");
-        Customer customer = new Customer(id, name, phone, "Observação");
+        Customer customer = new Customer(id, TestTenants.PILOT, name, phone, "Observação");
         customer.definirApelido("Lukinhas");
         customer.registrarAtendimento();
         customer.registrarAtendimento();
@@ -149,7 +152,6 @@ class JpaCustomerRepositoryTest {
 
         customerRepository.save(customer);
 
-        // Busca como se fosse uma nova instância (simula restart)
         Customer found = customerRepository.findById(id);
         assertNotNull(found);
         assertEquals("Lucas", found.getName().getFirstName());

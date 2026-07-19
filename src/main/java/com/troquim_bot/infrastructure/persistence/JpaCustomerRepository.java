@@ -1,5 +1,6 @@
 package com.troquim_bot.infrastructure.persistence;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.common.valueobject.CustomerName;
 import com.troquim_bot.common.valueobject.PhoneNumber;
 import com.troquim_bot.customer.Customer;
@@ -10,17 +11,15 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.UUID;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
  * Adapter JPA que implementa CustomerRepository.
- * 
- * Faz o mapeamento entre o aggregate Customer (domínio)
- * e a entidade JPA CustomerJpaEntity (infraestrutura).
- * 
- * Anotado com @Primary para ser usado pelo Spring por padrão,
- * enquanto InMemoryCustomerRepository pode ser usado em testes.
+ *
+ * Faz o mapeamento entre o aggregate Customer (domínio) e a entidade JPA
+ * CustomerJpaEntity (infraestrutura), incluindo business_id e o phone_e164
+ * canônico. Anotado com @Primary; é o único CustomerRepository de produção.
  */
 @Repository
 @Primary
@@ -39,7 +38,7 @@ public class JpaCustomerRepository implements CustomerRepository {
         }
         CustomerJpaEntity entity = toEntity(customer);
         CustomerJpaEntity saved = springDataRepository.save(entity);
-        return toDomain(saved, customer.getPhone());
+        return toDomain(saved);
     }
 
     @Override
@@ -48,8 +47,28 @@ public class JpaCustomerRepository implements CustomerRepository {
             return null;
         }
         return springDataRepository.findById(id.getValue())
-                .map(entity -> toDomain(entity, null))
+                .map(this::toDomain)
                 .orElse(null);
+    }
+
+    @Override
+    public Optional<Customer> findByBusinessAndPhone(BusinessId businessId, PhoneNumber phone) {
+        if (businessId == null || phone == null) {
+            return Optional.empty();
+        }
+        return springDataRepository
+                .findByBusinessIdAndPhoneE164(businessId.getValue(), phone.getE164())
+                .map(this::toDomain);
+    }
+
+    @Override
+    public List<Customer> findByBusinessId(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return springDataRepository.findByBusinessId(businessId.getValue()).stream()
+                .map(this::toDomain)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -58,13 +77,6 @@ public class JpaCustomerRepository implements CustomerRepository {
             return false;
         }
         return springDataRepository.existsById(id.getValue());
-    }
-
-    @Override
-    public List<Customer> findAll() {
-        return springDataRepository.findAll().stream()
-                .map(entity -> toDomain(entity, null))
-                .collect(Collectors.toList());
     }
 
     @Override
@@ -79,6 +91,8 @@ public class JpaCustomerRepository implements CustomerRepository {
     private CustomerJpaEntity toEntity(Customer customer) {
         return new CustomerJpaEntity(
                 customer.getId().getValue(),
+                customer.getBusinessId().getValue(),
+                customer.getPhone().getE164(),
                 customer.getName().getFirstName(),
                 customer.getName().getLastName(),
                 customer.getPhone().getValue(),
@@ -92,22 +106,16 @@ public class JpaCustomerRepository implements CustomerRepository {
         );
     }
 
-    private Customer toDomain(CustomerJpaEntity entity, PhoneNumber phoneFallback) {
+    private Customer toDomain(CustomerJpaEntity entity) {
         CustomerId customerId = CustomerId.from(entity.getId());
+        BusinessId businessId = BusinessId.from(entity.getBusinessId());
         CustomerName name = new CustomerName(entity.getFirstName(), entity.getLastName());
-        
-        PhoneNumber phone = phoneFallback;
-        if (phone == null && entity.getPhone() != null) {
-            phone = new PhoneNumber(entity.getPhone());
-        }
-        if (phone == null) {
-            phone = new PhoneNumber("+5500000000000");
-        }
-
+        PhoneNumber phone = new PhoneNumber(entity.getPhone());
         CustomerStatus status = CustomerStatus.valueOf(entity.getStatus());
 
         return new Customer(
                 customerId,
+                businessId,
                 name,
                 phone,
                 entity.getNotes(),

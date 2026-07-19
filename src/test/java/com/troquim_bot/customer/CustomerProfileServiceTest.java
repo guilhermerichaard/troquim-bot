@@ -2,6 +2,7 @@ package com.troquim_bot.customer;
 
 import com.troquim_bot.repository.CustomerRepository;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.support.TestTenants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +17,7 @@ class CustomerProfileServiceTest {
     @BeforeEach
     void setUp() {
         customerRepository = new InMemoryCustomerRepository();
-        service = new CustomerProfileService(customerRepository);
+        service = new CustomerProfileService(customerRepository, TestTenants.pilot());
     }
 
     @Test

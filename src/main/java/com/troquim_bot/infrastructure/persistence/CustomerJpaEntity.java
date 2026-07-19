@@ -3,22 +3,41 @@ package com.troquim_bot.infrastructure.persistence;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
  * Entidade JPA para persistência de Customer.
- * Mapeia a tabela "customers" no banco H2.
+ *
+ * Isolamento por tenant: business_id NOT NULL, phone_e164 NOT NULL e unicidade
+ * lógica UNIQUE (business_id, phone_e164), com índice por business_id para as
+ * consultas por tenant. No PostgreSQL, o schema/constraints são autoridade do
+ * Flyway (Hibernate apenas valida); estas anotações mantêm o schema equivalente
+ * quando o Hibernate gera o schema do H2 nos testes (sem modelos divergentes).
  */
 @Entity
-@Table(name = "customers")
+@Table(
+        name = "customers",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_customers_business_phone",
+                columnNames = {"business_id", "phone_e164"}),
+        indexes = @Index(name = "idx_customers_business_id", columnList = "business_id")
+)
 public class CustomerJpaEntity {
 
     @Id
     @Column(columnDefinition = "UUID")
     private UUID id;
+
+    @Column(name = "business_id", nullable = false, columnDefinition = "UUID")
+    private UUID businessId;
+
+    @Column(name = "phone_e164", nullable = false, length = 20)
+    private String phoneE164;
 
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;
@@ -55,11 +74,14 @@ public class CustomerJpaEntity {
      */
     protected CustomerJpaEntity() {}
 
-    public CustomerJpaEntity(UUID id, String firstName, String lastName, String phone,
+    public CustomerJpaEntity(UUID id, UUID businessId, String phoneE164,
+                             String firstName, String lastName, String phone,
                              String apelido, String notes, String status,
                              int totalAtendimentos, LocalDateTime ultimoAtendimento,
                              LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         this.id = id;
+        this.businessId = businessId;
+        this.phoneE164 = phoneE164;
         this.firstName = firstName;
         this.lastName = lastName;
         this.phone = phone;
@@ -75,6 +97,8 @@ public class CustomerJpaEntity {
     // ==================== GETTERS ====================
 
     public UUID getId() { return id; }
+    public UUID getBusinessId() { return businessId; }
+    public String getPhoneE164() { return phoneE164; }
     public String getFirstName() { return firstName; }
     public String getLastName() { return lastName; }
     public String getPhone() { return phone; }

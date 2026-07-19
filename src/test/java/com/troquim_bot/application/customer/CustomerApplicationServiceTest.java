@@ -6,6 +6,7 @@ import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerStatus;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.support.TestTenants;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveCriarClienteComSucesso() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", "Cliente VIP");
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", "Cliente VIP");
 
         assertNotNull(customer);
         assertNotNull(customer.getId());
@@ -46,7 +47,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveCriarClienteSemObservacoes() {
-        Customer customer = customerApplicationService.criarCliente("Maria Souza", "+5511988888888", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"Maria Souza", "+5511988888888", null);
 
         assertNotNull(customer);
         assertNull(customer.getNotes());
@@ -56,32 +57,32 @@ class CustomerApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoNomeNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            customerApplicationService.criarCliente(null, "+5511999999999", "teste"));
+            customerApplicationService.criarCliente(TestTenants.PILOT,null, "+5511999999999", "teste"));
     }
 
     @Test
     void deveLancarExcecaoQuandoNomeVazio() {
         assertThrows(IllegalArgumentException.class, () ->
-            customerApplicationService.criarCliente("", "+5511999999999", "teste"));
+            customerApplicationService.criarCliente(TestTenants.PILOT,"", "+5511999999999", "teste"));
     }
 
     @Test
     void deveLancarExcecaoQuandoTelefoneNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            customerApplicationService.criarCliente("João Silva", null, "teste"));
+            customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", null, "teste"));
     }
 
     @Test
     void deveLancarExcecaoQuandoTelefoneVazio() {
         assertThrows(IllegalArgumentException.class, () ->
-            customerApplicationService.criarCliente("João Silva", "", "teste"));
+            customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "", "teste"));
     }
 
     // ==================== buscarPorId ====================
 
     @Test
     void deveBuscarClientePorId() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
         CustomerId id = customer.getId();
 
         Optional<Customer> encontrado = customerApplicationService.buscarPorId(id);
@@ -109,18 +110,18 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveListarTodosOsClientes() {
-        customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
-        customerApplicationService.criarCliente("Maria Souza", "+5511988888888", null);
-        customerApplicationService.criarCliente("Pedro Santos", "+5511977777777", null);
+        customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
+        customerApplicationService.criarCliente(TestTenants.PILOT,"Maria Souza", "+5511988888888", null);
+        customerApplicationService.criarCliente(TestTenants.PILOT,"Pedro Santos", "+5511977777777", null);
 
-        List<Customer> customers = customerApplicationService.listarTodos();
+        List<Customer> customers = customerApplicationService.listarTodos(TestTenants.PILOT);
 
         assertEquals(3, customers.size());
     }
 
     @Test
     void deveRetornarListaVaziaQuandoNaoExistemClientes() {
-        List<Customer> customers = customerApplicationService.listarTodos();
+        List<Customer> customers = customerApplicationService.listarTodos(TestTenants.PILOT);
 
         assertTrue(customers.isEmpty());
     }
@@ -129,13 +130,13 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveListarApenasClientesAtivos() {
-        Customer ativo1 = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
-        Customer ativo2 = customerApplicationService.criarCliente("Maria Souza", "+5511988888888", null);
-        Customer inativo = customerApplicationService.criarCliente("Pedro Santos", "+5511977777777", null);
+        Customer ativo1 = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
+        Customer ativo2 = customerApplicationService.criarCliente(TestTenants.PILOT,"Maria Souza", "+5511988888888", null);
+        Customer inativo = customerApplicationService.criarCliente(TestTenants.PILOT,"Pedro Santos", "+5511977777777", null);
 
         customerApplicationService.inativarCliente(inativo.getId());
 
-        List<Customer> ativos = customerApplicationService.listarAtivos();
+        List<Customer> ativos = customerApplicationService.listarAtivos(TestTenants.PILOT);
 
         assertEquals(2, ativos.size());
         assertTrue(ativos.stream().allMatch(Customer::isAtivo));
@@ -145,7 +146,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveAtualizarNome() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
 
         Customer atualizado = customerApplicationService.atualizarNome(customer.getId(), "João Santos");
 
@@ -162,7 +163,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveAtualizarTelefone() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
 
         Customer atualizado = customerApplicationService.atualizarTelefone(customer.getId(), "+5511988888888");
 
@@ -179,7 +180,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveAtualizarObservacoes() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", "Original");
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", "Original");
 
         Customer atualizado = customerApplicationService.atualizarObservacoes(customer.getId(), "Atualizado");
 
@@ -188,7 +189,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveLimparObservacoes() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", "Original");
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", "Original");
 
         Customer atualizado = customerApplicationService.atualizarObservacoes(customer.getId(), null);
 
@@ -205,7 +206,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveInativarCliente() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
 
         Customer inativado = customerApplicationService.inativarCliente(customer.getId());
 
@@ -223,7 +224,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveAtivarCliente() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
         customerApplicationService.inativarCliente(customer.getId());
 
         Customer ativado = customerApplicationService.ativarCliente(customer.getId());
@@ -242,7 +243,7 @@ class CustomerApplicationServiceTest {
 
     @Test
     void deveRetornarTrueQuandoClienteExiste() {
-        Customer customer = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
+        Customer customer = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
 
         assertTrue(customerApplicationService.existe(customer.getId()));
     }
@@ -261,12 +262,12 @@ class CustomerApplicationServiceTest {
 
     @Test
     void clienteInativadoNaoApareceNaListaDeAtivos() {
-        Customer ativo = customerApplicationService.criarCliente("João Silva", "+5511999999999", null);
-        Customer inativo = customerApplicationService.criarCliente("Maria Souza", "+5511988888888", null);
+        Customer ativo = customerApplicationService.criarCliente(TestTenants.PILOT,"João Silva", "+5511999999999", null);
+        Customer inativo = customerApplicationService.criarCliente(TestTenants.PILOT,"Maria Souza", "+5511988888888", null);
 
         customerApplicationService.inativarCliente(inativo.getId());
 
-        List<Customer> ativos = customerApplicationService.listarAtivos();
+        List<Customer> ativos = customerApplicationService.listarAtivos(TestTenants.PILOT);
         assertEquals(1, ativos.size());
         assertEquals("João Silva", ativos.get(0).getName().getFullName());
     }
