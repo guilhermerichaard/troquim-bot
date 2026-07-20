@@ -81,9 +81,9 @@ class StrictMvpBookingConfirmationTest {
         assertTrue(confirmacao.contains("registrado com sucesso"),
                 "Esperava mensagem de sucesso, mas veio: " + confirmacao);
 
-        // Reservation criada e ativa
+        // Reservation criada e cancelada (o Appointment protege o slot, não a Reservation)
         assertEquals(1, reservationApp.listarTodos().size(), "Deveria haver 1 reserva");
-        assertEquals(1, reservationApp.listarAtivos().size(), "A reserva deveria estar ativa");
+        assertEquals(0, reservationApp.listarAtivos().size(), "A reserva deve estar cancelada após criar o Appointment");
 
         // Appointment criado
         assertEquals(1, appointmentApp.listarTodos().size(), "Deveria haver 1 agendamento");
@@ -115,7 +115,7 @@ class StrictMvpBookingConfirmationTest {
 
         String segunda = enviar(numero, "1");
 
-        assertTrue(segunda.contains("já está registrado"),
+        assertTrue(segunda.contains("ja esta registrado"),
                 "Esperava mensagem de idempotência, mas veio: " + segunda);
         assertEquals(1, reservationApp.listarTodos().size(), "Não pode duplicar a reserva");
         assertEquals(1, appointmentApp.listarTodos().size(), "Não pode duplicar o agendamento");
@@ -139,7 +139,7 @@ class StrictMvpBookingConfirmationTest {
                 "Esperava aviso de horário ocupado, mas veio: " + resposta);
 
         // Nenhum dado parcial para o segundo cliente
-        assertEquals(1, reservationApp.listarAtivos().size(), "Só a reserva do primeiro cliente pode estar ativa");
+        assertEquals(0, reservationApp.listarAtivos().size(), "Nenhuma reserva deve estar ativa (a do primeiro foi cancelada após criar Appointment)");
         assertEquals(1, appointmentApp.listarTodos().size(), "Não pode criar agendamento para o horário ocupado");
         assertEquals(1, customerRepository.findByBusinessId(TestTenants.PILOT).size(), "Cliente do horário ocupado não deve ser persistido");
 

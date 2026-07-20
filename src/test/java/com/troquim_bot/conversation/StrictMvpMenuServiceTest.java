@@ -38,12 +38,12 @@ class StrictMvpMenuServiceTest {
         // Cliente envia "oi": recebe o menu principal, estado permanece em INICIO
         ConversationState estadoInicial = conversationStateService.buscarPorNumero(NUMERO);
         String respostaSaudacao = strictMvpMenuService.processarMenu(NUMERO, "oi", estadoInicial);
-        assertTrue(respostaSaudacao.contains("Escolha uma opção"));
+        assertTrue(respostaSaudacao.contains("Escolha uma opcao"));
 
         // Cliente envia "1" (Agendar): deve iniciar o fluxo e persistir AGUARDANDO_SERVICO
         ConversationState estadoAntesDoMenu = conversationStateService.buscarPorNumero(NUMERO);
         String respostaMenuServicos = strictMvpMenuService.processarMenu(NUMERO, "1", estadoAntesDoMenu);
-        assertTrue(respostaMenuServicos.contains("Qual serviço"));
+        assertTrue(respostaMenuServicos.contains("Qual servico"));
 
         // Reproduz exatamente o que o ConversationOrchestrator faz na próxima mensagem:
         // busca o estado do zero no repositório (não reaproveita o objeto em memória).

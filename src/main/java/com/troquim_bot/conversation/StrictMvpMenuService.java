@@ -10,19 +10,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 public class StrictMvpMenuService {
 
-    private static final Pattern HORARIO_PATTERN = Pattern.compile(
-            "(?iu)(?:\\b(?:as|às)\\s*(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})(?::(\\d{2}))?\\b|\\b(\\d{1,2})\\s*(?:h(?:oras?)?\\b)?)"
-    );
-
     private final ConversationStateService conversationStateService;
     private final AvailabilityApplicationService availabilityApplicationService;
     private final BookingApplicationService bookingApplicationService;
+    private final ConversationNavigationPolicy navigationPolicy;
+    private final TimeInputParser timeInputParser;
     private final boolean strictMvpEnabled;
 
     public StrictMvpMenuService(ConversationStateService conversationStateService,
@@ -32,6 +28,8 @@ public class StrictMvpMenuService {
         this.conversationStateService = conversationStateService;
         this.availabilityApplicationService = availabilityApplicationService;
         this.bookingApplicationService = bookingApplicationService;
+        this.navigationPolicy = new ConversationNavigationPolicy();
+        this.timeInputParser = new TimeInputParser();
         this.strictMvpEnabled = "STRICT_MVP".equalsIgnoreCase(conversationMode);
     }
 
@@ -44,20 +42,28 @@ public class StrictMvpMenuService {
             return null;
         }
 
+        var navigationAction = navigationPolicy.interpretar(mensagem, state);
+        if (navigationAction.isPresent()) {
+            var action = navigationAction.get();
+            if (action instanceof ConversationNavigationPolicy.ResetToMenu) {
+                conversationStateService.limparEstado(numero);
+                ConversationState resetState = conversationStateService.buscarPorNumero(numero);
+                resetState.setStep(ConversationStep.INICIO);
+                conversationStateService.persistir(resetState);
+                return menuPrincipal();
+            }
+        }
+
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
 
-        // STRICT_MVP: todo input passa pelo menu, não pelo fluxo livre
         if (step == ConversationStep.FINALIZADO || step == ConversationStep.INICIO) {
-            // Intercepta explicitamente: "1", "2", "3" ou tentativas em texto
             if (texto.matches("^[123]$")) {
                 return processarEscolhaMenuPrincipal(numero, texto);
             }
-            // Qualquer outro texto redireciona para o menu — não deixa cair no fluxo livre
             return menuPrincipal();
         }
 
-        // Se está em fluxo de agendamento, processar conforme step
         if (step == ConversationStep.AGUARDANDO_SERVICO) {
             return processarEscolhaServico(numero, texto, mensagem);
         }
@@ -78,7 +84,6 @@ public class StrictMvpMenuService {
     }
 
     private String processarEscolhaMenuPrincipal(String numero, String texto) {
-        // Processa escolha do menu principal baseado em número ou texto equivalente
         if (texto.contains("1") || texto.contains("agendar") || texto.contains("marcar") || texto.contains("novo")) {
             return iniciarNovoAgendamento(numero);
         }
@@ -88,12 +93,11 @@ public class StrictMvpMenuService {
         if (texto.contains("3") || texto.contains("cancelar") || texto.contains("apagar") || texto.contains("remover") || texto.contains("desmarcar")) {
             return cancelarAgendamento(numero);
         }
-        // Fallback: reexibe o menu principal
         return menuPrincipal();
     }
 
     private String menuPrincipal() {
-        return "Olá! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
+        return "Ola! No momento eu consigo te ajudar com agendamentos. Escolha uma opcao:\n\n" +
                "1) Agendar\n" +
                "2) Meus agendamentos\n" +
                "3) Cancelar";
@@ -106,24 +110,21 @@ public class StrictMvpMenuService {
         state.setStep(ConversationStep.AGUARDANDO_SERVICO);
         conversationStateService.atualizarStep(state);
         conversationStateService.persistir(state);
-
         return menuServicos();
     }
 
     private String menuServicos() {
-        return "Qual serviço você gostaria de agendar?\n\n" +
+        return "Qual servico voce gostaria de agendar?\n\n" +
                "1) Unha\n" +
                "2) Cabelo\n" +
                "3) Sobrancelha\n" +
-               "4) Cílios\n" +
-               "5) Pé e mão\n\n" +
-               "Digite o número ou o nome do serviço:";
+               "4) Cilios\n" +
+               "5) Pe e mao\n\n" +
+               "Digite o numero ou o nome do servico:";
     }
 
     private String processarEscolhaServico(String numero, String texto, String mensagemOriginal) {
         String servico = null;
-
-        // Verifica se é número
         if (texto.matches("^[1-5]$")) {
             servico = switch (texto) {
                 case "1" -> "unha";
@@ -134,80 +135,72 @@ public class StrictMvpMenuService {
                 default -> null;
             };
         } else {
-            // Verifica por texto
             if (texto.contains("unha") || texto.contains("manicure") || texto.contains("pedicure")) {
                 servico = "unha";
             } else if (texto.contains("cabelo") || texto.contains("corte") || texto.contains("escova")) {
                 servico = "cabelo";
             } else if (texto.contains("sobrancelha")) {
                 servico = "sobrancelha";
-            } else if (texto.contains("cilio") || texto.contains("cílio")) {
+            } else if (texto.contains("cilio")) {
                 servico = "cilios";
             } else if (texto.contains("pe") && texto.contains("mao")) {
                 servico = "pe e mao";
             }
         }
-
         if (servico == null) {
-            return "Não entendi. Por favor, escolha um serviço:\n\n" +
+            return "Nao entendi. Por favor, escolha um servico:\n\n" +
                    "1) Unha\n" +
                    "2) Cabelo\n" +
                    "3) Sobrancelha\n" +
-                   "4) Cílios\n" +
-                   "5) Pé e mão\n\n" +
-                   "Digite o número ou o nome:";
+                   "4) Cilios\n" +
+                   "5) Pe e mao\n\n" +
+                   "Digite o numero ou o nome:";
         }
-
         conversationStateService.atualizarServico(numero, servico);
         return menuDias();
     }
 
     private String menuDias() {
-        return "Perfeito! Para qual dia você gostaria?\n\n" +
+        return "Perfeito! Para qual dia voce gostaria?\n\n" +
                "1) Segunda\n" +
-               "2) Terça\n" +
+               "2) Terca\n" +
                "3) Quarta\n" +
                "4) Quinta\n" +
                "5) Sexta\n" +
-               "6) Sábado\n\n" +
-               "Digite o número ou o nome do dia:";
+               "6) Sabado\n\n" +
+               "Digite o numero ou o nome do dia:";
     }
 
     private String processarEscolhaDia(String numero, String texto, String mensagemOriginal) {
         String dia = null;
-
-        // Verifica se é número
         if (texto.matches("^[1-6]$")) {
             dia = switch (texto) {
                 case "1" -> "segunda";
-                case "2" -> "terça";
+                case "2" -> "terca";
                 case "3" -> "quarta";
                 case "4" -> "quinta";
                 case "5" -> "sexta";
-                case "6" -> "sábado";
+                case "6" -> "sabado";
                 default -> null;
             };
         } else {
-            // Verifica por texto
             if (texto.contains("segunda")) dia = "segunda";
-            else if (texto.contains("terca") || texto.contains("terça")) dia = "terça";
+            else if (texto.contains("terca")) dia = "terca";
             else if (texto.contains("quarta")) dia = "quarta";
             else if (texto.contains("quinta")) dia = "quinta";
             else if (texto.contains("sexta")) dia = "sexta";
-            else if (texto.contains("sabado") || texto.contains("sábado")) dia = "sábado";
+            else if (texto.contains("sabado")) dia = "sabado";
         }
-
         if (dia == null) {
-            return "Não entendi. Por favor, escolha um dia:\n\n" +
+            return "Nao entendi. Por favor, escolha um dia:\n\n" +
                    "1) Segunda\n" +
-                   "2) Terça\n" +
+                   "2) Terca\n" +
                    "3) Quarta\n" +
                    "4) Quinta\n" +
                    "5) Sexta\n" +
-                   "6) Sábado\n\n" +
-                   "Digite o número ou o nome:";
+                   "6) Sabado\n\n" +
+                   "Digite o numero ou o nome:";
         }
-
         conversationStateService.atualizarDia(numero, dia);
         return menuHorarios(numero);
     }
@@ -215,41 +208,33 @@ public class StrictMvpMenuService {
     private String menuHorarios(String numero) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String dia = state.getDraftAtual().getDia();
-        
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
         if (horarios.isEmpty()) {
-            return "Não tenho horários disponíveis para " + dia + ". Por favor, escolha outro dia:\n\n" +
+            return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n" +
                    "1) Segunda\n" +
-                   "2) Terça\n" +
+                   "2) Terca\n" +
                    "3) Quarta\n" +
                    "4) Quinta\n" +
                    "5) Sexta\n" +
-                   "6) Sábado";
+                   "6) Sabado";
         }
-
         StringBuilder sb = new StringBuilder();
-        sb.append("Horários disponíveis para ").append(dia).append(":\n\n");
-        
+        sb.append("Horarios disponiveis para ").append(dia).append(":\n\n");
         for (int i = 0; i < horarios.size(); i++) {
             sb.append(i + 1).append(") ").append(horarios.get(i)).append("\n");
         }
-        
-        sb.append("\nDigite o número ou o horário (ex: 13h):");
+        sb.append("\nDigite o numero ou o horario (ex: 13h):");
         return sb.toString();
     }
 
     private String processarEscolhaHorario(String numero, String texto, String mensagemOriginal) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String dia = state.getDraftAtual().getDia();
-        
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
         if (horarios.isEmpty()) {
             return menuDias();
         }
-
         String horario = null;
-
-        // Verifica se é número
         if (texto.matches("^\\d+$")) {
             try {
                 int indice = Integer.parseInt(texto) - 1;
@@ -260,24 +245,16 @@ public class StrictMvpMenuService {
                 // Ignora
             }
         }
-
-        // Se não encontrou por número, tenta extrair do texto
         if (horario == null) {
-            Matcher matcher = HORARIO_PATTERN.matcher(mensagemOriginal);
-            if (matcher.find()) {
-                String hora = matcher.group(1);
-                String minuto = matcher.group(2);
-                if (hora != null) {
-                    horario = formatarHorario(hora, minuto);
-                }
+            var parsedTime = timeInputParser.parse(mensagemOriginal);
+            if (parsedTime.isPresent()) {
+                horario = formatarHorarioLocalTime(parsedTime.get());
             }
         }
-
         if (horario == null) {
-            return "Não entendi. Por favor, escolha um horário:\n\n" +
-                   "Digite o número ou o horário (ex: 13h):";
+            return "Nao entendi. Por favor, escolha um horario:\n\n" +
+                   "Digite o numero ou o horario (ex: 13h):";
         }
-
         conversationStateService.atualizarHorario(numero, horario);
         return menuNome(numero);
     }
@@ -285,20 +262,17 @@ public class StrictMvpMenuService {
     private String menuNome(String numero) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String nome = state.getNome();
-        
         if (nome != null && !nome.isBlank()) {
             return menuConfirmacao(numero);
         }
-        
-        return "Perfeito! Qual é o seu nome?";
+        return "Perfeito! Qual e o seu nome?";
     }
 
     private String processarEscolhaNome(String numero, String mensagem) {
         String nome = mensagem.trim();
         if (nome.length() < 2 || nome.length() > 60) {
-            return "Por favor, digite um nome válido:";
+            return "Por favor, digite um nome valido:";
         }
-        
         conversationStateService.atualizarNome(numero, nome);
         return menuConfirmacao(numero);
     }
@@ -306,7 +280,6 @@ public class StrictMvpMenuService {
     private String menuConfirmacao(String numero) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String resumo = state.getDraftAtual().getResumo();
-        
         return "Perfeito! Vou confirmar seu agendamento:\n\n" +
                resumo + "\n\n" +
                "1) Confirmar\n" +
@@ -323,62 +296,50 @@ public class StrictMvpMenuService {
                    "2) Meus agendamentos\n" +
                    "3) Cancelar";
         }
-
         if (texto.contains("1") || texto.contains("confirmar") || texto.contains("sim")) {
             ConversationState state = conversationStateService.buscarPorNumero(numero);
             var draft = state.getDraftAtual();
-
             if (draft == null || !draft.isCompleto()) {
                 return menuPrincipal();
             }
-
-            // Idempotência: se já foi registrado, não cria de novo.
             if (draft.isConfirmado()) {
-                return "Seu agendamento já está registrado. Em breve o salão confirmará a disponibilidade.\n\n" +
+                return "Seu agendamento ja esta registrado. Em breve o salao confirmara a disponibilidade.\n\n" +
                        "Deseja fazer algo mais?\n\n" +
                        "1) Agendar\n" +
                        "2) Meus agendamentos\n" +
                        "3) Cancelar";
             }
-
             BookingResult resultado = bookingApplicationService.confirmar(
                     numero, state.getNome(), draft.getServico(), draft.getDia(), draft.getHorario());
-
             if (!resultado.isConfirmado()) {
-                // Conflito/indisponibilidade: mantém em confirmação, sem dados parciais.
                 return resultado.mensagem() + "\n\n" +
-                       "Digite 2 para cancelar e escolher outro horário.";
+                       "Digite 2 para cancelar e escolher outro horario.";
             }
-
             draft.setConfirmado(true);
             state.setStep(ConversationStep.FINALIZADO);
             conversationStateService.persistir(state);
-
-            return "Seu agendamento foi registrado com sucesso! Em breve o salão confirmará a disponibilidade.\n\n" +
+            return "Seu agendamento foi registrado com sucesso! Em breve o salao confirmara a disponibilidade.\n\n" +
                    "Deseja fazer algo mais?\n\n" +
                    "1) Agendar\n" +
                    "2) Meus agendamentos\n" +
                    "3) Cancelar";
         }
-
         return "Por favor, digite 1 para confirmar ou 2 para cancelar:";
     }
 
     private String consultarAgendamentos(String numero) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         var draft = state.getDraftAtual();
-        
         if (draft != null && draft.isCompleto()) {
-            return "Você tem um agendamento pendente:\n\n" +
+            return "Voce tem um agendamento pendente:\n\n" +
                    draft.getResumo() + "\n\n" +
-                   "Aguardando confirmação do salão.\n\n" +
+                   "Aguardando confirmacao do salao.\n\n" +
                    "Deseja fazer algo mais?\n\n" +
                    "1) Agendar\n" +
                    "2) Meus agendamentos\n" +
                    "3) Cancelar";
         }
-        
-        return "Você ainda não tem agendamentos ativos.\n\n" +
+        return "Voce ainda nao tem agendamentos ativos.\n\n" +
                "Deseja fazer algo mais?\n\n" +
                "1) Agendar\n" +
                "2) Meus agendamentos\n" +
@@ -388,7 +349,6 @@ public class StrictMvpMenuService {
     private String cancelarAgendamento(String numero) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         var draft = state.getDraftAtual();
-        
         if (draft != null && draft.isCompleto()) {
             conversationStateService.limparEstado(numero);
             return "Seu agendamento foi cancelado com sucesso.\n\n" +
@@ -397,8 +357,7 @@ public class StrictMvpMenuService {
                    "2) Meus agendamentos\n" +
                    "3) Cancelar";
         }
-        
-        return "Você não tem agendamentos ativos para cancelar.\n\n" +
+        return "Voce nao tem agendamentos ativos para cancelar.\n\n" +
                "Deseja fazer algo mais?\n\n" +
                "1) Agendar\n" +
                "2) Meus agendamentos\n" +
@@ -412,11 +371,10 @@ public class StrictMvpMenuService {
         return semAcentos.toLowerCase(java.util.Locale.ROOT);
     }
 
-    private String formatarHorario(String hora, String minuto) {
-        int horaInt = Integer.parseInt(hora);
-        if (minuto == null || minuto.isBlank()) {
-            return horaInt + "h";
+    private String formatarHorarioLocalTime(java.time.LocalTime time) {
+        if (time.getMinute() == 0) {
+            return time.getHour() + "h";
         }
-        return horaInt + ":" + minuto;
+        return time.getHour() + ":" + String.format("%02d", time.getMinute());
     }
 }

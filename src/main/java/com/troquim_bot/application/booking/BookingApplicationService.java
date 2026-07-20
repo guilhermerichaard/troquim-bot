@@ -2,6 +2,7 @@ package com.troquim_bot.application.booking;
 
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
+import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
@@ -25,17 +26,17 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Caso de uso de confirmação de agendamento a partir do rascunho da conversa.
+ * Caso de uso de confirmaÃ§Ã£o de agendamento a partir do rascunho da conversa.
  *
- * Orquestra os Application Services já existentes (Customer, Reservation,
+ * Orquestra os Application Services jÃ¡ existentes (Customer, Reservation,
  * Appointment) para transformar os dados coletados no menu STRICT_MVP
- * (serviço, dia, horário, nome) em dados reais persistidos. Toda a regra
- * de negócio de confirmação vive aqui — a camada de conversa apenas invoca
- * este serviço e traduz o {@link BookingResult} em mensagem.
+ * (serviÃ§o, dia, horÃ¡rio, nome) em dados reais persistidos. Toda a regra
+ * de negÃ³cio de confirmaÃ§Ã£o vive aqui â€” a camada de conversa apenas invoca
+ * este serviÃ§o e traduz o {@link BookingResult} em mensagem.
  *
- * MVP: o salão tem um único profissional. Um {@link ProfessionalId} estável
- * evita duplicar um catálogo de profissionais e faz o conflito de horário
- * (mesmo profissional + mesma data + horário sobreposto) funcionar de fato.
+ * MVP: o salÃ£o tem um Ãºnico profissional. Um {@link ProfessionalId} estÃ¡vel
+ * evita duplicar um catÃ¡logo de profissionais e faz o conflito de horÃ¡rio
+ * (mesmo profissional + mesma data + horÃ¡rio sobreposto) funcionar de fato.
  */
 @Service
 public class BookingApplicationService {
@@ -62,17 +63,17 @@ public class BookingApplicationService {
      * Confirma o agendamento: localiza/cria o Customer, cria a Reservation
      * (que valida disponibilidade via conflito) e cria o Appointment.
      *
-     * Em caso de conflito, nenhum dado parcial permanece: a reserva só é
-     * criada após passar na verificação, o Customer só é persistido após o
+     * Em caso de conflito, nenhum dado parcial permanece: a reserva sÃ³ Ã©
+     * criada apÃ³s passar na verificaÃ§Ã£o, o Customer sÃ³ Ã© persistido apÃ³s o
      * agendamento concluir, e uma falha ao criar o Appointment cancela a
-     * reserva recém-criada (compensação).
+     * reserva recÃ©m-criada (compensaÃ§Ã£o).
      *
-     * Fronteira transacional da Application (ARCHITECTURE_V2_1 §C10): Reservation,
-     * Appointment e Customer são persistidos numa ÚNICA transação Spring/JPA. Se a
-     * persistência do Customer (ou qualquer escrita) lançar RuntimeException não
-     * tratada, a transação sofre rollback e nenhum Reservation/Appointment órfão
-     * permanece. A ordem funcional já validada é preservada; o caminho de conflito
-     * retorna sem exceção (commit sem Customer persistido).
+     * Fronteira transacional da Application (ARCHITECTURE_V2_1 Â§C10): Reservation,
+     * Appointment e Customer sÃ£o persistidos numa ÃšNICA transaÃ§Ã£o Spring/JPA. Se a
+     * persistÃªncia do Customer (ou qualquer escrita) lanÃ§ar RuntimeException nÃ£o
+     * tratada, a transaÃ§Ã£o sofre rollback e nenhum Reservation/Appointment Ã³rfÃ£o
+     * permanece. A ordem funcional jÃ¡ validada Ã© preservada; o caminho de conflito
+     * retorna sem exceÃ§Ã£o (commit sem Customer persistido).
      */
     @Transactional
     public BookingResult confirmar(String telefone, String nomeCliente,
@@ -85,12 +86,12 @@ public class BookingApplicationService {
             inicio = parseHorario(horario);
             fim = inicio.plus(DURACAO_PADRAO);
         } catch (RuntimeException e) {
-            return BookingResult.invalido("Não consegui interpretar a data ou o horário informado.");
+            return BookingResult.invalido("NÃ£o consegui interpretar a data ou o horÃ¡rio informado.");
         }
 
-        // Autoridade única de identidade: resolve/cria o Customer UMA vez e usa o
-        // CustomerId oficial surrogate. O cliente é persistido só no sucesso (persistir),
-        // para não deixar Customer órfão quando o horário estiver ocupado.
+        // Autoridade Ãºnica de identidade: resolve/cria o Customer UMA vez e usa o
+        // CustomerId oficial surrogate. O cliente Ã© persistido sÃ³ no sucesso (persistir),
+        // para nÃ£o deixar Customer Ã³rfÃ£o quando o horÃ¡rio estiver ocupado.
         Customer customer = customerProfileService.resolverOuConstruir(telefone, nomeCliente);
         CustomerId customerId = customer.getId();
         ServiceId serviceId = ServiceId.from(uuidDeterministico("service:" + normalizar(servico)));
@@ -99,26 +100,41 @@ public class BookingApplicationService {
         LocalDateTime expiraEm = LocalDateTime.of(data, inicio);
 
         Reservation reservation;
+        // Idempotência Application/Domain: se já existe Appointment confirmado para este
+        // cliente neste horário, retorna sucesso sem duplicar entidades.
+        if (!appointmentApplicationService.listarAtivosPorCliente(customerId).isEmpty()) {
+            return BookingResult.confirmado(servico, dia, horario, nomeCliente);
+        }
+
+        // Verifica conflito com Appointments já confirmados (a Reservation cancelada
+        // após criar o Appointment não protege mais o slot — o Appointment protege).
+        for (Appointment existente : appointmentApplicationService.listarAtivos()) {
+            if (PROFISSIONAL_PADRAO.equals(existente.getProfessionalId())
+                    && data.equals(existente.getDate())
+                    && inicio.isBefore(existente.getEndTime())
+                    && existente.getStartTime().isBefore(fim)) {
+                return BookingResult.indisponivel("Esse horário já está ocupado.");
+            }
+        }
+
         try {
             reservation = reservationApplicationService.criarReserva(
                     customerId, PROFISSIONAL_PADRAO, serviceId, availabilityId,
                     data, inicio, fim, expiraEm);
         } catch (IllegalArgumentException e) {
-            return BookingResult.indisponivel("Esse horário já está ocupado.");
+            return BookingResult.indisponivel("Esse horÃ¡rio jÃ¡ estÃ¡ ocupado.");
         }
 
         try {
-            appointmentApplicationService.criarAgendamento(
-                    customerId, PROFISSIONAL_PADRAO, serviceId, availabilityId,
-                    data, inicio, fim);
+            appointmentApplicationService.criarAgendamentoDeReserva(reservation.getId());
         } catch (RuntimeException e) {
-            // Compensação: não deixa uma reserva ativa sem o agendamento correspondente.
+            // CompensaÃ§Ã£o: nÃ£o deixa uma reserva ativa sem o agendamento correspondente.
             reservationApplicationService.cancelarReserva(reservation.getId());
-            return BookingResult.indisponivel("Esse horário já está ocupado.");
+            return BookingResult.indisponivel("Esse horÃ¡rio jÃ¡ estÃ¡ ocupado.");
         }
 
-        // Reserva e agendamento concluídos: persiste o Customer oficial uma única vez.
-        // O mesmo customerId já foi gravado em Reservation e Appointment.
+        // Reserva e agendamento concluÃ­dos: persiste o Customer oficial uma Ãºnica vez.
+        // O mesmo customerId jÃ¡ foi gravado em Reservation e Appointment.
         customerProfileService.persistir(customer);
 
         return BookingResult.confirmado(servico, dia, horario, nomeCliente);
@@ -142,7 +158,7 @@ public class BookingApplicationService {
             case "sexta" -> DayOfWeek.FRIDAY;
             case "sabado" -> DayOfWeek.SATURDAY;
             case "domingo" -> DayOfWeek.SUNDAY;
-            default -> throw new IllegalArgumentException("Dia não reconhecido: " + dia);
+            default -> throw new IllegalArgumentException("Dia nÃ£o reconhecido: " + dia);
         };
     }
 
