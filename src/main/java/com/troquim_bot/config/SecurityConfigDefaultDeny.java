@@ -41,6 +41,13 @@ public class SecurityConfigDefaultDeny {
                         "/webhook/whatsapp",
                         "/webhook/whatsapp/messages-upsert")
                     .permitAll();
+                // WhatsApp Cloud API (Meta): GET (handshake) e POST (eventos) exatos.
+                // O POST e' publico no Security, mas protegido pela assinatura HMAC da Meta.
+                // Rotas vizinhas (/webhook/whatsapp/cloud/**) NAO sao liberadas.
+                auth.requestMatchers(HttpMethod.GET, "/webhook/whatsapp/cloud")
+                    .permitAll();
+                auth.requestMatchers(HttpMethod.POST, "/webhook/whatsapp/cloud")
+                    .permitAll();
                 auth.requestMatchers(HttpMethod.GET, "/actuator/health")
                     .permitAll();
                 if (devProfile) {
