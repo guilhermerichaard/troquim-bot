@@ -1,0 +1,22 @@
+# =====================================================================
+# Compose de RELEASE — seleciona a imagem versionada do backend.
+#
+# Responsabilidade ÚNICA: apontar o serviço troquim-bot para a imagem já
+# construída (TROQUIM_RELEASE_IMAGE) e injetar as variáveis do release.
+# NÃO define postgres/redis/datasource/rede/porta/healthcheck: isso vem dos
+# arquivos base (docker-compose.yml + docker-compose.droplet.yml) via merge.
+#
+# Baixo acoplamento: este arquivo NÃO conhece o SHA do release. Quem escolhe
+# a imagem é a variável de ambiente TROQUIM_RELEASE_IMAGE, exportada no deploy.
+# O build ocorre SEPARADAMENTE (docker build) — ver docs/operations/
+# BACKEND_RELEASE_DEPLOY.md. Nenhum segredo, UUID, chave ou regra de domínio
+# pertence a este arquivo.
+# =====================================================================
+
+services:
+  troquim-bot:
+    image: ${TROQUIM_RELEASE_IMAGE:?TROQUIM_RELEASE_IMAGE obrigatória}
+    environment:
+      TROQUIM_PILOT_BUSINESS_ID: ${TROQUIM_PILOT_BUSINESS_ID:?TROQUIM_PILOT_BUSINESS_ID obrigatória}
+      TROQUIM_ADMIN_API_KEY: ${TROQUIM_ADMIN_API_KEY:?TROQUIM_ADMIN_API_KEY obrigatória}
+      TROQUIM_FLYWAY_BASELINE_ON_MIGRATE: ${TROQUIM_FLYWAY_BASELINE_ON_MIGRATE:-false}

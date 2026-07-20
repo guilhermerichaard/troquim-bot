@@ -1,2 +1,8 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+
+# Arquivos operacionais (compose, YAML, shell) sempre em LF — evita que
+# PowerShell/SSH gravem CRLF na Droplet e quebrem interpolação/parsing.
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
