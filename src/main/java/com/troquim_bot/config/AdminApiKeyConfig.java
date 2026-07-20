@@ -40,5 +40,19 @@ public class AdminApiKeyConfig {
                 "Set a valid API key via environment variable before starting."
             );
         }
+
+        // Surrounding whitespace (typically a trailing newline injected with the
+        // container secret) never matches a client-sent token: BearerTokenFilter
+        // compares the configured key against the trimmed incoming token, so a
+        // padded key silently rejects every valid request with 401. Fail loudly at
+        // startup instead of trimming silently — a malformed secret must be fixed,
+        // not quietly accepted.
+        if (!adminApiKey.equals(adminApiKey.strip())) {
+            throw new IllegalStateException(
+                "TROQUIM_ADMIN_API_KEY has leading or trailing whitespace and would never match a " +
+                "client token (every authenticated request would return 401). Provide the key without " +
+                "surrounding whitespace — check for a trailing newline in the container secret."
+            );
+        }
     }
 }
