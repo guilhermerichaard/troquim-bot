@@ -33,6 +33,17 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/troquim
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # WhatsApp Cloud API (Meta) — allowlist explícita encaminhada do /opt/troquim/.env.
+      # Desligada por padrão; quando enabled=false a app inicia sem credenciais e o
+      # fail-fast do WhatsAppCloudConfigValidator (profile azure + enabled=true) fica inerte.
+      # Valores reais vivem SOMENTE no .env (nunca commitado); aqui só a passagem.
+      TROQUIM_WHATSAPP_CLOUD_ENABLED: ${TROQUIM_WHATSAPP_CLOUD_ENABLED:-false}
+      TROQUIM_WHATSAPP_VERIFY_TOKEN: ${TROQUIM_WHATSAPP_VERIFY_TOKEN:-}
+      TROQUIM_WHATSAPP_APP_SECRET: ${TROQUIM_WHATSAPP_APP_SECRET:-}
+      TROQUIM_WHATSAPP_ACCESS_TOKEN: ${TROQUIM_WHATSAPP_ACCESS_TOKEN:-}
+      TROQUIM_WHATSAPP_PHONE_NUMBER_ID: ${TROQUIM_WHATSAPP_PHONE_NUMBER_ID:-}
+      TROQUIM_WHATSAPP_WABA_ID: ${TROQUIM_WHATSAPP_WABA_ID:-}
+      TROQUIM_WHATSAPP_GRAPH_API_VERSION: ${TROQUIM_WHATSAPP_GRAPH_API_VERSION:-}
     ports:
       - "8080:8080"   # TEMPORÁRIO — remover após validação
     depends_on:
