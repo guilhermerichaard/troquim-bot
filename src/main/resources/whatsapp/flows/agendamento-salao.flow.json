@@ -104,6 +104,7 @@
         "tem_erro": { "type": "boolean", "__example__": false },
         "servico_id": { "type": "string", "__example__": "unha" },
         "servico_nome": { "type": "string", "__example__": "Unhas" },
+        "servico_profissional": { "type": "string", "__example__": "Unhas · Qualquer profissional" },
         "profissional_id": { "type": "string", "__example__": "qualquer" },
         "profissional_nome": { "type": "string", "__example__": "Qualquer profissional" },
         "horarios_habilitado": { "type": "boolean", "__example__": false },
@@ -143,7 +144,7 @@
             "name": "form",
             "children": [
               { "type": "TextHeading", "text": "Escolha data e horário" },
-              { "type": "TextCaption", "text": "${data.servico_nome} · ${data.profissional_nome}" },
+              { "type": "TextCaption", "text": "${data.servico_profissional}" },
               {
                 "type": "TextBody",
                 "text": "${data.error_message}",
@@ -270,7 +271,9 @@
         "resumo_profissional": { "type": "string", "__example__": "Qualquer profissional" },
         "resumo_data": { "type": "string", "__example__": "Quarta-feira, 29/07" },
         "resumo_horario": { "type": "string", "__example__": "09:00" },
-        "resumo_duracao": { "type": "string", "__example__": "1h" }
+        "resumo_duracao": { "type": "string", "__example__": "1h" },
+        "resumo_quando": { "type": "string", "__example__": "Quarta-feira, 29/07 às 09:00" },
+        "resumo_detalhe": { "type": "string", "__example__": "Qualquer profissional · duração de 1h" }
       },
       "layout": {
         "type": "SingleColumnLayout",
@@ -286,11 +289,8 @@
                 "visible": "${data.tem_erro}"
               },
               { "type": "TextSubheading", "text": "${data.resumo_servico}" },
-              { "type": "TextBody", "text": "${data.resumo_data} às ${data.resumo_horario}" },
-              {
-                "type": "TextCaption",
-                "text": "${data.resumo_profissional} · duração de ${data.resumo_duracao}"
-              },
+              { "type": "TextBody", "text": "${data.resumo_quando}" },
+              { "type": "TextCaption", "text": "${data.resumo_detalhe}" },
               {
                 "type": "Footer",
                 "label": "Confirmar agendamento",

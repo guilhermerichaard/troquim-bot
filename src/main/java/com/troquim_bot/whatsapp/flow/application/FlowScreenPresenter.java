@@ -119,6 +119,11 @@ public class FlowScreenPresenter {
         data.put("datas", datas);
         data.put("horarios", horarios);
         data.put("horarios_habilitado", temHorarios);
+        // Rótulo composto no SERVIDOR: o Flow JSON só aceita binding de valor inteiro
+        // (${data.x}), nunca interpolação com texto literal. Compor aqui é apresentação,
+        // não regra de negócio.
+        data.put("servico_profissional",
+                ctx.servico().titulo() + " · " + ctx.profissional().titulo());
         return FlowResponse.tela(FlowScreen.AGENDA, data);
     }
 
@@ -134,11 +139,17 @@ public class FlowScreenPresenter {
     public FlowResponse confirmacao(FlowContexto ctx, String erro) {
         Map<String, Object> data = base(erro);
         data.putAll(selecao(ctx));
+        String data_ = dataPorExtenso(ctx.data());
+        String horario = ctx.horario().toString();
         data.put("resumo_servico", ctx.servico().titulo());
         data.put("resumo_profissional", ctx.profissional().titulo());
-        data.put("resumo_data", dataPorExtenso(ctx.data()));
-        data.put("resumo_horario", ctx.horario().toString());
+        data.put("resumo_data", data_);
+        data.put("resumo_horario", horario);
         data.put("resumo_duracao", ctx.servico().duracaoLegivel());
+        // Linhas compostas no SERVIDOR (binding de valor inteiro; sem interpolação no JSON).
+        data.put("resumo_quando", data_ + " às " + horario);
+        data.put("resumo_detalhe",
+                ctx.profissional().titulo() + " · duração de " + ctx.servico().duracaoLegivel());
         return FlowResponse.tela(FlowScreen.CONFIRMACAO, data);
     }
 

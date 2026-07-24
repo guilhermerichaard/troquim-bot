@@ -134,6 +134,26 @@ class FlowJsonEstruturaTest {
     }
 
     @Test
+    @DisplayName("referências ${data.x} são binding de valor inteiro, sem interpolação com literais")
+    void bindingDinamicoEhValorInteiro() {
+        // O Flow JSON só aceita binding de valor INTEIRO: "${data.campo}" ocupando toda a
+        // string. Misturar referência com texto literal ("${a} às ${b}") NÃO é suportado —
+        // o Builder o rejeita (rotulando como "campo não declarado"). Este guard percorre
+        // todos os valores string do layout e falha se uma referência ${data.x} não for o
+        // valor inteiro.
+        List<String> valores = new ArrayList<>();
+        coletarStrings(flow.path("screens"), valores);
+
+        for (String valor : valores) {
+            if (valor.contains("${data.")) {
+                assertTrue(valor.matches("^\\$\\{data\\.[a-zA-Z0-9_]+}$"),
+                        "Binding dinâmico deve ser valor inteiro (sem interpolação com literal): \""
+                                + valor + "\"");
+            }
+        }
+    }
+
+    @Test
     @DisplayName("toda ação data_exchange declara o flow_action que o registry conhece")
     void acoesConhecidasPeloCodigo() {
         Set<String> acoesValidas = new HashSet<>();
@@ -211,6 +231,15 @@ class FlowJsonEstruturaTest {
     }
 
     // ==================== helpers de varredura ====================
+
+    /** Coleta todo valor string folha sob um nó (para inspecionar bindings). */
+    private static void coletarStrings(JsonNode no, List<String> destino) {
+        if (no.isTextual()) {
+            destino.add(no.asText());
+            return;
+        }
+        no.forEach(filho -> coletarStrings(filho, destino));
+    }
 
     private static void coletarReferencias(JsonNode no, Set<String> destino) {
         if (no.isTextual()) {
