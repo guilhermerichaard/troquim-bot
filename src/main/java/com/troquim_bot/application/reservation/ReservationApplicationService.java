@@ -1,6 +1,7 @@
 package com.troquim_bot.application.reservation;
 
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.availability.HorarioIndisponivelException;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.ReservationRepository;
@@ -91,7 +92,10 @@ public class ReservationApplicationService {
         List<Reservation> existentes = reservationRepository.findByProfessionalIdAndDate(professionalId, date);
         for (Reservation existing : existentes) {
             if (existing.isAtivo() && newReservation.conflitaCom(existing)) {
-                throw new IllegalArgumentException("Já existe uma reserva neste horário para este profissional");
+                // Tipo específico: conflito é regra de negócio, e o chamador precisa
+                // distingui-lo de uma falha de escrita sem ler mensagem de exceção.
+                throw new HorarioIndisponivelException(
+                        "Já existe uma reserva neste horário para este profissional");
             }
         }
 

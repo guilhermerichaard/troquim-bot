@@ -16,6 +16,8 @@ import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.repository.ReservationRepository;
+import com.troquim_bot.support.OptionalBeans;
+import com.troquim_bot.support.InMemoryBookingIdempotencyStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -45,13 +47,15 @@ class StrictMvpBookingConfirmationTest {
         CustomerProfileService customerProfileService = new CustomerProfileService(customerRepository, TestTenants.pilot());
 
         BookingApplicationService booking = new BookingApplicationService(
-                reservationApp, appointmentApp, customerProfileService);
+                reservationApp, appointmentApp, customerProfileService,
+                new InMemoryBookingIdempotencyStore());
 
         conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
         menu = new StrictMvpMenuService(
                 conversationStateService,
                 new AvailabilityApplicationService(),
                 booking,
+                OptionalBeans.ausente(),
                 "STRICT_MVP");
     }
 

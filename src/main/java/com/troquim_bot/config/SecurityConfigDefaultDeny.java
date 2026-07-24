@@ -48,6 +48,11 @@ public class SecurityConfigDefaultDeny {
                     .permitAll();
                 auth.requestMatchers(HttpMethod.POST, "/webhook/whatsapp/cloud")
                     .permitAll();
+                // WhatsApp Flow (Meta) — Data Endpoint. Rota exata, POST apenas.
+                // Publico no Security porque a autenticacao E' o protocolo criptografico:
+                // sem a chave privada nao se produz um corpo que decifre e autentique (GCM).
+                auth.requestMatchers(HttpMethod.POST, "/api/v1/whatsapp/flows")
+                    .permitAll();
                 auth.requestMatchers(HttpMethod.GET, "/actuator/health")
                     .permitAll();
                 if (devProfile) {

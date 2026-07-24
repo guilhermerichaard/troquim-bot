@@ -1,11 +1,13 @@
 package com.troquim_bot.conversation;
 
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
+import com.troquim_bot.application.booking.AberturaDeAgenda;
 import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.application.booking.BookingResult;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -14,9 +16,28 @@ import java.util.*;
 @Service
 public class StrictMvpMenuService {
 
+    /**
+     * Falha tecnica: o texto canonico de {@link BookingResult}, o MESMO que o WhatsApp
+     * Flow usa — os dois canais nao podem divergir sobre o que aconteceu.
+     *
+     * Deliberadamente neutro: nao afirma que o horario continua livre nem que nada foi
+     * criado. Numa falha de persistencia nao ha evidencia de nenhuma das duas coisas. A
+     * instrucao de repetir e' segura por causa da idempotencia por MENSAGEM
+     * (InboundReceiptProcessor, UNIQUE por provider + external_message_id), nao por a
+     * agenda estar inalterada.
+     */
+    private static final String MENSAGEM_FALHA_TECNICA =
+            BookingResult.MENSAGEM_FALHA_TECNICA + "\n\nDigite 1 para tentar de novo.";
+
+    /** Texto natural: o cliente toca no botao, sem "digite 1". */
+    private static final String MENSAGEM_AGENDA_ABERTA =
+            "Te mandei a agenda aqui em cima. E so tocar em \"Abrir agenda\" e escolher.\n\n"
+                    + "Se preferir, pode continuar por aqui digitando o servico.";
+
     private final ConversationStateService conversationStateService;
     private final AvailabilityApplicationService availabilityApplicationService;
     private final BookingApplicationService bookingApplicationService;
+    private final ObjectProvider<AberturaDeAgenda> aberturaDeAgenda;
     private final ConversationNavigationPolicy navigationPolicy;
     private final TimeInputParser timeInputParser;
     private final boolean strictMvpEnabled;
@@ -24,10 +45,12 @@ public class StrictMvpMenuService {
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
                                 BookingApplicationService bookingApplicationService,
+                                ObjectProvider<AberturaDeAgenda> aberturaDeAgenda,
                                 @Value("${conversation.mode:STRICT_MVP}") String conversationMode) {
         this.conversationStateService = conversationStateService;
         this.availabilityApplicationService = availabilityApplicationService;
         this.bookingApplicationService = bookingApplicationService;
+        this.aberturaDeAgenda = aberturaDeAgenda;
         this.navigationPolicy = new ConversationNavigationPolicy();
         this.timeInputParser = new TimeInputParser();
         this.strictMvpEnabled = "STRICT_MVP".equalsIgnoreCase(conversationMode);
@@ -110,6 +133,17 @@ public class StrictMvpMenuService {
         state.setStep(ConversationStep.AGUARDANDO_SERVICO);
         conversationStateService.atualizarStep(state);
         conversationStateService.persistir(state);
+
+        // ÚNICO ponto de integração com a agenda rica. A conversa nao conhece WhatsApp
+        // Flow, Meta nem criptografia: pergunta a uma capacidade opcional se ela existe e
+        // manda abrir. Ausente, desligada ou com falha de envio, o menu textual segue
+        // exatamente como antes — o estado da conversa ja foi preparado acima, entao o
+        // cliente que ignorar o botao continua atendido pelo texto.
+        AberturaDeAgenda agenda = aberturaDeAgenda.getIfAvailable();
+        if (agenda != null && agenda.disponivel() && agenda.abrirPara(numero).abriu()) {
+            return MENSAGEM_AGENDA_ABERTA;
+        }
+
         return menuServicos();
     }
 
@@ -309,9 +343,24 @@ public class StrictMvpMenuService {
                        "2) Meus agendamentos\n" +
                        "3) Cancelar";
             }
-            BookingResult resultado = bookingApplicationService.confirmar(
-                    numero, state.getNome(), draft.getServico(), draft.getDia(), draft.getHorario());
+            BookingResult resultado;
+            try {
+                resultado = bookingApplicationService.confirmar(
+                        numero, state.getNome(), draft.getServico(), draft.getDia(), draft.getHorario());
+            } catch (RuntimeException falhaTecnica) {
+                // A confirmacao estourou e o rollback foi acionado. Ainda assim nao
+                // afirmamos ao cliente o que ficou gravado: quem falhou foi o proprio
+                // mecanismo de persistencia. O draft e' preservado para que repetir seja
+                // um retry do MESMO agendamento. A protecao contra duplicacao vem do
+                // recibo de mensagem, nao de uma varredura da agenda do cliente.
+                return MENSAGEM_FALHA_TECNICA;
+            }
+            if (resultado.isFalhaTecnica()) {
+                return MENSAGEM_FALHA_TECNICA;
+            }
             if (!resultado.isConfirmado()) {
+                // Conflito ou dado invalido: aqui ha evidencia de agenda, entao pedir
+                // outro horario e' a orientacao correta.
                 return resultado.mensagem() + "\n\n" +
                        "Digite 2 para cancelar e escolher outro horario.";
             }

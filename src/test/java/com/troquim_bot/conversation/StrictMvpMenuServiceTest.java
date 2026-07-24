@@ -12,6 +12,8 @@ import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
 import com.troquim_bot.repository.InMemoryConversationStateRepository;
+import com.troquim_bot.support.OptionalBeans;
+import com.troquim_bot.support.InMemoryBookingIdempotencyStore;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,7 +33,9 @@ class StrictMvpMenuServiceTest {
                 new BookingApplicationService(
                         new ReservationApplicationService(new InMemoryReservationRepository()),
                         new AppointmentApplicationService(),
-                        new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())),
+                        new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),
+                new InMemoryBookingIdempotencyStore()),
+                OptionalBeans.ausente(),
                 "STRICT_MVP"
         );
 

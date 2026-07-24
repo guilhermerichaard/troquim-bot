@@ -18,6 +18,7 @@ import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.service.ServiceId;
 import com.troquim_bot.support.TestTenants;
+import com.troquim_bot.support.InMemoryBookingIdempotencyStore;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -52,7 +53,8 @@ class CustomerIdentityConsolidationTest {
         return new BookingApplicationService(
                 new ReservationApplicationService(reservationRepository),
                 new AppointmentApplicationService(appointmentRepository, reservationRepository),
-                profiles);
+                profiles,
+                new InMemoryBookingIdempotencyStore());
     }
 
     private void novoContexto() {
@@ -98,7 +100,8 @@ class CustomerIdentityConsolidationTest {
         CustomerProfileService profiles = profiles();
         ReservationApplicationService reservationApp = new ReservationApplicationService(reservationRepository);
         AppointmentApplicationService appointmentApp = new AppointmentApplicationService(appointmentRepository, reservationRepository);
-        BookingApplicationService booking = new BookingApplicationService(reservationApp, appointmentApp, profiles);
+        BookingApplicationService booking = new BookingApplicationService(reservationApp, appointmentApp, profiles,
+                new InMemoryBookingIdempotencyStore());
 
         BookingResult resultado = booking.confirmar("5511900000001", "Maria Silva", "cabelo", "sexta", "13h");
         assertTrue(resultado.isConfirmado(), "O agendamento deveria ser confirmado");

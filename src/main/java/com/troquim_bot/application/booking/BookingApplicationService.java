@@ -4,6 +4,7 @@ import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.availability.HorarioIndisponivelException;
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerProfileService;
@@ -11,6 +12,8 @@ import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.reservation.Reservation;
 import com.troquim_bot.service.ServiceId;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +44,8 @@ import java.util.UUID;
 @Service
 public class BookingApplicationService {
 
+    private static final Logger log = LoggerFactory.getLogger(BookingApplicationService.class);
+
     private static final Duration DURACAO_PADRAO = Duration.ofHours(1);
 
     private static final ProfessionalId PROFISSIONAL_PADRAO =
@@ -49,14 +54,17 @@ public class BookingApplicationService {
     private final ReservationApplicationService reservationApplicationService;
     private final AppointmentApplicationService appointmentApplicationService;
     private final CustomerProfileService customerProfileService;
+    private final BookingIdempotencyStore idempotencyStore;
 
     @Autowired
     public BookingApplicationService(ReservationApplicationService reservationApplicationService,
                                      AppointmentApplicationService appointmentApplicationService,
-                                     CustomerProfileService customerProfileService) {
+                                     CustomerProfileService customerProfileService,
+                                     BookingIdempotencyStore idempotencyStore) {
         this.reservationApplicationService = reservationApplicationService;
         this.appointmentApplicationService = appointmentApplicationService;
         this.customerProfileService = customerProfileService;
+        this.idempotencyStore = idempotencyStore;
     }
 
     /**
@@ -99,9 +107,9 @@ public class BookingApplicationService {
                 "availability:" + PROFISSIONAL_PADRAO + ":" + normalizar(dia) + ":" + inicio));
         LocalDateTime expiraEm = LocalDateTime.of(data, inicio);
 
-        Reservation reservation;
-        // Idempotência Application/Domain: se já existe Appointment confirmado para este
-        // cliente neste horário, retorna sucesso sem duplicar entidades.
+        // NAO e' idempotencia: e' um atalho historico deste caminho legado (qualquer
+        // agendamento ativo do cliente encerra a confirmacao). A idempotencia real deste
+        // canal vem do InboundReceiptProcessor, uma camada acima.
         if (!appointmentApplicationService.listarAtivosPorCliente(customerId).isEmpty()) {
             return BookingResult.confirmado(servico, dia, horario, nomeCliente);
         }
@@ -117,27 +125,189 @@ public class BookingApplicationService {
             }
         }
 
+        // Sem BookingCommandKey: a idempotencia deste caminho vive uma camada acima, no
+        // InboundReceiptProcessor (UNIQUE por provider + external_message_id). Ver secao
+        // "Conversation" em docs/features/whatsapp-flow-agendamento.md.
+        return reservarEAgendar(customer, PROFISSIONAL_PADRAO, serviceId, availabilityId,
+                data, inicio, fim, expiraEm, servico, dia, horario, nomeCliente, null);
+    }
+
+    /**
+     * Confirma o agendamento para uma DATA de calendario explicita.
+     *
+     * Existe porque o WhatsApp Flow coleta a data num CalendarPicker (data absoluta),
+     * enquanto {@link #confirmar} recebe nome de dia da semana e resolve a proxima
+     * ocorrencia. As duas portas de entrada compartilham a MESMA orquestracao e a
+     * mesma deteccao de conflito: o Flow nao reimplementa confirmacao.
+     *
+     * A idempotencia aqui e por SLOT (mesmo cliente, mesma data, mesmo horario) —
+     * reconfirmar o mesmo agendamento devolve sucesso sem duplicar, mas um horario
+     * diferente segue sendo um agendamento novo.
+     *
+     * O AvailabilityId e derivado da data ISO (nao do nome do dia), evitando a colisao
+     * entre semanas que o caminho por dia da semana tem.
+     */
+    @Transactional
+    public BookingResult confirmarEm(String telefone, String nomeCliente, String servico,
+                                     ProfessionalId profissional, LocalDate data, LocalTime inicio,
+                                     Duration duracao, BookingCommandKey chave) {
+        if (chave == null) {
+            throw new IllegalArgumentException(
+                    "BookingCommandKey e obrigatoria: sem ela nao ha idempotencia de comando");
+        }
+        if (data == null || inicio == null || profissional == null) {
+            return BookingResult.invalido("Data ou horario ausente.");
+        }
+        if (data.isBefore(LocalDate.now())) {
+            return BookingResult.invalido("Essa data ja passou.");
+        }
+
+        // PRIMEIRA escrita da transacao: reivindicar o comando. Antes de qualquer coisa de
+        // negocio, para que duas execucoes simultaneas do MESMO comando se serializem aqui
+        // e nao no meio da criacao do agendamento.
+        BookingIdempotencyStore.Claim claim = idempotencyStore.reivindicar(chave);
+        if (!claim.reivindicada()) {
+            if (claim.baseJaConfirmada().isPresent()) {
+                // Regra do MVP: este Flow ja concluiu um agendamento e agora chegou uma
+                // escolha DIFERENTE. Nao e' retry (dados nao batem) nem conflito de agenda
+                // (o horario pode estar livre) — a sessao e' que se esgotou. Nada e'
+                // escrito e o cliente e' orientado a abrir a agenda de novo.
+                log.info("Confirmacao recusada: a base do comando ja concluiu um agendamento.");
+                return BookingResult.sessaoJaConfirmada();
+            }
+            if (claim.existente().isPresent()) {
+                // Retry de um comando ja concluido: devolve o desfecho gravado, sem
+                // reexecutar negocio e sem procurar agendamentos do cliente.
+                return claim.existente().get().comoResultado();
+            }
+            // Chave tomada, sem desfecho visivel. Nao ha como decidir com seguranca:
+            // tratar como falha tecnica deixa o cliente repetir, que e' o caminho seguro.
+            log.warn("Comando de booking reivindicado por outra execucao e ainda sem desfecho.");
+            return BookingResult.falhaTecnica();
+        }
+
+        LocalTime fim = inicio.plus(duracao == null ? DURACAO_PADRAO : duracao);
+
+        Customer customer = customerProfileService.resolverOuConstruir(telefone, nomeCliente);
+        ServiceId serviceId = BookingIds.serviceId(servico);
+        AvailabilityId availabilityId = AvailabilityId.from(uuidDeterministico(
+                "availability:" + profissional + ":" + data + ":" + inicio));
+        LocalDateTime expiraEm = LocalDateTime.of(data, inicio);
+
+        // INVARIANTE DE DOMINIO (nao e' idempotencia): um profissional nao pode ter dois
+        // agendamentos sobrepostos. Continua valendo para comandos DIFERENTES que disputem
+        // o mesmo slot; o retry do MESMO comando ja foi resolvido pela chave acima.
+        for (Appointment existente : appointmentApplicationService.listarAtivos()) {
+            if (profissional.equals(existente.getProfessionalId())
+                    && data.equals(existente.getDate())
+                    && inicio.isBefore(existente.getEndTime())
+                    && existente.getStartTime().isBefore(fim)) {
+                BookingResult conflito = BookingResult.indisponivel("Esse horario ja esta ocupado.");
+                // Desfecho negativo tambem e' gravado: repetir o mesmo comando deve dar a
+                // mesma resposta, sem varrer a agenda de novo.
+                idempotencyStore.concluir(chave, null, conflito.status(),
+                        servico, data.toString(), inicio.toString(), nomeCliente);
+                return conflito;
+            }
+        }
+
+        return reservarEAgendar(customer, profissional, serviceId, availabilityId,
+                data, inicio, fim, expiraEm, servico, data.toString(), inicio.toString(),
+                nomeCliente, chave);
+    }
+
+    /**
+     * Orquestracao compartilhada Reservation -> Appointment -> Customer, com compensacao.
+     * Unico lugar do sistema que materializa um agendamento confirmado.
+     */
+    private BookingResult reservarEAgendar(Customer customer, ProfessionalId profissional,
+                                           ServiceId serviceId, AvailabilityId availabilityId,
+                                           LocalDate data, LocalTime inicio, LocalTime fim,
+                                           LocalDateTime expiraEm, String servico,
+                                           String rotuloDia, String rotuloHorario,
+                                           String nomeCliente, BookingCommandKey chave) {
+        Reservation reservation;
         try {
             reservation = reservationApplicationService.criarReserva(
-                    customerId, PROFISSIONAL_PADRAO, serviceId, availabilityId,
+                    customer.getId(), profissional, serviceId, availabilityId,
                     data, inicio, fim, expiraEm);
-        } catch (IllegalArgumentException e) {
-            return BookingResult.indisponivel("Esse horÃ¡rio jÃ¡ estÃ¡ ocupado.");
+        } catch (HorarioIndisponivelException conflito) {
+            // Conflito REAL de agenda. Nada foi escrito: sem compensacao a fazer.
+            return concluirConflito(chave, servico, rotuloDia, rotuloHorario, nomeCliente);
+        } catch (RuntimeException falha) {
+            throw falhaTecnica("criar reserva", falha);
         }
 
+        Appointment appointment;
         try {
-            appointmentApplicationService.criarAgendamentoDeReserva(reservation.getId());
-        } catch (RuntimeException e) {
-            // CompensaÃ§Ã£o: nÃ£o deixa uma reserva ativa sem o agendamento correspondente.
-            reservationApplicationService.cancelarReserva(reservation.getId());
-            return BookingResult.indisponivel("Esse horÃ¡rio jÃ¡ estÃ¡ ocupado.");
+            appointment = appointmentApplicationService.criarAgendamentoDeReserva(reservation.getId());
+        } catch (HorarioIndisponivelException conflito) {
+            compensar(reservation);
+            return concluirConflito(chave, servico, rotuloDia, rotuloHorario, nomeCliente);
+        } catch (RuntimeException falha) {
+            compensar(reservation);
+            throw falhaTecnica("criar agendamento", falha);
         }
 
-        // Reserva e agendamento concluÃ­dos: persiste o Customer oficial uma Ãºnica vez.
-        // O mesmo customerId jÃ¡ foi gravado em Reservation e Appointment.
+        // Reserva e agendamento concluidos: persiste o Customer oficial uma unica vez.
+        // O mesmo customerId ja foi gravado em Reservation e Appointment.
+        //
+        // DELIBERADAMENTE SEM try/catch: uma falha aqui precisa PROPAGAR para que o
+        // rollback da transacao desfaca Reservation, Appointment E a reivindicacao junto.
         customerProfileService.persistir(customer);
 
-        return BookingResult.confirmado(servico, dia, horario, nomeCliente);
+        // Recibo do comando, na MESMA transacao. Commit: agendamento e recibo aparecem
+        // juntos. Rollback: somem juntos, e o retry reivindica do zero.
+        if (chave != null) {
+            idempotencyStore.concluir(chave, appointment.getId(), BookingResult.Status.CONFIRMADO,
+                    servico, rotuloDia, rotuloHorario, nomeCliente);
+        }
+
+        return BookingResult.confirmado(servico, rotuloDia, rotuloHorario, nomeCliente);
+    }
+
+    /** Grava o desfecho negativo para que o retry do MESMO comando responda igual. */
+    private BookingResult concluirConflito(BookingCommandKey chave, String servico,
+                                           String rotuloDia, String rotuloHorario,
+                                           String nomeCliente) {
+        BookingResult conflito = BookingResult.indisponivel("Esse horario ja esta ocupado.");
+        if (chave != null) {
+            idempotencyStore.concluir(chave, null, conflito.status(),
+                    servico, rotuloDia, rotuloHorario, nomeCliente);
+        }
+        return conflito;
+    }
+
+    /**
+     * Falha tecnica SEMPRE lanca — nunca vira retorno.
+     *
+     * O motivo e' a idempotencia: a reivindicacao do comando ja foi inserida nesta
+     * transacao. Retornar normalmente comitaria uma chave reivindicada e sem desfecho, e
+     * todo retry futuro dela ficaria preso em "em andamento". Lancando, o rollback apaga
+     * a reivindicacao junto com Reservation/Appointment, e o cliente pode repetir de fato.
+     *
+     * Quem chama (Flow e conversa) ja traduz RuntimeException em falha tecnica.
+     */
+    private RuntimeException falhaTecnica(String etapa, RuntimeException causa) {
+        log.error("Falha tecnica ao {}: {}", etapa, causa.getClass().getSimpleName());
+        return new BookingPersistenceException(
+                "Falha de persistencia ao " + etapa + " (" + causa.getClass().getSimpleName() + ")",
+                causa);
+    }
+
+    /**
+     * Compensacao best-effort da reserva orfa.
+     *
+     * Para repositorios JPA o rollback da transacao ja e' a rede de seguranca real; esta
+     * compensacao existe para os repositorios em memoria, onde nao ha rollback. Falhar
+     * aqui nao pode mascarar o erro original, entao a excecao e' registrada e engolida.
+     */
+    private void compensar(Reservation reservation) {
+        try {
+            reservationApplicationService.cancelarReserva(reservation.getId());
+        } catch (RuntimeException e) {
+            log.warn("Compensacao da reserva nao pode ser aplicada: {}", e.getClass().getSimpleName());
+        }
     }
 
     private LocalDate proximaDataPara(String dia) {

@@ -8,6 +8,7 @@ import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.reservation.ReservationStatus;
 import com.troquim_bot.support.TestTenants;
+import com.troquim_bot.support.InMemoryBookingIdempotencyStore;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,8 @@ class BookingConsistencyRegressionTest {
         appointmentApplicationService = new AppointmentApplicationService(appointmentRepository, reservationRepository);
         customerProfileService = new CustomerProfileService(customerRepository, TestTenants.pilot());
         bookingApplicationService = new BookingApplicationService(
-                reservationApplicationService, appointmentApplicationService, customerProfileService);
+                reservationApplicationService, appointmentApplicationService, customerProfileService,
+                new InMemoryBookingIdempotencyStore());
     }
 
     // ==================== FALHA #2: Appointment sem reservation_id e Reservation ATIVO ====================

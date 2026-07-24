@@ -20,6 +20,8 @@ import com.troquim_bot.repository.InMemoryReservationRepository;
 import com.troquim_bot.schedule.AppointmentBookingService;
 import com.troquim_bot.schedule.AppointmentService;
 import com.troquim_bot.schedule.ScheduleService;
+import com.troquim_bot.support.OptionalBeans;
+import com.troquim_bot.support.InMemoryBookingIdempotencyStore;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -148,7 +150,9 @@ class ConversationServiceRegressionTest {
                         new BookingApplicationService(
                                 new ReservationApplicationService(new InMemoryReservationRepository()),
                                 new AppointmentApplicationService(),
-                                new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())),
+                                new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),
+                new InMemoryBookingIdempotencyStore()),
+                        OptionalBeans.ausente(),
                         "NORMAL"
                 )
         );

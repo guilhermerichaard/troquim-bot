@@ -3,6 +3,7 @@ package com.troquim_bot.application.appointment;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.availability.HorarioIndisponivelException;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AppointmentRepository;
@@ -223,7 +224,10 @@ public class AppointmentApplicationService {
         List<Appointment> existentes = appointmentRepository.findByProfessionalIdAndDate(professionalId, date);
         for (Appointment existing : existentes) {
             if (existing.isAtivo() && temp.conflitaCom(existing)) {
-                throw new IllegalArgumentException("Já existe um agendamento neste horário para este profissional");
+                // Tipo específico: conflito é regra de negócio, e o chamador precisa
+                // distingui-lo de uma falha de escrita sem ler mensagem de exceção.
+                throw new HorarioIndisponivelException(
+                        "Já existe um agendamento neste horário para este profissional");
             }
         }
     }

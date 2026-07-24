@@ -1,0 +1,317 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SERVICO": ["AGENDA"],
+    "AGENDA": ["CLIENTE"],
+    "CLIENTE": ["CONFIRMACAO"],
+    "CONFIRMACAO": []
+  },
+  "screens": [
+    {
+      "id": "SERVICO",
+      "title": "Agendamento",
+      "terminal": false,
+      "data": {
+        "error_message": { "type": "string", "__example__": "" },
+        "tem_erro": { "type": "boolean", "__example__": false },
+        "profissional_habilitado": { "type": "boolean", "__example__": false },
+        "servicos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "unha", "title": "Unhas", "description": "1h" },
+            { "id": "cabelo", "title": "Cabelo", "description": "1h" }
+          ]
+        },
+        "profissionais": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{ "id": "qualquer", "title": "Qualquer profissional" }]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              { "type": "TextHeading", "text": "O que você quer cuidar hoje? ✨" },
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.tem_erro}"
+              },
+              {
+                "type": "Dropdown",
+                "name": "servico_id",
+                "label": "Serviço",
+                "required": true,
+                "data-source": "${data.servicos}",
+                "on-select-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "flow_action": "SERVICO_SELECIONADO",
+                    "servico_id": "${form.servico_id}"
+                  }
+                }
+              },
+              {
+                "type": "Dropdown",
+                "name": "profissional_id",
+                "label": "Profissional (opcional)",
+                "required": false,
+                "enabled": "${data.profissional_habilitado}",
+                "data-source": "${data.profissionais}"
+              },
+              {
+                "type": "Footer",
+                "label": "Ver datas",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "flow_action": "BUSCAR_DATAS",
+                    "servico_id": "${form.servico_id}",
+                    "profissional_id": "${form.profissional_id}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "AGENDA",
+      "title": "Data e horário",
+      "terminal": false,
+      "data": {
+        "error_message": { "type": "string", "__example__": "" },
+        "tem_erro": { "type": "boolean", "__example__": false },
+        "servico_id": { "type": "string", "__example__": "unha" },
+        "servico_nome": { "type": "string", "__example__": "Unhas" },
+        "profissional_id": { "type": "string", "__example__": "qualquer" },
+        "profissional_nome": { "type": "string", "__example__": "Qualquer profissional" },
+        "horarios_habilitado": { "type": "boolean", "__example__": false },
+        "datas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "enabled": { "type": "boolean" }
+            }
+          },
+          "__example__": [{ "id": "2026-07-29", "title": "Quarta-feira, 29/07" }]
+        },
+        "horarios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "enabled": { "type": "boolean" }
+            }
+          },
+          "__example__": [
+            { "id": "09:00", "title": "09:00" },
+            { "id": "10:00", "title": "10:00" }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              { "type": "TextHeading", "text": "Escolha data e horário" },
+              { "type": "TextCaption", "text": "${data.servico_nome} · ${data.profissional_nome}" },
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.tem_erro}"
+              },
+              {
+                "type": "Dropdown",
+                "name": "data",
+                "label": "Data",
+                "required": true,
+                "data-source": "${data.datas}",
+                "on-select-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "flow_action": "DATA_SELECIONADA",
+                    "servico_id": "${data.servico_id}",
+                    "profissional_id": "${data.profissional_id}",
+                    "data": "${form.data}"
+                  }
+                }
+              },
+              {
+                "type": "Dropdown",
+                "name": "horario",
+                "label": "Horário",
+                "required": true,
+                "enabled": "${data.horarios_habilitado}",
+                "data-source": "${data.horarios}"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "flow_action": "HORARIO_SELECIONADO",
+                    "servico_id": "${data.servico_id}",
+                    "profissional_id": "${data.profissional_id}",
+                    "data": "${form.data}",
+                    "horario": "${form.horario}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CLIENTE",
+      "title": "Seus dados",
+      "terminal": false,
+      "data": {
+        "error_message": { "type": "string", "__example__": "" },
+        "tem_erro": { "type": "boolean", "__example__": false },
+        "servico_id": { "type": "string", "__example__": "unha" },
+        "profissional_id": { "type": "string", "__example__": "qualquer" },
+        "data": { "type": "string", "__example__": "2026-07-29" },
+        "horario": { "type": "string", "__example__": "09:00" },
+        "nome_prefill": { "type": "string", "__example__": "Ana" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              { "type": "TextHeading", "text": "Quase lá" },
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.tem_erro}"
+              },
+              {
+                "type": "TextInput",
+                "name": "nome",
+                "label": "Seu nome",
+                "input-type": "text",
+                "required": true,
+                "init-value": "${data.nome_prefill}"
+              },
+              {
+                "type": "TextArea",
+                "name": "observacoes",
+                "label": "Alguma observação? (opcional)",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Revisar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "flow_action": "MONTAR_RESUMO",
+                    "servico_id": "${data.servico_id}",
+                    "profissional_id": "${data.profissional_id}",
+                    "data": "${data.data}",
+                    "horario": "${data.horario}",
+                    "nome": "${form.nome}",
+                    "observacoes": "${form.observacoes}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONFIRMACAO",
+      "title": "Confirmação",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "error_message": { "type": "string", "__example__": "" },
+        "tem_erro": { "type": "boolean", "__example__": false },
+        "servico_id": { "type": "string", "__example__": "unha" },
+        "profissional_id": { "type": "string", "__example__": "qualquer" },
+        "data": { "type": "string", "__example__": "2026-07-29" },
+        "horario": { "type": "string", "__example__": "09:00" },
+        "nome": { "type": "string", "__example__": "Ana" },
+        "observacoes": { "type": "string", "__example__": "" },
+        "resumo_servico": { "type": "string", "__example__": "Unhas" },
+        "resumo_profissional": { "type": "string", "__example__": "Qualquer profissional" },
+        "resumo_data": { "type": "string", "__example__": "Quarta-feira, 29/07" },
+        "resumo_horario": { "type": "string", "__example__": "09:00" },
+        "resumo_duracao": { "type": "string", "__example__": "1h" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              { "type": "TextHeading", "text": "Confere pra mim?" },
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.tem_erro}"
+              },
+              { "type": "TextSubheading", "text": "${data.resumo_servico}" },
+              { "type": "TextBody", "text": "${data.resumo_data} às ${data.resumo_horario}" },
+              {
+                "type": "TextCaption",
+                "text": "${data.resumo_profissional} · duração de ${data.resumo_duracao}"
+              },
+              {
+                "type": "Footer",
+                "label": "Confirmar agendamento",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "flow_action": "CONFIRMAR_AGENDAMENTO",
+                    "servico_id": "${data.servico_id}",
+                    "profissional_id": "${data.profissional_id}",
+                    "data": "${data.data}",
+                    "horario": "${data.horario}",
+                    "nome": "${data.nome}",
+                    "observacoes": "${data.observacoes}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

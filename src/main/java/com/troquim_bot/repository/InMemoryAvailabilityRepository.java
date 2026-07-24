@@ -5,6 +5,8 @@ import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 
+import org.springframework.stereotype.Repository;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,7 +15,14 @@ import java.util.stream.Collectors;
 
 /**
  * Implementação em memória do AvailabilityRepository.
+ *
+ * Registrado como bean: {@link com.troquim_bot.application.availability.AvailabilityApplicationService}
+ * passou a receber suas dependências por injeção (antes o Spring escolhia o construtor
+ * vazio e o serviço criava instâncias próprias). Sendo a única implementação existente,
+ * é ela que satisfaz a porta — e agora há UMA instância compartilhada, não uma por
+ * serviço.
  */
+@Repository
 public class InMemoryAvailabilityRepository implements AvailabilityRepository {
 
     private final ConcurrentMap<AvailabilityId, Availability> availabilities = new ConcurrentHashMap<>();
