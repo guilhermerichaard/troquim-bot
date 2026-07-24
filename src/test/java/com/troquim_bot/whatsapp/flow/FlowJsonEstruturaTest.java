@@ -172,6 +172,22 @@ class FlowJsonEstruturaTest {
     }
 
     @Test
+    @DisplayName("nenhum TextInput usa init-value (rejeitado pelo Flow Builder)")
+    void textInputSemInitValue() {
+        // O Flow Builder da Meta rejeita `init-value` em TextInput. O pré-preenchimento
+        // do nome (nome_prefill) continua no schema e é enviado pelo presenter, mas a Meta
+        // simplesmente o ignora — não pode ser ligado via init-value.
+        List<JsonNode> inputs = new ArrayList<>();
+        coletarPorTipo(flow.path("screens"), "TextInput", inputs);
+
+        assertFalse(inputs.isEmpty(), "Deve existir ao menos um TextInput (nome)");
+        for (JsonNode input : inputs) {
+            assertTrue(input.path("init-value").isMissingNode(),
+                    "TextInput '" + input.path("name").asText() + "' não pode ter init-value");
+        }
+    }
+
+    @Test
     @DisplayName("visible está ligado a booleano, não a texto")
     void visibleUsaBooleano() {
         List<String> visiveis = new ArrayList<>();
