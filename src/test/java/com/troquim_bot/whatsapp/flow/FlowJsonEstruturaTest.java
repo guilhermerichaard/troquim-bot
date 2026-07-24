@@ -154,6 +154,22 @@ class FlowJsonEstruturaTest {
     }
 
     @Test
+    @DisplayName("labels de TextArea respeitam o limite de 20 caracteres da Meta")
+    void textAreaLabelDentroDoLimite() {
+        // O Flow Builder rejeita label de TextArea acima de 20 caracteres.
+        List<JsonNode> textAreas = new ArrayList<>();
+        coletarPorTipo(flow.path("screens"), "TextArea", textAreas);
+
+        assertFalse(textAreas.isEmpty(), "Deve existir ao menos um TextArea (observacoes)");
+        for (JsonNode ta : textAreas) {
+            String label = ta.path("label").asText();
+            assertTrue(label.length() <= 20,
+                    "Label de TextArea '" + ta.path("name").asText() + "' excede 20 caracteres ("
+                            + label.length() + "): \"" + label + "\"");
+        }
+    }
+
+    @Test
     @DisplayName("toda ação data_exchange declara o flow_action que o registry conhece")
     void acoesConhecidasPeloCodigo() {
         Set<String> acoesValidas = new HashSet<>();

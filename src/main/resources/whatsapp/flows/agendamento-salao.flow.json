@@ -229,7 +229,7 @@
               {
                 "type": "TextArea",
                 "name": "observacoes",
-                "label": "Alguma observação? (opcional)",
+                "label": "Observação opcional",
                 "required": false
               },
               {
