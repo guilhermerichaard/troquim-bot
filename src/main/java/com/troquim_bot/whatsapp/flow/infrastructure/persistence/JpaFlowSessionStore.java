@@ -102,7 +102,7 @@ public class JpaFlowSessionStore implements FlowSessionStore {
     }
 
     private static FlowSession paraSessao(WhatsAppFlowSessionJpaEntity e, LocalDateTime agora) {
-        return new FlowSession(e.getFlowToken(), e.getTelefone(), e.getBusinessId(),
+        return FlowSession.persistida(e.getFlowToken(), e.getTelefone(), e.getBusinessId(),
                 e.statusEfetivo(agora), e.getCriadoEm(), e.getExpiraEm(),
                 e.temConfirmacao() ? Optional.of(outcomeDe(e)) : Optional.empty());
     }

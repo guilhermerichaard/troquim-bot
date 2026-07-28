@@ -1,5 +1,6 @@
 package com.troquim_bot.whatsapp.flow.application;
 
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.whatsapp.flow.application.handler.FlowActionHandler;
 import com.troquim_bot.whatsapp.flow.application.handler.FlowHandlerRegistry;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSession;
@@ -32,12 +33,17 @@ public class FlowExchangeService {
     private final FlowHandlerRegistry registry;
     private final FlowScreenPresenter presenter;
     private final FlowSessionStore sessionStore;
+    private final FlowPreviewSessions previewSessions;
+    private final TenantProvider tenantProvider;
 
     public FlowExchangeService(FlowHandlerRegistry registry, FlowScreenPresenter presenter,
-                               FlowSessionStore sessionStore) {
+                               FlowSessionStore sessionStore, FlowPreviewSessions previewSessions,
+                               TenantProvider tenantProvider) {
         this.registry = registry;
         this.presenter = presenter;
         this.sessionStore = sessionStore;
+        this.previewSessions = previewSessions;
+        this.tenantProvider = tenantProvider;
     }
 
     public FlowExchangeOutcome processar(FlowRequest request) {
@@ -58,13 +64,24 @@ public class FlowExchangeService {
 
         // A partir daqui, toda requisição precisa de uma sessão válida: é a única
         // amarração confiável entre o payload e o cliente do WhatsApp.
-        Optional<FlowSession> sessao = sessionStore.buscar(request.flowToken());
-        if (sessao.isEmpty() || !sessao.get().utilizavel(LocalDateTime.now())) {
-            // Token desconhecido, vencido ou invalidado: todos falham igual, com 427 e sem
-            // pista sobre qual dos casos ocorreu (não ajudar quem sonda tokens).
-            return FlowExchangeOutcome.tokenInvalido();
+        LocalDateTime agora = LocalDateTime.now();
+        final FlowSession session;
+        if (previewSessions.ehTokenDePreview(request.flowToken())) {
+            // Editor da Meta em rascunho: sessão efêmera, sem cliente e sem poder de
+            // agendar. Deixa o Flow Builder testar a navegação sem cair no 427 — o CONFIRM
+            // é simulado no handler, então não há brecha no agendamento real.
+            session = previewSessions.novaSessao(request.flowToken(), agora);
+        } else {
+            Optional<FlowSession> sessao = sessionStore.buscar(request.flowToken());
+            if (sessao.isEmpty() || !sessao.get().utilizavel(agora)
+                    || !sessao.get().pertenceAoTenant(tenantProvider.currentBusinessId().getValue())) {
+                // Token desconhecido, vencido, invalidado OU emitido para outro negócio:
+                // todos falham igual, com 427 e sem pista sobre qual caso ocorreu (não
+                // ajudar quem sonda tokens nem revelar que o token existe noutro tenant).
+                return FlowExchangeOutcome.tokenInvalido();
+            }
+            session = sessao.get();
         }
-        FlowSession session = sessao.get();
 
         // INIT e BACK abrem/reabrem a tela inicial SERVICO com o profissional ainda
         // desabilitado (habilita após a escolha do serviço, como no exemplo oficial).

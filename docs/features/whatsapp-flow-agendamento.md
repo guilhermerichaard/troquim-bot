@@ -255,6 +255,35 @@ piloto, trocando só a implementação deste provider — nenhum handler conhece
 | 400 | envelope/corpo malformado ou grande demais | — |
 | 500 | falha inesperada | — |
 
+### 7.1 Preview do editor da Meta (Flow Builder)
+
+O Flow Builder testa a navegação dinâmica chamando o Data Endpoint com um `flow_token`
+**fixo**, configurado à mão no painel — não com um token de sessão real (256 bits, gerado
+no envio e amarrado a um cliente). Sem tratamento, esse token cai no **427** e o editor não
+passa da primeira tela ao selecionar um serviço ou avançar.
+
+`FlowPreviewSessions` resolve isso **sem afrouxar o agendamento**:
+
+- Liga **só** quando as três condições valem juntas: `TROQUIM_WHATSAPP_FLOW_DRAFT=true`,
+  `TROQUIM_WHATSAPP_FLOW_PREVIEW_TOKEN` configurado, e o `flow_token` recebido idêntico a
+  esse token (comparação em tempo constante). Faltando qualquer uma — draft off, token
+  vazio ou token diferente — o endpoint responde **427**, inclusive para o próprio token de
+  preview. Produção-segura por default (`DRAFT=false`).
+- Para esse token, monta uma `FlowSession` **efêmera e não persistida**, sem telefone nem
+  businessId (`FlowSession.preview(...)`) — a representação honesta de "não há cliente real".
+- As telas de navegação são **leitura pura** (catálogo fixo + disponibilidade), então o
+  editor exercita o Flow verdadeiro, incluindo a revalidação de cada passo.
+- `ConfirmarAgendamentoHandler` reconhece `session.preview()` e encerra com um **SUCCESS
+  simulado** — sem `BookingApplicationService`, sem command key, sem tocar a sessão. É o
+  **único** ponto onde preview e caminho real divergem, e ele diverge **antes** de qualquer
+  escrita no domínio.
+
+**Análise de risco:** mesmo que o token de preview seja adivinhado, o pior que se consegue
+é navegar pelo catálogo/agenda (dados públicos) e ver uma tela de sucesso simulada — nunca
+um agendamento, PII de cliente, nem acesso cruzado de tenant. Além disso, o preview exige
+`TROQUIM_WHATSAPP_FLOW_DRAFT=true`: em produção com o Flow publicado (`DRAFT=false`), o
+caminho de preview fica **inteiramente inerte** e o token de preview não vale nada.
+
 ## 8. Configuração
 
 ```bash
@@ -268,6 +297,9 @@ TROQUIM_WHATSAPP_FLOW_ID=               # id do Flow publicado; sem ele → fall
 TROQUIM_WHATSAPP_FLOW_NAME=             # alternativa ao id
 TROQUIM_WHATSAPP_FLOW_CTA=Abrir agenda  # máx. 20 caracteres (limite da Meta)
 TROQUIM_WHATSAPP_FLOW_DRAFT=false       # true = modo draft, só teste interno
+
+# Preview do editor (ver §7.1) — EXIGE TROQUIM_WHATSAPP_FLOW_DRAFT=true junto
+TROQUIM_WHATSAPP_FLOW_PREVIEW_TOKEN=    # vazio = desligado; = token colado no painel da Meta
 
 # Sessão e telas
 TROQUIM_WHATSAPP_FLOW_SESSAO_TTL_MIN=30

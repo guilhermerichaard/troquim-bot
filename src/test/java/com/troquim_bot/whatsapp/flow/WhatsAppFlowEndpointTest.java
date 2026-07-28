@@ -56,12 +56,18 @@ class WhatsAppFlowEndpointTest {
     private static final String TELEFONE = "5511999990000";
     private static final String SUCCESS = "SUCCESS";
 
+    /** Token FIXO que simula o configurado no editor da Meta (Flow Builder). */
+    private static final String PREVIEW_TOKEN = "preview-teste-token-endpoint";
+
     private static final FlowTestCrypto CRYPTO = new FlowTestCrypto();
 
     @DynamicPropertySource
     static void chaves(DynamicPropertyRegistry registry) {
         registry.add("troquim.integrations.whatsapp.flow.enabled", () -> "true");
         registry.add("troquim.integrations.whatsapp.flow.private-key", CRYPTO::privateKeyPem);
+        // Preview exige draft=true E preview-token: as duas condições ligadas aqui.
+        registry.add("troquim.integrations.whatsapp.flow.modo-rascunho", () -> "true");
+        registry.add("troquim.integrations.whatsapp.flow.preview-token", () -> PREVIEW_TOKEN);
     }
 
     @Autowired
@@ -367,6 +373,45 @@ class WhatsAppFlowEndpointTest {
         assertEquals(1, appointmentApplicationService.listarAtivos().size());
     }
 
+    // ==================== 18-20. Preview do editor da Meta ====================
+
+    @Test
+    @DisplayName("18. token de preview navega (não cai no 427 do editor)")
+    void previewNavega() throws Exception {
+        JsonNode resposta = trocar(dataExchangeToken(PREVIEW_TOKEN, "SERVICO", """
+                "flow_action":"SERVICO_SELECIONADO","servico_id":"cabelo" """));
+        assertEquals("SERVICO", resposta.path("screen").asText());
+        assertTrue(resposta.path("data").path("profissional_habilitado").asBoolean(),
+                "O preview deve exercitar a habilitação progressiva como o Flow real");
+    }
+
+    @Test
+    @DisplayName("19. CONFIRMAR no preview encerra em SUCCESS mas NÃO cria agendamento")
+    void previewConfirmaSemAgendar() throws Exception {
+        LocalDate dia = proximo(java.time.DayOfWeek.WEDNESDAY);
+        JsonNode resposta = trocar(confirmToken(PREVIEW_TOKEN, dia, "10:00"));
+
+        assertEquals(SUCCESS, resposta.path("screen").asText());
+        assertEquals(PREVIEW_TOKEN, resposta.path("data")
+                .path("extension_message_response").path("params").path("flow_token").asText());
+        assertTrue(appointmentApplicationService.listarAtivos().isEmpty(),
+                "Um token de preview NUNCA pode criar agendamento real");
+    }
+
+    @Test
+    @DisplayName("20. token desconhecido continua 427 mesmo com preview configurado")
+    void tokenDesconhecidoContinua427ComPreview() throws Exception {
+        FlowTestCrypto.Sessao cripto = CRYPTO.novaSessao();
+        String corpo = """
+                {"version":"3.0","action":"data_exchange","screen":"SERVICO",
+                 "flow_token":"outro-token-qualquer","data":{"flow_action":"SERVICO_SELECIONADO","servico_id":"cabelo"}}""";
+
+        mockMvc.perform(post(ROTA).contentType(MediaType.APPLICATION_JSON)
+                        .content(CRYPTO.envelope(corpo, cripto)))
+                .andExpect(result -> assertEquals(427, result.getResponse().getStatus()));
+        assertTrue(appointmentApplicationService.listarAtivos().isEmpty());
+    }
+
     // ==================== helpers ====================
 
     private JsonNode trocar(String corpoClaro) throws Exception {
@@ -390,9 +435,13 @@ class WhatsAppFlowEndpointTest {
     }
 
     private String dataExchange(String tela, String campos) {
+        return dataExchangeToken(sessao.flowToken(), tela, campos);
+    }
+
+    private String dataExchangeToken(String token, String tela, String campos) {
         return """
                 {"version":"3.0","action":"data_exchange","screen":"%s","flow_token":"%s",
-                 "data":{%s}}""".formatted(tela, sessao.flowToken(), campos);
+                 "data":{%s}}""".formatted(tela, token, campos);
     }
 
     private String confirm(LocalDate dia, String horario) {

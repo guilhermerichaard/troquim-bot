@@ -99,19 +99,23 @@ class AbrirAgendaPorFlowServiceTest {
         assertEquals(TELEFONE, sessao.telefone());
         assertEquals(TestTenants.PILOT.getValue(), sessao.businessId());
         assertEquals(FlowSessionStatus.ABERTA, sessao.status());
-        assertTrue(sessao.pertenceA(TELEFONE, TestTenants.PILOT.getValue()));
+        assertTrue(sessao.pertenceAoTenant(TestTenants.PILOT.getValue()));
     }
 
     @Test
-    @DisplayName("8-9. o token não serve para outro cliente nem para outro negócio")
+    @DisplayName("8-9. o token carrega o dono e não serve para outro negócio")
     void tokenNaoServeParaOutroClienteOuTenant() {
         servico(new GatewayEspiao()).abrirPara(TELEFONE);
         FlowSession sessao = store.sessoes.values().iterator().next();
 
-        assertFalse(sessao.pertenceA("5511911112222", TestTenants.PILOT.getValue()),
-                "Outro cliente não pode usar este token");
-        assertFalse(sessao.pertenceA(TELEFONE, TestTenants.OUTRO.getValue()),
+        // O telefone não é verificado contra o payload (vem SEMPRE da sessão); o que
+        // precisa ser inviolável é o vínculo gravado. Ver WhatsAppFlowTenantIsolationTest
+        // para a prova ponta a ponta de que outro tenant não alcança esta sessão.
+        assertEquals(TELEFONE, sessao.telefone(), "A sessão é o único portador do telefone");
+        assertFalse(sessao.pertenceAoTenant(TestTenants.OUTRO.getValue()),
                 "Outro tenant não pode usar este token");
+        assertFalse(sessao.pertenceAoTenant(null),
+                "Sem tenant corrente não há como reivindicar a sessão");
     }
 
     // ==================== 10-12. Envio ====================
@@ -191,7 +195,7 @@ class AbrirAgendaPorFlowServiceTest {
     @Test
     @DisplayName("5. sessão expirada não é utilizável, mesmo sem rotina de limpeza")
     void sessaoExpirada() {
-        FlowSession vencida = new FlowSession("t", TELEFONE, TestTenants.PILOT.getValue(),
+        FlowSession vencida = FlowSession.persistida("t", TELEFONE, TestTenants.PILOT.getValue(),
                 FlowSessionStatus.ABERTA, LocalDateTime.now().minusHours(2),
                 LocalDateTime.now().minusMinutes(1), Optional.empty());
 
@@ -202,7 +206,7 @@ class AbrirAgendaPorFlowServiceTest {
     @Test
     @DisplayName("7. sessão concluída continua legível — é o que reconhece a repetição")
     void sessaoConcluidaAindaLegivel() {
-        FlowSession concluida = new FlowSession("t", TELEFONE, TestTenants.PILOT.getValue(),
+        FlowSession concluida = FlowSession.persistida("t", TELEFONE, TestTenants.PILOT.getValue(),
                 FlowSessionStatus.CONCLUIDA, LocalDateTime.now(),
                 LocalDateTime.now().plusMinutes(10),
                 Optional.of(new FlowConfirmationOutcome("Unhas", "2026-08-05", "10:00")));
@@ -215,7 +219,7 @@ class AbrirAgendaPorFlowServiceTest {
     @Test
     @DisplayName("sessão invalidada nunca volta a ser utilizável")
     void sessaoInvalidadaNaoVolta() {
-        FlowSession invalidada = new FlowSession("t", TELEFONE, TestTenants.PILOT.getValue(),
+        FlowSession invalidada = FlowSession.persistida("t", TELEFONE, TestTenants.PILOT.getValue(),
                 FlowSessionStatus.INVALIDADA, LocalDateTime.now(),
                 LocalDateTime.now().plusMinutes(10), Optional.empty());
 
@@ -273,7 +277,7 @@ class AbrirAgendaPorFlowServiceTest {
         public FlowSession abrir(String telefone, UUID businessId, LocalDateTime expiraEm) {
             // Token longo e distinto por chamada, como o SecureRandom do adaptador real.
             String token = UUID.randomUUID() + "-" + UUID.randomUUID() + "-" + contador.incrementAndGet();
-            FlowSession sessao = new FlowSession(token, telefone, businessId,
+            FlowSession sessao = FlowSession.persistida(token, telefone, businessId,
                     FlowSessionStatus.ABERTA, LocalDateTime.now(), expiraEm, Optional.empty());
             sessoes.put(token, sessao);
             return sessao;
@@ -291,7 +295,7 @@ class AbrirAgendaPorFlowServiceTest {
             if (atual.jaConfirmada()) {
                 return atual.resultado().orElseThrow();
             }
-            sessoes.put(flowToken, new FlowSession(atual.flowToken(), atual.telefone(),
+            sessoes.put(flowToken, FlowSession.persistida(atual.flowToken(), atual.telefone(),
                     atual.businessId(), FlowSessionStatus.CONCLUIDA, atual.criadaEm(),
                     atual.expiraEm(), Optional.of(outcome)));
             return outcome;
@@ -301,7 +305,7 @@ class AbrirAgendaPorFlowServiceTest {
         public void invalidar(String flowToken) {
             FlowSession atual = sessoes.get(flowToken);
             if (atual != null) {
-                sessoes.put(flowToken, new FlowSession(atual.flowToken(), atual.telefone(),
+                sessoes.put(flowToken, FlowSession.persistida(atual.flowToken(), atual.telefone(),
                         atual.businessId(), FlowSessionStatus.INVALIDADA, atual.criadaEm(),
                         atual.expiraEm(), atual.resultado()));
             }

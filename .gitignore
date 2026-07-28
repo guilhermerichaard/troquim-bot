@@ -37,3 +37,17 @@ build/
 .env.local
 .env.*.local
 backend/.env
+
+### Snapshots / dumps / material sensivel ###
+# Snapshots do repositorio empacotam o .env junto: nunca podem ser versionados.
+# Guarde-os FORA do worktree (ex.: ../_snapshots-fora-do-repo/).
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.dump
+*.sql.gz
+*.pem
+*.key
+*.p12
+*.jks

@@ -42,6 +42,15 @@ public class WhatsAppFlowProperties {
     private boolean modoRascunho = false;
 
     /**
+     * Token FIXO que o editor da Meta (Flow Builder) usa para testar a navegação dinâmica
+     * em rascunho. Sem default: vazio DESLIGA o preview (produção-seguro). O preview só
+     * liga em conjunto com {@link #modoRascunho} — ver {@link #temPreview()} e
+     * {@code FlowPreviewSessions}. Quando ligado, o endpoint aceita esse token exato como
+     * uma sessão efêmera SEM cliente e SEM poder de agendar.
+     */
+    private String previewToken;
+
+    /**
      * Validade da sessão, em minutos. Curta o bastante para limitar a janela de um token
      * vazado, longa o bastante para o cliente concluir sem pressa.
      */
@@ -53,6 +62,16 @@ public class WhatsAppFlowProperties {
      */
     public boolean temFlowConfigurado() {
         return (flowId != null && !flowId.isBlank()) || (flowName != null && !flowName.isBlank());
+    }
+
+    /**
+     * O preview do editor está habilitado? Exige, ao mesmo tempo, o modo rascunho ligado
+     * ({@code TROQUIM_WHATSAPP_FLOW_DRAFT=true}) E um {@code preview-token} configurado.
+     * Faltando qualquer um dos dois, o preview fica desligado e o endpoint segue tratando
+     * qualquer token desconhecido como 427 — inclusive o próprio token de preview.
+     */
+    public boolean temPreview() {
+        return modoRascunho && previewToken != null && !previewToken.isBlank();
     }
 
     public boolean isEnabled() {
@@ -125,6 +144,14 @@ public class WhatsAppFlowProperties {
 
     public void setModoRascunho(boolean modoRascunho) {
         this.modoRascunho = modoRascunho;
+    }
+
+    public String getPreviewToken() {
+        return previewToken;
+    }
+
+    public void setPreviewToken(String previewToken) {
+        this.previewToken = previewToken;
     }
 
     public int getSessaoTtlMinutos() {

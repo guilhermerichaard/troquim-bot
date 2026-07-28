@@ -98,6 +98,15 @@ public class ConfirmarAgendamentoHandler implements FlowActionHandler {
             return presenter.cliente(ctx, "", "Informe seu nome para continuar.");
         }
 
+        // Preview do editor da Meta: exercitou toda a revalidação acima, mas encerra com um
+        // SUCCESS SIMULADO — sem command key, sem BookingApplicationService e sem tocar a
+        // sessão. É o ÚNICO ponto onde o preview diverge do caminho real, e diverge ANTES de
+        // qualquer escrita. Um token de preview jamais cria agendamento.
+        if (session.preview()) {
+            return sucesso(session, new FlowConfirmationOutcome(
+                    ctx.servico().titulo(), ctx.data().toString(), ctx.horario().toString()));
+        }
+
         // 2. Chave do comando. Base = flow_token; fingerprint = payload canônico com IDs
         // estáveis. businessId, telefone, serviceId e professionalId vêm da SESSÃO e do
         // catálogo — nunca do corpo enviado pelo cliente.

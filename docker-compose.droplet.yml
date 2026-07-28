@@ -44,6 +44,21 @@ services:
       TROQUIM_WHATSAPP_PHONE_NUMBER_ID: ${TROQUIM_WHATSAPP_PHONE_NUMBER_ID:-}
       TROQUIM_WHATSAPP_WABA_ID: ${TROQUIM_WHATSAPP_WABA_ID:-}
       TROQUIM_WHATSAPP_GRAPH_API_VERSION: ${TROQUIM_WHATSAPP_GRAPH_API_VERSION:-}
+      # WhatsApp Flow (Meta) — Data Endpoint de agendamento. Mesma regra da Cloud API:
+      # desligado por padrão, valores reais só no /opt/troquim/.env (nunca commitado), aqui
+      # só a passagem. A chave privada é PEM PKCS#8 (\n escapado numa linha).
+      TROQUIM_WHATSAPP_FLOW_ENABLED: ${TROQUIM_WHATSAPP_FLOW_ENABLED:-false}
+      WHATSAPP_FLOW_PRIVATE_KEY: ${WHATSAPP_FLOW_PRIVATE_KEY:-}
+      WHATSAPP_FLOW_PRIVATE_KEY_PASSWORD: ${WHATSAPP_FLOW_PRIVATE_KEY_PASSWORD:-}
+      TROQUIM_WHATSAPP_FLOW_ID: ${TROQUIM_WHATSAPP_FLOW_ID:-}
+      TROQUIM_WHATSAPP_FLOW_NAME: ${TROQUIM_WHATSAPP_FLOW_NAME:-}
+      TROQUIM_WHATSAPP_FLOW_CTA: ${TROQUIM_WHATSAPP_FLOW_CTA:-Abrir agenda}
+      TROQUIM_WHATSAPP_FLOW_DRAFT: ${TROQUIM_WHATSAPP_FLOW_DRAFT:-false}
+      TROQUIM_WHATSAPP_FLOW_SESSAO_TTL_MIN: ${TROQUIM_WHATSAPP_FLOW_SESSAO_TTL_MIN:-30}
+      # Token FIXO do editor da Meta para testar navegação em rascunho. Só vale com
+      # TROQUIM_WHATSAPP_FLOW_DRAFT=true; senão (ou vazio) cai em 427. Sessão efêmera, sem
+      # cliente, que NUNCA agenda (CONFIRM simulado).
+      TROQUIM_WHATSAPP_FLOW_PREVIEW_TOKEN: ${TROQUIM_WHATSAPP_FLOW_PREVIEW_TOKEN:-}
     ports:
       - "8080:8080"   # TEMPORÁRIO — remover após validação
     depends_on:

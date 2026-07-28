@@ -46,7 +46,10 @@ public class HorarioSelecionadoHandler implements FlowActionHandler {
             return resolvido.falha();
         }
 
-        String nomeConhecido = customerProfileService.nomePreferido(session.telefone()).orElse("");
+        // Preview do editor não tem cliente real (telefone nulo): nada a pré-preencher.
+        String nomeConhecido = session.preview()
+                ? ""
+                : customerProfileService.nomePreferido(session.telefone()).orElse("");
         return presenter.cliente(resolvido.contexto(), nomeConhecido, null);
     }
 }

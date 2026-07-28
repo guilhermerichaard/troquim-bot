@@ -25,6 +25,8 @@ import java.util.UUID;
  * @param criadaEm   instante da criação
  * @param expiraEm   validade; vencida, o protocolo manda responder HTTP 427
  * @param resultado  desfecho do CONFIRM já executado; vazio enquanto não confirmado
+ * @param preview    sessão efêmera do editor da Meta; ver {@link #preview}. Numa sessão
+ *                   de preview não há cliente real e o CONFIRM é simulado — nunca agenda
  */
 public record FlowSession(String flowToken,
                           String telefone,
@@ -32,7 +34,30 @@ public record FlowSession(String flowToken,
                           FlowSessionStatus status,
                           LocalDateTime criadaEm,
                           LocalDateTime expiraEm,
-                          Optional<FlowConfirmationOutcome> resultado) {
+                          Optional<FlowConfirmationOutcome> resultado,
+                          boolean preview) {
+
+    /** Sessão REAL: persistida e amarrada a um cliente e a um tenant. */
+    public static FlowSession persistida(String flowToken, String telefone, UUID businessId,
+                                         FlowSessionStatus status, LocalDateTime criadaEm,
+                                         LocalDateTime expiraEm,
+                                         Optional<FlowConfirmationOutcome> resultado) {
+        return new FlowSession(flowToken, telefone, businessId, status, criadaEm, expiraEm,
+                resultado, false);
+    }
+
+    /**
+     * Sessão EFÊMERA de preview do editor da Meta. Não é persistida e, de propósito, não
+     * tem telefone nem businessId: é a representação honesta de "não há cliente real por
+     * trás deste token". Nasce ABERTA e válida pelo TTL informado, apenas para o Flow
+     * Builder exercitar a navegação dinâmica. O handler de confirmação a reconhece por
+     * {@link #preview()} e simula o sucesso — um token de preview NUNCA cria agendamento.
+     */
+    public static FlowSession preview(String flowToken, LocalDateTime criadaEm,
+                                      LocalDateTime expiraEm) {
+        return new FlowSession(flowToken, null, null, FlowSessionStatus.ABERTA, criadaEm,
+                expiraEm, Optional.empty(), true);
+    }
 
     public boolean expirada(LocalDateTime agora) {
         return expiraEm != null && agora.isAfter(expiraEm);
@@ -60,9 +85,17 @@ public record FlowSession(String flowToken,
         return status == FlowSessionStatus.ABERTA || status == FlowSessionStatus.CONCLUIDA;
     }
 
-    /** O token pertence a este cliente e a este negócio? */
-    public boolean pertenceA(String telefone, UUID businessId) {
-        return this.telefone != null && this.telefone.equals(telefone)
-                && this.businessId != null && this.businessId.equals(businessId);
+    /**
+     * A sessão foi aberta para este tenant?
+     *
+     * Substitui o antigo {@code pertenceA(telefone, businessId)}: no Data Endpoint o
+     * telefone NÃO é um fato independente — ele vem da própria sessão, então compará-lo
+     * seria uma tautologia. O único fato externo verificável é o tenant corrente, e é
+     * ele que impede uma sessão emitida sob outro negócio de ser reproduzida aqui.
+     *
+     * Preview não tem tenant por construção e é tratado antes desta verificação.
+     */
+    public boolean pertenceAoTenant(UUID businessId) {
+        return businessId != null && businessId.equals(this.businessId);
     }
 }

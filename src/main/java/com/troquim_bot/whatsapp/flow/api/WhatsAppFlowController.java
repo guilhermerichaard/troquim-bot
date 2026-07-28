@@ -146,10 +146,13 @@ public class WhatsAppFlowController {
         }
         try {
             JsonNode raiz = objectMapper.readTree(new String(corpo, StandardCharsets.UTF_8));
+            if (!raiz.isObject()) {
+                throw new FlowPayloadDecryptionException("Envelope do Flow deve ser um objeto JSON");
+            }
             return new EncryptedFlowEnvelope(
-                    texto(raiz, "encrypted_flow_data"),
-                    texto(raiz, "encrypted_aes_key"),
-                    texto(raiz, "initial_vector"));
+                    textoObrigatorio(raiz, "encrypted_flow_data"),
+                    textoObrigatorio(raiz, "encrypted_aes_key"),
+                    textoObrigatorio(raiz, "initial_vector"));
         } catch (Exception e) {
             throw new FlowPayloadDecryptionException(
                     "Envelope do Flow não é JSON válido (" + e.getClass().getSimpleName() + ")", e);
@@ -179,6 +182,20 @@ public class WhatsAppFlowController {
             throw new FlowPayloadDecryptionException(
                     "Corpo do Flow não é JSON válido (" + e.getClass().getSimpleName() + ")", e);
         }
+    }
+
+    /**
+     * Campo textual OBRIGATÓRIO do envelope: ausente, nulo, não-textual ou em branco vira
+     * 400 controlado (falha antes de qualquer operação criptográfica), nunca um envelope
+     * meio-vazio que só quebraria adiante na decifragem.
+     */
+    private static String textoObrigatorio(JsonNode raiz, String campo) {
+        JsonNode no = raiz.get(campo);
+        if (no == null || no.isNull() || !no.isTextual() || no.asText().isBlank()) {
+            throw new FlowPayloadDecryptionException(
+                    "Campo obrigatório ausente ou inválido no envelope: " + campo);
+        }
+        return no.asText();
     }
 
     private static String texto(JsonNode raiz, String campo) {
