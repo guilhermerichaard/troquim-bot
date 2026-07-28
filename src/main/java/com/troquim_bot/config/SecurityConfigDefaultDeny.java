@@ -63,6 +63,10 @@ public class SecurityConfigDefaultDeny {
                         "/clientes/**", "/conversations/**", "/customers/**",
                         "/ordens/**", "/professionals/**", "/reservations/**", "/services/**")
                     .hasRole("ADMIN");
+                // Onboarding "Conectar WhatsApp Business" (Embedded Signup). Vincula uma
+                // conta da Meta ao tenant, entao nunca pode ser iniciado anonimamente.
+                auth.requestMatchers("/api/v1/admin/**")
+                    .hasRole("ADMIN");
                 auth.anyRequest().denyAll();
             })
             .csrf(csrf -> csrf.disable())
