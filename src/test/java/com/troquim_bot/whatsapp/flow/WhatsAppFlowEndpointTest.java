@@ -223,7 +223,7 @@ class WhatsAppFlowEndpointTest {
         assertEquals(SUCCESS, resposta.path("screen").asText());
         assertEquals(sessao.flowToken(), resposta.path("data")
                 .path("extension_message_response").path("params").path("flow_token").asText());
-        assertEquals(1, appointmentApplicationService.listarAtivos().size());
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
     }
 
     @Test
@@ -239,7 +239,7 @@ class WhatsAppFlowEndpointTest {
         JsonNode segunda = trocar(confirm(dia, "11:00"));
         assertNotEquals(SUCCESS, segunda.path("screen").asText());
         assertEquals("AGENDA", segunda.path("screen").asText());
-        assertEquals(1, appointmentApplicationService.listarAtivos().size(),
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size(),
                 "A corrida não pode produzir um segundo agendamento no mesmo slot");
     }
 
@@ -253,7 +253,7 @@ class WhatsAppFlowEndpointTest {
 
         assertEquals(SUCCESS, primeira.path("screen").asText());
         assertEquals(SUCCESS, segunda.path("screen").asText());
-        assertEquals(1, appointmentApplicationService.listarAtivos().size(),
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size(),
                 "A reentrega do mesmo flow_token não pode duplicar o agendamento");
     }
 
@@ -276,7 +276,7 @@ class WhatsAppFlowEndpointTest {
         assertFalse(mensagem.toLowerCase().contains("ocupado"));
         assertFalse(mensagem.toLowerCase().contains("tente novamente"));
 
-        assertEquals(1, appointmentApplicationService.listarAtivos().size());
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
     }
 
     @Test
@@ -291,7 +291,7 @@ class WhatsAppFlowEndpointTest {
                         .content(CRYPTO.envelope(corpo, cripto)))
                 .andExpect(result -> assertEquals(427, result.getResponse().getStatus()));
 
-        assertTrue(appointmentApplicationService.listarAtivos().isEmpty());
+        assertTrue(appointmentApplicationService.listarAtivos(TestTenants.PILOT).isEmpty());
     }
 
     // ==================== 15-16. Protocolo e sigilo ====================
@@ -370,7 +370,7 @@ class WhatsAppFlowEndpointTest {
                 "flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"cabelo","profissional_id":"qualquer",
                 "data":"%s","horario":"%s","nome":"Ana Souza" """.formatted(dia, horario)));
         assertEquals(SUCCESS, sucesso.path("screen").asText());
-        assertEquals(1, appointmentApplicationService.listarAtivos().size());
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
     }
 
     // ==================== 18-20. Preview do editor da Meta ====================
@@ -394,7 +394,7 @@ class WhatsAppFlowEndpointTest {
         assertEquals(SUCCESS, resposta.path("screen").asText());
         assertEquals(PREVIEW_TOKEN, resposta.path("data")
                 .path("extension_message_response").path("params").path("flow_token").asText());
-        assertTrue(appointmentApplicationService.listarAtivos().isEmpty(),
+        assertTrue(appointmentApplicationService.listarAtivos(TestTenants.PILOT).isEmpty(),
                 "Um token de preview NUNCA pode criar agendamento real");
     }
 
@@ -409,7 +409,7 @@ class WhatsAppFlowEndpointTest {
         mockMvc.perform(post(ROTA).contentType(MediaType.APPLICATION_JSON)
                         .content(CRYPTO.envelope(corpo, cripto)))
                 .andExpect(result -> assertEquals(427, result.getResponse().getStatus()));
-        assertTrue(appointmentApplicationService.listarAtivos().isEmpty());
+        assertTrue(appointmentApplicationService.listarAtivos(TestTenants.PILOT).isEmpty());
     }
 
     // ==================== helpers ====================

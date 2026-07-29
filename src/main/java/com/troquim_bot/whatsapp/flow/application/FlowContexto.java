@@ -1,5 +1,6 @@
 package com.troquim_bot.whatsapp.flow.application;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.whatsapp.flow.application.catalog.FlowProfessionalOption;
 import com.troquim_bot.whatsapp.flow.application.catalog.FlowServiceOption;
 
@@ -16,30 +17,31 @@ import java.time.LocalTime;
  *
  * Campos ao fim da cadeia são nulos enquanto o cliente não chegou naquela tela.
  */
-public record FlowContexto(FlowServiceOption servico,
+public record FlowContexto(BusinessId businessId,
+                           FlowServiceOption servico,
                            FlowProfessionalOption profissional,
                            LocalDate data,
                            LocalTime horario,
                            String nome,
                            String observacao) {
 
-    public static FlowContexto de(FlowServiceOption servico) {
-        return new FlowContexto(servico, null, null, null, null, null);
+    public static FlowContexto de(BusinessId businessId, FlowServiceOption servico) {
+        return new FlowContexto(businessId, servico, null, null, null, null, null);
     }
 
     public FlowContexto com(FlowProfessionalOption profissional) {
-        return new FlowContexto(servico, profissional, data, horario, nome, observacao);
+        return new FlowContexto(businessId, servico, profissional, data, horario, nome, observacao);
     }
 
     public FlowContexto com(LocalDate data) {
-        return new FlowContexto(servico, profissional, data, horario, nome, observacao);
+        return new FlowContexto(businessId, servico, profissional, data, horario, nome, observacao);
     }
 
     public FlowContexto com(LocalTime horario) {
-        return new FlowContexto(servico, profissional, data, horario, nome, observacao);
+        return new FlowContexto(businessId, servico, profissional, data, horario, nome, observacao);
     }
 
     public FlowContexto comDadosPessoais(String nome, String observacao) {
-        return new FlowContexto(servico, profissional, data, horario, nome, observacao);
+        return new FlowContexto(businessId, servico, profissional, data, horario, nome, observacao);
     }
 }

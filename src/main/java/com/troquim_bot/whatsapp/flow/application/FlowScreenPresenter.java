@@ -92,7 +92,7 @@ public class FlowScreenPresenter {
         LocalDate limite = hoje.plusDays(Math.max(1, properties.getJanelaDias()));
 
         List<Map<String, Object>> datas = new ArrayList<>();
-        for (LocalDate dia : disponibilidade.datasDisponiveis(hoje, limite,
+        for (LocalDate dia : disponibilidade.datasDisponiveis(ctx.businessId(), hoje, limite,
                 ctx.profissional().professionalId())) {
             datas.add(opcao(dia.toString(), dataPorExtenso(dia), null));
         }
@@ -104,7 +104,7 @@ public class FlowScreenPresenter {
         boolean temData = ctx.data() != null;
         List<Map<String, Object>> horarios = new ArrayList<>();
         if (temData) {
-            for (LocalTime h : disponibilidade.horariosLivres(ctx.data(),
+            for (LocalTime h : disponibilidade.horariosLivres(ctx.businessId(), ctx.data(),
                     ctx.profissional().professionalId())) {
                 horarios.add(opcao(h.toString(), h.toString(), null));
             }

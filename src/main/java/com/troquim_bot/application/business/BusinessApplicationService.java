@@ -10,7 +10,6 @@ import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.common.valueobject.Address;
 import com.troquim_bot.common.valueobject.PhoneNumber;
 import com.troquim_bot.repository.BusinessRepository;
-import com.troquim_bot.repository.InMemoryBusinessRepository;
 
 import java.time.LocalTime;
 import java.util.HashSet;
@@ -32,14 +31,10 @@ public class BusinessApplicationService {
     private final BusinessRepository businessRepository;
 
     /**
-     * Construtor para MVP com repositório em memória.
-     */
-    public BusinessApplicationService() {
-        this(new InMemoryBusinessRepository());
-    }
-
-    /**
-     * Construtor com injeção de dependência (para testes ou futura implementação JPA).
+     * Como é o único construtor, o Spring injeta o BusinessRepository real. Existia aqui
+     * um construtor no-arg com InMemoryBusinessRepository: o Spring o escolhia e o
+     * read-path passava a ler de um repositório desconectado — o mesmo defeito que já
+     * deixou GET /customers sempre vazio.
      */
     public BusinessApplicationService(BusinessRepository businessRepository) {
         this.businessRepository = businessRepository;

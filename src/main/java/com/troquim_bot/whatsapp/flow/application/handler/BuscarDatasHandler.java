@@ -36,7 +36,7 @@ public class BuscarDatasHandler implements FlowActionHandler {
 
     @Override
     public FlowResponse tratar(FlowRequest request, FlowSession session) {
-        FlowContextoResolvido resolvido = resolver.ateProfissional(request);
+        FlowContextoResolvido resolvido = resolver.ateProfissional(request, session);
         return resolvido.valido()
                 ? presenter.agenda(resolvido.contexto(), null)
                 : resolvido.falha();

@@ -1,5 +1,6 @@
 package com.troquim_bot.whatsapp.flow;
 
+import com.troquim_bot.support.TestTenants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
@@ -162,7 +163,7 @@ class ConversaAteConfirmacaoTest {
         // 5. Confirma: o agendamento é persistido de verdade.
         JsonNode sucesso = trocar(confirm(dia, horario));
         assertEquals("SUCCESS", sucesso.path("screen").asText());
-        assertEquals(1, appointmentApplicationService.listarAtivos().size());
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
 
         // 6. A disponibilidade compartilhada já reflete o agendamento: o horário some da
         //    lista que a MESMA fronteira devolve. Se conversa e Flow tivessem fontes

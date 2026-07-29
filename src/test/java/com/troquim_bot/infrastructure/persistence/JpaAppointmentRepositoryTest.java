@@ -1,5 +1,6 @@
 package com.troquim_bot.infrastructure.persistence;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.appointment.AppointmentStatus;
@@ -45,7 +46,7 @@ class JpaAppointmentRepositoryTest {
         LocalTime startTime = LocalTime.of(10, 0);
         LocalTime endTime = LocalTime.of(11, 0);
 
-        Appointment appointment = new Appointment(id, customerId, professionalId,
+        Appointment appointment = new Appointment(id, TestTenants.PILOT, customerId, professionalId,
                 serviceId, availabilityId, date, startTime, endTime);
 
         appointmentRepository.save(appointment);
@@ -74,7 +75,7 @@ class JpaAppointmentRepositoryTest {
         LocalTime startTime = LocalTime.of(14, 0);
         LocalTime endTime = LocalTime.of(15, 0);
 
-        Appointment appointment = new Appointment(id, customerId, professionalId,
+        Appointment appointment = new Appointment(id, TestTenants.PILOT, customerId, professionalId,
                 serviceId, availabilityId, reservationId, date, startTime, endTime);
 
         appointmentRepository.save(appointment);
@@ -91,7 +92,7 @@ class JpaAppointmentRepositoryTest {
         LocalTime startTime = LocalTime.of(14, 0);
         LocalTime endTime = LocalTime.of(15, 0);
 
-        Appointment appointment = new Appointment(id, customerId, professionalId,
+        Appointment appointment = new Appointment(id, TestTenants.PILOT, customerId, professionalId,
                 serviceId, availabilityId, date, startTime, endTime);
 
         appointmentRepository.save(appointment);
@@ -117,7 +118,7 @@ class JpaAppointmentRepositoryTest {
         LocalTime startTime = LocalTime.of(9, 0);
         LocalTime endTime = LocalTime.of(10, 0);
 
-        Appointment appointment = new Appointment(id, customerId, professionalId,
+        Appointment appointment = new Appointment(id, TestTenants.PILOT, customerId, professionalId,
                 serviceId, availabilityId, date, startTime, endTime);
 
         appointmentRepository.save(appointment);
@@ -136,9 +137,9 @@ class JpaAppointmentRepositoryTest {
         LocalTime startTime2 = LocalTime.of(9, 0);
         LocalTime endTime2 = LocalTime.of(10, 0);
 
-        appointmentRepository.save(new Appointment(id1, customerId, professionalId,
+        appointmentRepository.save(new Appointment(id1, TestTenants.PILOT, customerId, professionalId,
                 serviceId, availabilityId, date, startTime1, endTime1));
-        appointmentRepository.save(new Appointment(id2, customerId, professionalId,
+        appointmentRepository.save(new Appointment(id2, TestTenants.PILOT, customerId, professionalId,
                 serviceId, availabilityId, date, startTime2, endTime2));
 
         List<Appointment> all = appointmentRepository.findAll();
@@ -160,13 +161,13 @@ class JpaAppointmentRepositoryTest {
         LocalTime endTime = LocalTime.of(11, 0);
 
         // Appointment do profId na data
-        appointmentRepository.save(new Appointment(id1, customerId, profId,
+        appointmentRepository.save(new Appointment(id1, TestTenants.PILOT, customerId, profId,
                 serviceId, availabilityId, date, startTime, endTime));
         // Outro appointment do profId na data
-        appointmentRepository.save(new Appointment(id2, customerId, profId,
+        appointmentRepository.save(new Appointment(id2, TestTenants.PILOT, customerId, profId,
                 serviceId, availabilityId, date, startTime.plusHours(1), endTime.plusHours(1)));
         // Appointment do profId em outra data (não deve aparecer)
-        appointmentRepository.save(new Appointment(id3, customerId, profId,
+        appointmentRepository.save(new Appointment(id3, TestTenants.PILOT, customerId, profId,
                 serviceId, availabilityId, outraData, startTime, endTime));
 
         List<Appointment> results = appointmentRepository.findByProfessionalIdAndDate(profId, date);
@@ -174,7 +175,7 @@ class JpaAppointmentRepositoryTest {
 
         // Appointment de outro profissional na mesma data (não deve aparecer)
         AppointmentId id4 = AppointmentId.generate();
-        appointmentRepository.save(new Appointment(id4, customerId, outroProfId,
+        appointmentRepository.save(new Appointment(id4, TestTenants.PILOT, customerId, outroProfId,
                 serviceId, availabilityId, date, startTime, endTime));
 
         results = appointmentRepository.findByProfessionalIdAndDate(profId, date);
@@ -193,12 +194,12 @@ class JpaAppointmentRepositoryTest {
         AppointmentId id2 = AppointmentId.generate();
         AppointmentId id3 = AppointmentId.generate();
 
-        appointmentRepository.save(new Appointment(id1, clienteId, professionalId,
+        appointmentRepository.save(new Appointment(id1, TestTenants.PILOT, clienteId, professionalId,
                 serviceId, availabilityId, date, startTime, endTime));
-        appointmentRepository.save(new Appointment(id2, clienteId, professionalId,
+        appointmentRepository.save(new Appointment(id2, TestTenants.PILOT, clienteId, professionalId,
                 serviceId, availabilityId, date, startTime.plusHours(1), endTime.plusHours(1)));
         // Appointment de outro cliente
-        appointmentRepository.save(new Appointment(id3, outroClienteId, professionalId,
+        appointmentRepository.save(new Appointment(id3, TestTenants.PILOT, outroClienteId, professionalId,
                 serviceId, availabilityId, date, startTime, endTime));
 
         List<Appointment> results = appointmentRepository.findByCustomerId(clienteId);
@@ -212,7 +213,7 @@ class JpaAppointmentRepositoryTest {
         LocalTime startTime = LocalTime.of(16, 0);
         LocalTime endTime = LocalTime.of(17, 0);
 
-        Appointment appointment = new Appointment(id, customerId, professionalId,
+        Appointment appointment = new Appointment(id, TestTenants.PILOT, customerId, professionalId,
                 serviceId, availabilityId, date, startTime, endTime);
 
         appointmentRepository.save(appointment);
@@ -230,7 +231,7 @@ class JpaAppointmentRepositoryTest {
         LocalTime startTime = LocalTime.of(10, 0);
         LocalTime endTime = LocalTime.of(11, 30);
 
-        Appointment appointment = new Appointment(id, customerId, professionalId,
+        Appointment appointment = new Appointment(id, TestTenants.PILOT, customerId, professionalId,
                 serviceId, availabilityId, date, startTime, endTime);
 
         appointmentRepository.save(appointment);

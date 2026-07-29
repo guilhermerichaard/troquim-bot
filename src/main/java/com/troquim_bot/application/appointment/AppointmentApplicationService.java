@@ -3,6 +3,7 @@ package com.troquim_bot.application.appointment;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.availability.HorarioIndisponivelException;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
@@ -59,9 +60,13 @@ public class AppointmentApplicationService {
     /**
      * Cria um novo agendamento.
      */
-    public Appointment criarAgendamento(CustomerId customerId, ProfessionalId professionalId,
+    public Appointment criarAgendamento(BusinessId businessId, CustomerId customerId,
+                                         ProfessionalId professionalId,
                                          ServiceId serviceId, AvailabilityId availabilityId,
                                          LocalDate date, LocalTime startTime, LocalTime endTime) {
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         validateCriacao(customerId, professionalId, serviceId, availabilityId, date, startTime, endTime);
 
         // Verifica se a data não está no passado
@@ -70,10 +75,10 @@ public class AppointmentApplicationService {
         }
 
         AppointmentId id = AppointmentId.generate();
-        Appointment newAppointment = new Appointment(id, customerId, professionalId, serviceId,
-            availabilityId, date, startTime, endTime);
+        Appointment newAppointment = new Appointment(id, businessId, customerId, professionalId,
+            serviceId, availabilityId, date, startTime, endTime);
 
-        checkConflito(professionalId, date, startTime, endTime);
+        checkConflito(businessId, professionalId, date, startTime, endTime);
 
         return appointmentRepository.save(newAppointment);
     }
@@ -97,6 +102,7 @@ public class AppointmentApplicationService {
         AppointmentId id = AppointmentId.generate();
         Appointment appointment = new Appointment(
             id,
+            reservation.getBusinessId(),
             reservation.getCustomerId(),
             reservation.getProfessionalId(),
             reservation.getServiceId(),
@@ -134,6 +140,32 @@ public class AppointmentApplicationService {
     /**
      * Lista apenas agendamentos ativos (não cancelados).
      */
+    public List<Appointment> listarAtivos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return appointmentRepository.findByBusinessId(businessId).stream()
+                .filter(Appointment::isAtivo)
+                .toList();
+    }
+
+    /**
+     * Agenda do negócio a partir de uma data, ordenada. É a leitura que /app usa —
+     * mesma fronteira de domínio que o Flow, sem calendário paralelo.
+     */
+    public List<Appointment> listarAtivosPorTenantDesde(BusinessId businessId, LocalDate desde) {
+        if (businessId == null || desde == null) {
+            return List.of();
+        }
+        return listarAtivos(businessId).stream()
+                .filter(a -> !a.getDate().isBefore(desde))
+                .sorted(Comparator.comparing(Appointment::getDate)
+                        .thenComparing(Appointment::getStartTime))
+                .toList();
+    }
+
+    /** @deprecated leitura global, sem tenant. Use {@link #listarAtivos(BusinessId)}. */
+    @Deprecated
     public List<Appointment> listarAtivos() {
         return appointmentRepository.findAll().stream()
             .filter(Appointment::isAtivo)
@@ -214,14 +246,16 @@ public class AppointmentApplicationService {
         if (!startTime.isBefore(endTime)) throw new IllegalArgumentException("Horário de início deve ser menor que horário de fim");
     }
 
-    private void checkConflito(ProfessionalId professionalId, LocalDate date,
+    private void checkConflito(BusinessId businessId, ProfessionalId professionalId, LocalDate date,
                                 LocalTime startTime, LocalTime endTime) {
-        Appointment temp = new Appointment(AppointmentId.generate(), CustomerId.from(java.util.UUID.randomUUID()),
+        Appointment temp = new Appointment(AppointmentId.generate(), businessId,
+            CustomerId.from(java.util.UUID.randomUUID()),
             professionalId, ServiceId.from(java.util.UUID.randomUUID()),
             AvailabilityId.from(java.util.UUID.randomUUID()),
             date, startTime, endTime);
 
-        List<Appointment> existentes = appointmentRepository.findByProfessionalIdAndDate(professionalId, date);
+        List<Appointment> existentes = appointmentRepository
+                .findByBusinessIdAndProfessionalIdAndDate(businessId, professionalId, date);
         for (Appointment existing : existentes) {
             if (existing.isAtivo() && temp.conflitaCom(existing)) {
                 // Tipo específico: conflito é regra de negócio, e o chamador precisa

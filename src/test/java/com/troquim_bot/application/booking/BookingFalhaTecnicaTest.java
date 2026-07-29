@@ -269,7 +269,7 @@ class BookingFalhaTecnicaTest {
 
         Cenario(AppointmentRepository appointments) {
             this.appointments = appointments;
-            this.booking = new BookingApplicationService(
+            this.booking = new BookingApplicationService(TestTenants.pilot(),
                     new ReservationApplicationService(reservations),
                     new AppointmentApplicationService(appointments, reservations),
                     new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),
@@ -324,6 +324,18 @@ class BookingFalhaTecnicaTest {
         @Override
         public Appointment save(Appointment appointment) {
             throw new IllegalStateException("Falha simulada de persistência");
+        }
+
+        @Override
+        public List<Appointment> findByBusinessIdAndProfessionalIdAndDate(
+                com.troquim_bot.business.BusinessId businessId,
+                ProfessionalId professionalId, java.time.LocalDate date) {
+            return List.of();
+        }
+
+        @Override
+        public List<Appointment> findByBusinessId(com.troquim_bot.business.BusinessId businessId) {
+            return List.of();
         }
 
         @Override

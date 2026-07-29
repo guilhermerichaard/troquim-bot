@@ -22,6 +22,9 @@ public class ReservationJpaEntity {
     @Column(columnDefinition = "UUID")
     private UUID id;
 
+    @Column(name = "business_id", nullable = false, columnDefinition = "UUID")
+    private UUID businessId;
+
     @Column(name = "customer_id", nullable = false, columnDefinition = "UUID")
     private UUID customerId;
 
@@ -60,12 +63,13 @@ public class ReservationJpaEntity {
      */
     protected ReservationJpaEntity() {}
 
-    public ReservationJpaEntity(UUID id, UUID customerId, UUID professionalId,
+    public ReservationJpaEntity(UUID id, UUID businessId, UUID customerId, UUID professionalId,
                                 UUID serviceId, UUID availabilityId,
                                 LocalDate date, LocalTime startTime, LocalTime endTime,
                                 LocalDateTime expiresAt, String status,
                                 LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         this.id = id;
+        this.businessId = businessId;
         this.customerId = customerId;
         this.professionalId = professionalId;
         this.serviceId = serviceId;
@@ -82,6 +86,7 @@ public class ReservationJpaEntity {
     // ==================== GETTERS ====================
 
     public UUID getId() { return id; }
+    public UUID getBusinessId() { return businessId; }
     public UUID getCustomerId() { return customerId; }
     public UUID getProfessionalId() { return professionalId; }
     public UUID getServiceId() { return serviceId; }

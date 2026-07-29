@@ -1,5 +1,6 @@
 package com.troquim_bot.application.appointment;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.appointment.AppointmentStatus;
@@ -51,7 +52,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveCriarAgendamentoComSucesso() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 
@@ -75,7 +76,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoCustomerIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 null, profId1, serviceId1, availabilityId1,
                 futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0)));
     }
@@ -83,7 +84,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoProfessionalIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, null, serviceId1, availabilityId1,
                 futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0)));
     }
@@ -91,7 +92,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoServiceIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, profId1, null, availabilityId1,
                 futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0)));
     }
@@ -99,7 +100,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoAvailabilityIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, null,
                 futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0)));
     }
@@ -107,7 +108,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoDataNula() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 null, LocalTime.of(8, 0), LocalTime.of(9, 0)));
     }
@@ -115,7 +116,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoStartTimeNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 futureDate, null, LocalTime.of(9, 0)));
     }
@@ -123,7 +124,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoEndTimeNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 futureDate, LocalTime.of(8, 0), null));
     }
@@ -131,7 +132,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoStartTimeMaiorQueEndTime() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 futureDate, LocalTime.of(10, 0), LocalTime.of(9, 0)));
     }
@@ -139,7 +140,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoStartTimeIgualEndTime() {
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 futureDate, LocalTime.of(8, 0), LocalTime.of(8, 0)));
     }
@@ -148,30 +149,30 @@ class AppointmentApplicationServiceTest {
     void deveLancarExcecaoQuandoDataNoPassado() {
         LocalDate pastDate = LocalDate.now().minusDays(1);
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 pastDate, LocalTime.of(8, 0), LocalTime.of(9, 0)));
     }
 
     @Test
     void deveLancarExcecaoQuandoHorarioConflitante() {
-        appointmentApplicationService.criarAgendamento(
+        appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(10, 0));
 
         assertThrows(IllegalArgumentException.class, () ->
-            appointmentApplicationService.criarAgendamento(
+            appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
                 customerId2, profId1, serviceId1, availabilityId1,
                 futureDate, LocalTime.of(9, 0), LocalTime.of(11, 0)));
     }
 
     @Test
     void devePermitirHorarioNaoConflitante() {
-        appointmentApplicationService.criarAgendamento(
+        appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(10, 0));
 
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(10, 0), LocalTime.of(12, 0));
 
@@ -181,11 +182,11 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void devePermitirHorarioConflitanteParaProfissionaisDiferentes() {
-        appointmentApplicationService.criarAgendamento(
+        appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(10, 0));
 
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId2, serviceId1, availabilityId1,
             futureDate, LocalTime.of(9, 0), LocalTime.of(11, 0));
 
@@ -197,8 +198,7 @@ class AppointmentApplicationServiceTest {
     @Test
     void deveCriarAgendamentoDeReservaComSucesso() {
         // Cria uma reserva
-        Reservation reservation = new Reservation(
-            ReservationId.generate(), customerId1, profId1, serviceId1, availabilityId1,
+        Reservation reservation = new Reservation(ReservationId.generate(), TestTenants.PILOT, customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0),
             LocalDateTime.of(futureDate, LocalTime.of(23, 59)));
         reservationRepository.save(reservation);
@@ -234,8 +234,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveLancarExcecaoQuandoReservaNaoEstaAtiva() {
-        Reservation reservation = new Reservation(
-            ReservationId.generate(), customerId1, profId1, serviceId1, availabilityId1,
+        Reservation reservation = new Reservation(ReservationId.generate(), TestTenants.PILOT, customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0),
             LocalDateTime.of(futureDate, LocalTime.of(23, 59)));
         reservation.cancelar();
@@ -249,7 +248,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveBuscarPorId() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
         AppointmentId id = appointment.getId();
@@ -274,10 +273,10 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveListarTodos() {
-        appointmentApplicationService.criarAgendamento(
+        appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
-        appointmentApplicationService.criarAgendamento(
+        appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(10, 0), LocalTime.of(11, 0));
 
@@ -293,7 +292,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveConfirmarAgendamento() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 
@@ -314,7 +313,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveLancarExcecaoQuandoConfirmarJaConfirmado() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
         appointmentApplicationService.confirmarAgendamento(appointment.getId());
@@ -327,7 +326,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveCancelarAgendamentoPendente() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 
@@ -339,7 +338,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveCancelarAgendamentoConfirmado() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
         appointmentApplicationService.confirmarAgendamento(appointment.getId());
@@ -357,7 +356,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveLancarExcecaoQuandoCancelarJaConcluido() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
         appointmentApplicationService.confirmarAgendamento(appointment.getId());
@@ -371,7 +370,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveConcluirAgendamento() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
         appointmentApplicationService.confirmarAgendamento(appointment.getId());
@@ -389,7 +388,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveLancarExcecaoQuandoConcluirPendente() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 
@@ -401,7 +400,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveRetornarTrueQuandoExiste() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 
@@ -422,16 +421,16 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deveListarApenasAtivos() {
-        Appointment ativo = appointmentApplicationService.criarAgendamento(
+        Appointment ativo = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
-        Appointment cancelado = appointmentApplicationService.criarAgendamento(
+        Appointment cancelado = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(10, 0), LocalTime.of(11, 0));
 
         appointmentApplicationService.cancelarAgendamento(cancelado.getId());
 
-        List<Appointment> ativos = appointmentApplicationService.listarAtivos();
+        List<Appointment> ativos = appointmentApplicationService.listarAtivos(TestTenants.PILOT);
         assertEquals(1, ativos.size());
         assertTrue(ativos.stream().allMatch(Appointment::isAtivo));
     }
@@ -440,7 +439,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void deleteDeveCancelarAgendamento() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 
@@ -453,7 +452,7 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void fluxoCompletoPendenteConfirmadoConcluido() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
         assertEquals(AppointmentStatus.PENDENTE, appointment.getStatus());
@@ -469,12 +468,12 @@ class AppointmentApplicationServiceTest {
 
     @Test
     void agendamentoCanceladoNaoImpedeCriacaoDeNovo() {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(10, 0));
         appointmentApplicationService.cancelarAgendamento(appointment.getId());
 
-        Appointment novo = appointmentApplicationService.criarAgendamento(
+        Appointment novo = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId2, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(9, 0), LocalTime.of(11, 0));
 

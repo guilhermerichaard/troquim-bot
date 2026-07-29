@@ -1,5 +1,6 @@
 package com.troquim_bot.controller;
 
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.controller.dto.CreateReservationRequest;
 import com.troquim_bot.controller.dto.ReservationResponse;
 import com.troquim_bot.controller.dto.UpdateReservationRequest;
@@ -37,7 +38,10 @@ public class ReservationController {
 
     private final ReservationApplicationService reservationApplicationService;
 
-    public ReservationController(ReservationApplicationService reservationApplicationService) {
+    private final TenantProvider tenantProvider;
+
+    public ReservationController(TenantProvider tenantProvider, ReservationApplicationService reservationApplicationService) {
+        this.tenantProvider = tenantProvider;
         this.reservationApplicationService = reservationApplicationService;
     }
 
@@ -101,7 +105,7 @@ public class ReservationController {
             LocalDateTime expiresAt = LocalDateTime.parse(request.getExpiresAt());
 
             Reservation reservation = reservationApplicationService.criarReserva(
-                customerId, professionalId, serviceId, availabilityId,
+                tenantProvider.currentBusinessId(), customerId, professionalId, serviceId, availabilityId,
                 date, startTime, endTime, expiresAt
             );
 

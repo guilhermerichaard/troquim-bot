@@ -1,5 +1,6 @@
 package com.troquim_bot.whatsapp.flow;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.whatsapp.flow.infrastructure.persistence.SpringDataWhatsAppFlowSessionRepository;
 import com.troquim_bot.whatsapp.flow.support.FlowTestCrypto;
@@ -67,7 +68,7 @@ class WhatsAppFlowPreviewDraftOffEndpointTest {
                         .content(CRYPTO.envelope(corpo, cripto)))
                 .andExpect(result -> assertEquals(427, result.getResponse().getStatus()));
 
-        assertTrue(appointmentApplicationService.listarAtivos().isEmpty());
+        assertTrue(appointmentApplicationService.listarAtivos(TestTenants.PILOT).isEmpty());
         // Um 427 não pode ser porta de entrada para criar sessão: nada é gravado.
         assertEquals(sessoesAntes, sessionRepository.count(),
                 "Preview desligado não pode persistir linha em whatsapp_flow_sessions");

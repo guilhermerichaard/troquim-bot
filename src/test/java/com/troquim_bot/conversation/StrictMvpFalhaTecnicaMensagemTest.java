@@ -48,7 +48,7 @@ class StrictMvpFalhaTecnicaMensagemTest {
         ReservationRepository reservations = new InMemoryReservationRepository();
         appointments = new FalhaControlada();
 
-        BookingApplicationService booking = new BookingApplicationService(
+        BookingApplicationService booking = new BookingApplicationService(TestTenants.pilot(),
                 new ReservationApplicationService(reservations),
                 new AppointmentApplicationService(appointments, reservations),
                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),
@@ -57,7 +57,7 @@ class StrictMvpFalhaTecnicaMensagemTest {
         conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
         menu = new StrictMvpMenuService(
                 conversationStateService,
-                new AvailabilityApplicationService(),
+                new AvailabilityApplicationService(TestTenants.pilot()),
                 booking,
                 OptionalBeans.ausente(),
                 "STRICT_MVP");

@@ -4,6 +4,7 @@ import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.ReservationRepository;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.reservation.Reservation;
 import com.troquim_bot.reservation.ReservationId;
 import com.troquim_bot.reservation.ReservationStatus;
@@ -90,9 +91,34 @@ public class JpaReservationRepository implements ReservationRepository {
 
     // ==================== MAPEAMENTO ====================
 
+    @Override
+    public List<Reservation> findByBusinessIdAndProfessionalIdAndDate(
+            BusinessId businessId, ProfessionalId professionalId, LocalDate date) {
+        if (businessId == null || professionalId == null || date == null) {
+            return List.of();
+        }
+        return springDataRepository
+                .findByBusinessIdAndProfessionalIdAndDate(
+                        businessId.getValue(), professionalId.getValue(), date)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Reservation> findByBusinessId(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return springDataRepository.findByBusinessId(businessId.getValue()).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     private ReservationJpaEntity toEntity(Reservation reservation) {
         return new ReservationJpaEntity(
                 reservation.getId().getValue(),
+                reservation.getBusinessId().getValue(),
                 reservation.getCustomerId().getValue(),
                 reservation.getProfessionalId().getValue(),
                 reservation.getServiceId().getValue(),
@@ -117,6 +143,7 @@ public class JpaReservationRepository implements ReservationRepository {
 
         return new Reservation(
                 id,
+                BusinessId.from(entity.getBusinessId()),
                 customerId,
                 professionalId,
                 serviceId,

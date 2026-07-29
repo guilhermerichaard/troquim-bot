@@ -1,6 +1,7 @@
 package com.troquim_bot.whatsapp.flow.application.availability;
 
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.whatsapp.flow.infrastructure.crypto.ConditionalOnWhatsAppFlow;
 import org.springframework.stereotype.Component;
@@ -31,15 +32,18 @@ public class FlowAvailabilityQuery {
         this.availabilityApplicationService = availabilityApplicationService;
     }
 
-    public List<LocalTime> horariosLivres(LocalDate data, ProfessionalId profissional) {
-        return availabilityApplicationService.horariosLivres(data, profissional);
+    public List<LocalTime> horariosLivres(BusinessId businessId, LocalDate data,
+                                          ProfessionalId profissional) {
+        return availabilityApplicationService.horariosLivres(businessId, data, profissional);
     }
 
-    public List<LocalDate> datasDisponiveis(LocalDate de, LocalDate ate, ProfessionalId profissional) {
-        return availabilityApplicationService.datasComVaga(de, ate, profissional);
+    public List<LocalDate> datasDisponiveis(BusinessId businessId, LocalDate de, LocalDate ate,
+                                            ProfessionalId profissional) {
+        return availabilityApplicationService.datasComVaga(businessId, de, ate, profissional);
     }
 
-    public boolean estaLivre(LocalDate data, LocalTime horario, ProfessionalId profissional) {
-        return availabilityApplicationService.estaLivre(data, horario, profissional);
+    public boolean estaLivre(BusinessId businessId, LocalDate data, LocalTime horario,
+                             ProfessionalId profissional) {
+        return availabilityApplicationService.estaLivre(businessId, data, horario, profissional);
     }
 }

@@ -87,7 +87,7 @@ public class ConfirmarAgendamentoHandler implements FlowActionHandler {
     @Override
     public FlowResponse tratar(FlowRequest request, FlowSession session) {
         // 1. Revalidação da cadeia, sem checagem antecipada de disponibilidade.
-        FlowContextoResolvido resolvido = resolver.ateHorarioSemChecarDisponibilidade(request);
+        FlowContextoResolvido resolvido = resolver.ateHorarioSemChecarDisponibilidade(request, session);
         if (!resolvido.valido()) {
             return resolvido.falha();
         }

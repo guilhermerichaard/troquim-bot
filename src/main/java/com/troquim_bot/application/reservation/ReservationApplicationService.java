@@ -1,6 +1,7 @@
 package com.troquim_bot.application.reservation;
 
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.availability.HorarioIndisponivelException;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
@@ -51,10 +52,14 @@ public class ReservationApplicationService {
      * @return Reservation criada com status ATIVO
      * @throws IllegalArgumentException se houver conflito de horário
      */
-    public Reservation criarReserva(CustomerId customerId, ProfessionalId professionalId,
+    public Reservation criarReserva(BusinessId businessId, CustomerId customerId,
+                                     ProfessionalId professionalId,
                                      ServiceId serviceId, AvailabilityId availabilityId,
                                      LocalDate date, LocalTime startTime, LocalTime endTime,
                                      LocalDateTime expiresAt) {
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         if (customerId == null) {
             throw new IllegalArgumentException("CustomerId é obrigatório");
         }
@@ -85,11 +90,14 @@ public class ReservationApplicationService {
 
         ReservationId id = ReservationId.generate();
 
-        Reservation newReservation = new Reservation(id, customerId, professionalId, serviceId,
-            availabilityId, date, startTime, endTime, expiresAt);
+        Reservation newReservation = new Reservation(id, businessId, customerId, professionalId,
+            serviceId, availabilityId, date, startTime, endTime, expiresAt);
 
-        // Verifica conflito com reservas ativas existentes do mesmo profissional na mesma data
-        List<Reservation> existentes = reservationRepository.findByProfessionalIdAndDate(professionalId, date);
+        // Conflito é avaliado DENTRO do negócio: o professional_id do catálogo do Flow é
+        // sintético e compartilhado, então sem o escopo de tenant a reserva de um negócio
+        // bloquearia o horário de outro.
+        List<Reservation> existentes = reservationRepository
+                .findByBusinessIdAndProfessionalIdAndDate(businessId, professionalId, date);
         for (Reservation existing : existentes) {
             if (existing.isAtivo() && newReservation.conflitaCom(existing)) {
                 // Tipo específico: conflito é regra de negócio, e o chamador precisa
@@ -129,6 +137,17 @@ public class ReservationApplicationService {
      * 
      * @return Lista de reservations ativas
      */
+    public List<Reservation> listarAtivos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return reservationRepository.findByBusinessId(businessId).stream()
+                .filter(Reservation::isAtivo)
+                .toList();
+    }
+
+    /** @deprecated leitura global, sem tenant. Use {@link #listarAtivos(BusinessId)}. */
+    @Deprecated
     public List<Reservation> listarAtivos() {
         return reservationRepository.findAll().stream()
             .filter(Reservation::isAtivo)

@@ -56,7 +56,7 @@ class BookingQueryResponderTest {
                         new InMemoryAppointmentRepository(),
                         new InMemoryReservationRepository()
                 ),
-                new AvailabilityApplicationService(
+                new AvailabilityApplicationService(TestTenants.pilot(),
                         new InMemoryAvailabilityRepository(),
                         scheduleService
                 ),

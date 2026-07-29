@@ -36,7 +36,7 @@ public class ServicoSelecionadoHandler implements FlowActionHandler {
 
     @Override
     public FlowResponse tratar(FlowRequest request, FlowSession session) {
-        FlowContextoResolvido resolvido = resolver.ateServico(request);
+        FlowContextoResolvido resolvido = resolver.ateServico(request, session);
         return resolvido.valido()
                 ? presenter.servico(true, null)
                 : resolvido.falha();

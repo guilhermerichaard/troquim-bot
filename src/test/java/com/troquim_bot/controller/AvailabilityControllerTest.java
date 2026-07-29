@@ -1,5 +1,6 @@
 package com.troquim_bot.controller;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.controller.dto.CreateAvailabilityRequest;
 import com.troquim_bot.controller.dto.UpdateAvailabilityRequest;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
@@ -37,7 +38,7 @@ class AvailabilityControllerTest {
     @BeforeEach
     void setUp() {
         availabilityRepository = new InMemoryAvailabilityRepository();
-        availabilityApplicationService = new AvailabilityApplicationService(availabilityRepository);
+        availabilityApplicationService = new AvailabilityApplicationService(TestTenants.pilot(), availabilityRepository);
         AvailabilityController availabilityController = new AvailabilityController(availabilityApplicationService);
         mockMvc = MockMvcBuilders.standaloneSetup(availabilityController).build();
     }

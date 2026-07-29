@@ -1,5 +1,6 @@
 package com.troquim_bot.application.availability;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.availability.AvailabilityStatus;
@@ -28,7 +29,7 @@ class AvailabilityApplicationServiceTest {
     @BeforeEach
     void setUp() {
         availabilityRepository = new InMemoryAvailabilityRepository();
-        availabilityApplicationService = new AvailabilityApplicationService(availabilityRepository);
+        availabilityApplicationService = new AvailabilityApplicationService(TestTenants.pilot(), availabilityRepository);
     }
 
     // ==================== criarDisponibilidade ====================

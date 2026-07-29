@@ -1,9 +1,11 @@
 package com.troquim_bot.application.booking;
 
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.availability.HorarioIndisponivelException;
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
@@ -55,12 +57,15 @@ public class BookingApplicationService {
     private final AppointmentApplicationService appointmentApplicationService;
     private final CustomerProfileService customerProfileService;
     private final BookingIdempotencyStore idempotencyStore;
+    private final TenantProvider tenantProvider;
 
     @Autowired
-    public BookingApplicationService(ReservationApplicationService reservationApplicationService,
+    public BookingApplicationService(TenantProvider tenantProvider,
+                                     ReservationApplicationService reservationApplicationService,
                                      AppointmentApplicationService appointmentApplicationService,
                                      CustomerProfileService customerProfileService,
                                      BookingIdempotencyStore idempotencyStore) {
+        this.tenantProvider = tenantProvider;
         this.reservationApplicationService = reservationApplicationService;
         this.appointmentApplicationService = appointmentApplicationService;
         this.customerProfileService = customerProfileService;
@@ -116,7 +121,8 @@ public class BookingApplicationService {
 
         // Verifica conflito com Appointments já confirmados (a Reservation cancelada
         // após criar o Appointment não protege mais o slot — o Appointment protege).
-        for (Appointment existente : appointmentApplicationService.listarAtivos()) {
+        BusinessId tenantLegado = tenantProvider.currentBusinessId();
+        for (Appointment existente : appointmentApplicationService.listarAtivos(tenantLegado)) {
             if (PROFISSIONAL_PADRAO.equals(existente.getProfessionalId())
                     && data.equals(existente.getDate())
                     && inicio.isBefore(existente.getEndTime())
@@ -128,7 +134,7 @@ public class BookingApplicationService {
         // Sem BookingCommandKey: a idempotencia deste caminho vive uma camada acima, no
         // InboundReceiptProcessor (UNIQUE por provider + external_message_id). Ver secao
         // "Conversation" em docs/features/whatsapp-flow-agendamento.md.
-        return reservarEAgendar(customer, PROFISSIONAL_PADRAO, serviceId, availabilityId,
+        return reservarEAgendar(tenantLegado, customer, PROFISSIONAL_PADRAO, serviceId, availabilityId,
                 data, inicio, fim, expiraEm, servico, dia, horario, nomeCliente, null);
     }
 
@@ -197,7 +203,8 @@ public class BookingApplicationService {
         // INVARIANTE DE DOMINIO (nao e' idempotencia): um profissional nao pode ter dois
         // agendamentos sobrepostos. Continua valendo para comandos DIFERENTES que disputem
         // o mesmo slot; o retry do MESMO comando ja foi resolvido pela chave acima.
-        for (Appointment existente : appointmentApplicationService.listarAtivos()) {
+        BusinessId tenant = BusinessId.from(chave.businessId());
+        for (Appointment existente : appointmentApplicationService.listarAtivos(tenant)) {
             if (profissional.equals(existente.getProfessionalId())
                     && data.equals(existente.getDate())
                     && inicio.isBefore(existente.getEndTime())
@@ -211,7 +218,7 @@ public class BookingApplicationService {
             }
         }
 
-        return reservarEAgendar(customer, profissional, serviceId, availabilityId,
+        return reservarEAgendar(tenant, customer, profissional, serviceId, availabilityId,
                 data, inicio, fim, expiraEm, servico, data.toString(), inicio.toString(),
                 nomeCliente, chave);
     }
@@ -220,7 +227,8 @@ public class BookingApplicationService {
      * Orquestracao compartilhada Reservation -> Appointment -> Customer, com compensacao.
      * Unico lugar do sistema que materializa um agendamento confirmado.
      */
-    private BookingResult reservarEAgendar(Customer customer, ProfessionalId profissional,
+    private BookingResult reservarEAgendar(BusinessId businessId, Customer customer,
+                                           ProfessionalId profissional,
                                            ServiceId serviceId, AvailabilityId availabilityId,
                                            LocalDate data, LocalTime inicio, LocalTime fim,
                                            LocalDateTime expiraEm, String servico,
@@ -229,7 +237,7 @@ public class BookingApplicationService {
         Reservation reservation;
         try {
             reservation = reservationApplicationService.criarReserva(
-                    customer.getId(), profissional, serviceId, availabilityId,
+                    businessId, customer.getId(), profissional, serviceId, availabilityId,
                     data, inicio, fim, expiraEm);
         } catch (HorarioIndisponivelException conflito) {
             // Conflito REAL de agenda. Nada foi escrito: sem compensacao a fazer.

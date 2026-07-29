@@ -1,5 +1,6 @@
 package com.troquim_bot.controller;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.controller.dto.CreateAppointmentRequest;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
@@ -51,7 +52,7 @@ class AppointmentControllerTest {
         appointmentRepository = new InMemoryAppointmentRepository();
         reservationRepository = new InMemoryReservationRepository();
         appointmentApplicationService = new AppointmentApplicationService(appointmentRepository, reservationRepository);
-        AppointmentController appointmentController = new AppointmentController(appointmentApplicationService);
+        AppointmentController appointmentController = new AppointmentController(TestTenants.pilot(), appointmentApplicationService);
         mockMvc = MockMvcBuilders.standaloneSetup(appointmentController).build();
     }
 
@@ -59,10 +60,10 @@ class AppointmentControllerTest {
 
     @Test
     void deveRetornar200QuandoListarTodos() throws Exception {
-        appointmentApplicationService.criarAgendamento(
+        appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
-        appointmentApplicationService.criarAgendamento(
+        appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(10, 0), LocalTime.of(11, 0));
 
@@ -85,7 +86,7 @@ class AppointmentControllerTest {
 
     @Test
     void deveRetornar200QuandoBuscarPorIdExistente() throws Exception {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
         String appointmentId = appointment.getId().getValue().toString();
@@ -154,8 +155,7 @@ class AppointmentControllerTest {
 
     @Test
     void deveCriarAgendamentoDeReservaERetornar201() throws Exception {
-        Reservation reservation = new Reservation(
-            ReservationId.generate(), customerId1, profId1, serviceId1, availabilityId1,
+        Reservation reservation = new Reservation(ReservationId.generate(), TestTenants.PILOT, customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0),
             LocalDateTime.of(futureDate, LocalTime.of(23, 59)));
         reservationRepository.save(reservation);
@@ -181,7 +181,7 @@ class AppointmentControllerTest {
 
     @Test
     void deveConfirmarAgendamento() throws Exception {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 
@@ -200,7 +200,7 @@ class AppointmentControllerTest {
 
     @Test
     void deveCancelarAgendamento() throws Exception {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 
@@ -213,7 +213,7 @@ class AppointmentControllerTest {
 
     @Test
     void deveConcluirAgendamento() throws Exception {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
         appointmentApplicationService.confirmarAgendamento(appointment.getId());
@@ -227,7 +227,7 @@ class AppointmentControllerTest {
 
     @Test
     void deveCancelarAgendamentoERetornar204() throws Exception {
-        Appointment appointment = appointmentApplicationService.criarAgendamento(
+        Appointment appointment = appointmentApplicationService.criarAgendamento(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             futureDate, LocalTime.of(8, 0), LocalTime.of(9, 0));
 

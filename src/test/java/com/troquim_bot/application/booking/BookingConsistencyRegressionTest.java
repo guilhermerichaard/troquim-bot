@@ -45,7 +45,7 @@ class BookingConsistencyRegressionTest {
         reservationApplicationService = new ReservationApplicationService(reservationRepository);
         appointmentApplicationService = new AppointmentApplicationService(appointmentRepository, reservationRepository);
         customerProfileService = new CustomerProfileService(customerRepository, TestTenants.pilot());
-        bookingApplicationService = new BookingApplicationService(
+        bookingApplicationService = new BookingApplicationService(TestTenants.pilot(),
                 reservationApplicationService, appointmentApplicationService, customerProfileService,
                 new InMemoryBookingIdempotencyStore());
     }

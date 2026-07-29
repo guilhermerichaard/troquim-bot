@@ -84,7 +84,7 @@ class WhatsAppFlowTenantIsolationTest {
     @Test
     @DisplayName("token do tenant B não cria agendamento no tenant A (427 e nada gravado)")
     void tokenDeOutroTenantNaoAgenda() throws Exception {
-        int antes = appointmentApplicationService.listarAtivos().size();
+        int antes = appointmentApplicationService.listarAtivos(TestTenants.PILOT).size();
         FlowSession outroTenant = sessaoDeOutroNegocio();
         LocalDate dia = proximaQuarta();
 
@@ -98,7 +98,7 @@ class WhatsAppFlowTenantIsolationTest {
                         .content(CRYPTO.envelope(corpo, CRYPTO.novaSessao())))
                 .andExpect(result -> assertEquals(427, result.getResponse().getStatus()));
 
-        assertEquals(antes, appointmentApplicationService.listarAtivos().size(),
+        assertEquals(antes, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size(),
                 "Nenhum agendamento pode ser criado a partir de sessão de outro negócio");
     }
 

@@ -50,7 +50,7 @@ class CustomerIdentityConsolidationTest {
     }
 
     private BookingApplicationService booking(CustomerProfileService profiles) {
-        return new BookingApplicationService(
+        return new BookingApplicationService(TestTenants.pilot(),
                 new ReservationApplicationService(reservationRepository),
                 new AppointmentApplicationService(appointmentRepository, reservationRepository),
                 profiles,
@@ -100,7 +100,7 @@ class CustomerIdentityConsolidationTest {
         CustomerProfileService profiles = profiles();
         ReservationApplicationService reservationApp = new ReservationApplicationService(reservationRepository);
         AppointmentApplicationService appointmentApp = new AppointmentApplicationService(appointmentRepository, reservationRepository);
-        BookingApplicationService booking = new BookingApplicationService(reservationApp, appointmentApp, profiles,
+        BookingApplicationService booking = new BookingApplicationService(TestTenants.pilot(), reservationApp, appointmentApp, profiles,
                 new InMemoryBookingIdempotencyStore());
 
         BookingResult resultado = booking.confirmar("5511900000001", "Maria Silva", "cabelo", "sexta", "13h");
@@ -126,12 +126,12 @@ class CustomerIdentityConsolidationTest {
         CustomerProfileService profiles = profiles();
         AppointmentApplicationService appointmentApp = new AppointmentApplicationService(appointmentRepository, reservationRepository);
         BookingQueryResponder responder = new BookingQueryResponder(
-                appointmentApp, new AvailabilityApplicationService(), profiles);
+                appointmentApp, new AvailabilityApplicationService(TestTenants.pilot()), profiles);
 
         String numero = "5511900000001";
         LocalDate data = LocalDate.now().plusDays(1);
         // Agendamento gravado sob o id LEGADO derivado do telefone, sem Customer persistido.
-        appointmentApp.criarAgendamento(
+        appointmentApp.criarAgendamento(TestTenants.PILOT,
                 CustomerId.fromPhone(numero),
                 ProfessionalId.from(UUID.randomUUID()),
                 ServiceId.from(UUID.randomUUID()),

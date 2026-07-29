@@ -52,7 +52,7 @@ class ConversationServiceCancelamentoTest {
         String resposta = fixture.conversationService.gerarResposta(fixture.numero, "Quero cancelar meu agendamento");
 
         assertEquals("Seu agendamento foi cancelado com sucesso.", resposta);
-        assertEquals(0, fixture.appointmentApplicationService.listarAtivos().size());
+        assertEquals(0, fixture.appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
     }
 
     @Test
@@ -77,7 +77,7 @@ class ConversationServiceCancelamentoTest {
         assertTrue(resposta.contains("mais de um agendamento"), "Deve perguntar qual agendamento cancelar");
         assertTrue(resposta.contains("1."), "Deve listar o primeiro agendamento");
         assertTrue(resposta.contains("2."), "Deve listar o segundo agendamento");
-        assertEquals(2, fixture.appointmentApplicationService.listarAtivos().size(),
+        assertEquals(2, fixture.appointmentApplicationService.listarAtivos(TestTenants.PILOT).size(),
             "Nenhum agendamento deve ser cancelado automaticamente");
     }
 
@@ -149,7 +149,7 @@ class ConversationServiceCancelamentoTest {
                 appointmentRepository,
                 reservationRepository
         );
-        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(
+        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(TestTenants.pilot(),
                 new com.troquim_bot.repository.InMemoryAvailabilityRepository(),
                 scheduleService
         );
@@ -163,7 +163,7 @@ class ConversationServiceCancelamentoTest {
                 new PromptService(),
                 customerProfileService,
                 appointmentApplicationService,
-                new AppointmentBookingService(
+                new AppointmentBookingService(TestTenants.pilot(),
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
@@ -174,7 +174,7 @@ class ConversationServiceCancelamentoTest {
                 new StrictMvpMenuService(
                         new ConversationStateService(new InMemoryConversationStateRepository()),
                         availabilityApplicationService,
-                        new BookingApplicationService(
+                        new BookingApplicationService(TestTenants.pilot(),
                                 new ReservationApplicationService(new InMemoryReservationRepository()),
                                 new AppointmentApplicationService(),
                                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),

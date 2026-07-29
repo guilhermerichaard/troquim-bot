@@ -41,7 +41,7 @@ public class MontarResumoHandler implements FlowActionHandler {
 
     @Override
     public FlowResponse tratar(FlowRequest request, FlowSession session) {
-        FlowContextoResolvido resolvido = resolver.ateHorario(request);
+        FlowContextoResolvido resolvido = resolver.ateHorario(request, session);
         if (!resolvido.valido()) {
             return resolvido.falha();
         }

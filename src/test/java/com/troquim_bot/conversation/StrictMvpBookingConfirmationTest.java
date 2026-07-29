@@ -46,14 +46,14 @@ class StrictMvpBookingConfirmationTest {
         customerRepository = new InMemoryCustomerRepository();
         CustomerProfileService customerProfileService = new CustomerProfileService(customerRepository, TestTenants.pilot());
 
-        BookingApplicationService booking = new BookingApplicationService(
+        BookingApplicationService booking = new BookingApplicationService(TestTenants.pilot(),
                 reservationApp, appointmentApp, customerProfileService,
                 new InMemoryBookingIdempotencyStore());
 
         conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
         menu = new StrictMvpMenuService(
                 conversationStateService,
-                new AvailabilityApplicationService(),
+                new AvailabilityApplicationService(TestTenants.pilot()),
                 booking,
                 OptionalBeans.ausente(),
                 "STRICT_MVP");
@@ -87,7 +87,7 @@ class StrictMvpBookingConfirmationTest {
 
         // Reservation criada e cancelada (o Appointment protege o slot, não a Reservation)
         assertEquals(1, reservationApp.listarTodos().size(), "Deveria haver 1 reserva");
-        assertEquals(0, reservationApp.listarAtivos().size(), "A reserva deve estar cancelada após criar o Appointment");
+        assertEquals(0, reservationApp.listarAtivos(TestTenants.PILOT).size(), "A reserva deve estar cancelada após criar o Appointment");
 
         // Appointment criado
         assertEquals(1, appointmentApp.listarTodos().size(), "Deveria haver 1 agendamento");
@@ -143,7 +143,7 @@ class StrictMvpBookingConfirmationTest {
                 "Esperava aviso de horário ocupado, mas veio: " + resposta);
 
         // Nenhum dado parcial para o segundo cliente
-        assertEquals(0, reservationApp.listarAtivos().size(), "Nenhuma reserva deve estar ativa (a do primeiro foi cancelada após criar Appointment)");
+        assertEquals(0, reservationApp.listarAtivos(TestTenants.PILOT).size(), "Nenhuma reserva deve estar ativa (a do primeiro foi cancelada após criar Appointment)");
         assertEquals(1, appointmentApp.listarTodos().size(), "Não pode criar agendamento para o horário ocupado");
         assertEquals(1, customerRepository.findByBusinessId(TestTenants.PILOT).size(), "Cliente do horário ocupado não deve ser persistido");
 

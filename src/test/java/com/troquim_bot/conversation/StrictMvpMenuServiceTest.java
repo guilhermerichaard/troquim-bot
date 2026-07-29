@@ -29,8 +29,8 @@ class StrictMvpMenuServiceTest {
                 new ConversationStateService(new InMemoryConversationStateRepository());
         StrictMvpMenuService strictMvpMenuService = new StrictMvpMenuService(
                 conversationStateService,
-                new AvailabilityApplicationService(),
-                new BookingApplicationService(
+                new AvailabilityApplicationService(TestTenants.pilot()),
+                new BookingApplicationService(TestTenants.pilot(),
                         new ReservationApplicationService(new InMemoryReservationRepository()),
                         new AppointmentApplicationService(),
                         new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),

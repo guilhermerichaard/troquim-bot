@@ -1,6 +1,7 @@
 package com.troquim_bot.repository;
 
 import com.troquim_bot.professional.ProfessionalId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.reservation.Reservation;
 import com.troquim_bot.reservation.ReservationId;
 
@@ -48,6 +49,27 @@ public class InMemoryReservationRepository implements ReservationRepository {
     @Override
     public List<Reservation> findAll() {
         return new ArrayList<>(reservations.values());
+    }
+
+    @Override
+    public List<Reservation> findByBusinessIdAndProfessionalIdAndDate(
+            BusinessId businessId, ProfessionalId professionalId, LocalDate date) {
+        if (businessId == null || professionalId == null || date == null) {
+            return List.of();
+        }
+        return findByProfessionalIdAndDate(professionalId, date).stream()
+                .filter(a -> a.pertenceAoTenant(businessId))
+                .toList();
+    }
+
+    @Override
+    public List<Reservation> findByBusinessId(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return findAll().stream()
+                .filter(a -> a.pertenceAoTenant(businessId))
+                .toList();
     }
 
     @Override

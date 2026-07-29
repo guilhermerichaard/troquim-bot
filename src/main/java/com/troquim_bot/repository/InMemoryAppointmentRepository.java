@@ -1,5 +1,6 @@
 package com.troquim_bot.repository;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.customer.CustomerId;
@@ -49,6 +50,27 @@ public class InMemoryAppointmentRepository implements AppointmentRepository {
     @Override
     public List<Appointment> findAll() {
         return new ArrayList<>(appointments.values());
+    }
+
+    @Override
+    public List<Appointment> findByBusinessIdAndProfessionalIdAndDate(
+            BusinessId businessId, ProfessionalId professionalId, LocalDate date) {
+        if (businessId == null || professionalId == null || date == null) {
+            return List.of();
+        }
+        return findByProfessionalIdAndDate(professionalId, date).stream()
+                .filter(a -> a.pertenceAoTenant(businessId))
+                .toList();
+    }
+
+    @Override
+    public List<Appointment> findByBusinessId(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return findAll().stream()
+                .filter(a -> a.pertenceAoTenant(businessId))
+                .toList();
     }
 
     @Override

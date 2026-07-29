@@ -1,6 +1,7 @@
 package com.troquim_bot.reservation;
 
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.service.ServiceId;
@@ -21,6 +22,7 @@ import java.time.LocalTime;
 public class Reservation {
 
     private final ReservationId id;
+    private final BusinessId businessId;
     private final CustomerId customerId;
     private final ProfessionalId professionalId;
     private final ServiceId serviceId;
@@ -37,12 +39,16 @@ public class Reservation {
      * Construtor para criação de novo Reservation.
      * Inicia com status ATIVO.
      */
-    public Reservation(ReservationId id, CustomerId customerId, ProfessionalId professionalId,
+    public Reservation(ReservationId id, BusinessId businessId, CustomerId customerId,
+                       ProfessionalId professionalId,
                        ServiceId serviceId, AvailabilityId availabilityId,
                        LocalDate date, LocalTime startTime, LocalTime endTime,
                        LocalDateTime expiresAt) {
         if (id == null) {
             throw new IllegalArgumentException("ReservationId é obrigatório");
+        }
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
         }
         if (customerId == null) {
             throw new IllegalArgumentException("CustomerId é obrigatório");
@@ -73,6 +79,7 @@ public class Reservation {
         }
 
         this.id = id;
+        this.businessId = businessId;
         this.customerId = customerId;
         this.professionalId = professionalId;
         this.serviceId = serviceId;
@@ -90,13 +97,17 @@ public class Reservation {
      * Construtor para reconstituição de Reservation existente (ex: do banco de dados).
      * Usado apenas pela infraestrutura.
      */
-    public Reservation(ReservationId id, CustomerId customerId, ProfessionalId professionalId,
+    public Reservation(ReservationId id, BusinessId businessId, CustomerId customerId,
+                       ProfessionalId professionalId,
                        ServiceId serviceId, AvailabilityId availabilityId,
                        LocalDate date, LocalTime startTime, LocalTime endTime,
                        LocalDateTime expiresAt, ReservationStatus status,
                        LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         if (id == null) {
             throw new IllegalArgumentException("ReservationId é obrigatório");
+        }
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
         }
         if (customerId == null) {
             throw new IllegalArgumentException("CustomerId é obrigatório");
@@ -130,6 +141,7 @@ public class Reservation {
         }
 
         this.id = id;
+        this.businessId = businessId;
         this.customerId = customerId;
         this.professionalId = professionalId;
         this.serviceId = serviceId;
@@ -144,6 +156,15 @@ public class Reservation {
     }
 
     // ==================== GETTERS ====================
+
+    public BusinessId getBusinessId() {
+        return businessId;
+    }
+
+    /** A reserva pertence a este negócio? */
+    public boolean pertenceAoTenant(BusinessId businessId) {
+        return businessId != null && businessId.equals(this.businessId);
+    }
 
     public ReservationId getId() {
         return id;

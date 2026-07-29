@@ -1,5 +1,6 @@
 package com.troquim_bot.controller;
 
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.controller.dto.AppointmentResponse;
 import com.troquim_bot.controller.dto.CreateAppointmentRequest;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
@@ -36,7 +37,10 @@ public class AppointmentController {
 
     private final AppointmentApplicationService appointmentApplicationService;
 
-    public AppointmentController(AppointmentApplicationService appointmentApplicationService) {
+    private final TenantProvider tenantProvider;
+
+    public AppointmentController(TenantProvider tenantProvider, AppointmentApplicationService appointmentApplicationService) {
+        this.tenantProvider = tenantProvider;
         this.appointmentApplicationService = appointmentApplicationService;
     }
 
@@ -99,7 +103,7 @@ public class AppointmentController {
             LocalTime endTime = LocalTime.parse(request.getEndTime());
 
             Appointment appointment = appointmentApplicationService.criarAgendamento(
-                customerId, professionalId, serviceId, availabilityId,
+                tenantProvider.currentBusinessId(), customerId, professionalId, serviceId, availabilityId,
                 date, startTime, endTime
             );
 

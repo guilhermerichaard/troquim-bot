@@ -1,5 +1,6 @@
 package com.troquim_bot.whatsapp.flow;
 
+import com.troquim_bot.support.TestTenants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
@@ -87,7 +88,7 @@ class WhatsAppFlowPreviewNaoPersisteSessaoTest {
                 "Sessão de preview é efêmera: não pode virar linha em whatsapp_flow_sessions");
         assertTrue(sessionRepository.findById(PREVIEW_TOKEN).isEmpty(),
                 "O token de preview não pode existir na tabela de sessões");
-        assertTrue(appointmentApplicationService.listarAtivos().isEmpty(),
+        assertTrue(appointmentApplicationService.listarAtivos(TestTenants.PILOT).isEmpty(),
                 "Um token de preview NUNCA pode criar agendamento real");
     }
 

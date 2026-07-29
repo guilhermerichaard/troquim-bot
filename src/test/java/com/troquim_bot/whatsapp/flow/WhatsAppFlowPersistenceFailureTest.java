@@ -81,6 +81,19 @@ class WhatsAppFlowPersistenceFailureTest {
                 }
 
                 @Override
+                public List<Appointment> findByBusinessIdAndProfessionalIdAndDate(
+                        com.troquim_bot.business.BusinessId businessId,
+                        ProfessionalId professionalId, java.time.LocalDate date) {
+                    return List.of();
+                }
+
+                @Override
+                public List<Appointment> findByBusinessId(
+                        com.troquim_bot.business.BusinessId businessId) {
+                    return List.of();
+                }
+
+                @Override
                 public Appointment findById(AppointmentId id) {
                     return null;
                 }

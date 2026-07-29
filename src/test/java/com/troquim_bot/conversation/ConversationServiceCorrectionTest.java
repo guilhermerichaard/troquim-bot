@@ -185,7 +185,7 @@ class ConversationServiceCorrectionTest {
                 appointmentRepository,
                 reservationRepository
         );
-        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(
+        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(TestTenants.pilot(),
                 new com.troquim_bot.repository.InMemoryAvailabilityRepository(),
                 scheduleService
         );
@@ -199,7 +199,7 @@ class ConversationServiceCorrectionTest {
                 new PromptService(),
                 customerProfileService,
                 appointmentApplicationService,
-                new AppointmentBookingService(
+                new AppointmentBookingService(TestTenants.pilot(),
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
@@ -210,7 +210,7 @@ class ConversationServiceCorrectionTest {
                 new StrictMvpMenuService(
                         new ConversationStateService(new InMemoryConversationStateRepository()),
                         availabilityApplicationService,
-                        new BookingApplicationService(
+                        new BookingApplicationService(TestTenants.pilot(),
                                 new ReservationApplicationService(new InMemoryReservationRepository()),
                                 new AppointmentApplicationService(),
                                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),

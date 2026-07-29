@@ -20,4 +20,13 @@ public interface SpringDataReservationRepository extends JpaRepository<Reservati
      * Busca reservas por ID do profissional e data.
      */
     List<ReservationJpaEntity> findByProfessionalIdAndDate(UUID professionalId, LocalDate date);
+
+    /**
+     * Consulta escopada por negócio. O professional_id do catálogo do Flow é sintético
+     * e compartilhado, então filtrar só por profissional cruzaria tenants.
+     */
+    List<ReservationJpaEntity> findByBusinessIdAndProfessionalIdAndDate(
+            UUID businessId, UUID professionalId, LocalDate date);
+
+    List<ReservationJpaEntity> findByBusinessId(UUID businessId);
 }

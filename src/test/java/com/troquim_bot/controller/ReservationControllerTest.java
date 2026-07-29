@@ -1,5 +1,6 @@
 package com.troquim_bot.controller;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.controller.dto.CreateReservationRequest;
 import com.troquim_bot.controller.dto.UpdateReservationRequest;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
@@ -48,7 +49,7 @@ class ReservationControllerTest {
     void setUp() {
         reservationRepository = new InMemoryReservationRepository();
         reservationApplicationService = new ReservationApplicationService(reservationRepository);
-        ReservationController reservationController = new ReservationController(reservationApplicationService);
+        ReservationController reservationController = new ReservationController(TestTenants.pilot(), reservationApplicationService);
         mockMvc = MockMvcBuilders.standaloneSetup(reservationController).build();
     }
 
@@ -57,10 +58,10 @@ class ReservationControllerTest {
     @Test
     void deveRetornar200QuandoListarTodos() throws Exception {
         // Cria algumas reservas
-        reservationApplicationService.criarReserva(
+        reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
-        reservationApplicationService.criarReserva(
+        reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(10, 0), LocalTime.of(11, 0), expiresAt);
 
@@ -85,7 +86,7 @@ class ReservationControllerTest {
 
     @Test
     void deveRetornar200QuandoBuscarPorIdExistente() throws Exception {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
         String reservationId = reservation.getId().getValue().toString();
@@ -182,7 +183,7 @@ class ReservationControllerTest {
 
     @Test
     void deveAtualizarData() throws Exception {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
         String reservationId = reservation.getId().getValue().toString();
@@ -213,7 +214,7 @@ class ReservationControllerTest {
 
     @Test
     void deveCancelarReservaERetornar204() throws Exception {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
         String reservationId = reservation.getId().getValue().toString();

@@ -4,6 +4,8 @@ import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.availability.AvailabilityStatus;
+import com.troquim_bot.business.BusinessId;
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AvailabilityRepository;
@@ -52,25 +54,28 @@ public class AvailabilityApplicationService {
     private final AvailabilityRepository availabilityRepository;
     private final ScheduleService scheduleService;
     private final AppointmentRepository appointmentRepository;
+    private final TenantProvider tenantProvider;
 
     /**
      * Construtor para MVP com repositório em memória.
      */
-    public AvailabilityApplicationService() {
-        this(new InMemoryAvailabilityRepository(), new ScheduleService(),
+    public AvailabilityApplicationService(TenantProvider tenantProvider) {
+        this(tenantProvider, new InMemoryAvailabilityRepository(), new ScheduleService(),
                 new InMemoryAppointmentRepository());
     }
 
     /**
      * Construtor com injeção de dependência (para testes ou futura implementação JPA).
      */
-    public AvailabilityApplicationService(AvailabilityRepository availabilityRepository) {
-        this(availabilityRepository, new ScheduleService(), new InMemoryAppointmentRepository());
+    public AvailabilityApplicationService(TenantProvider tenantProvider,
+                                          AvailabilityRepository availabilityRepository) {
+        this(tenantProvider, availabilityRepository, new ScheduleService(), new InMemoryAppointmentRepository());
     }
 
-    public AvailabilityApplicationService(AvailabilityRepository availabilityRepository,
+    public AvailabilityApplicationService(TenantProvider tenantProvider,
+                                          AvailabilityRepository availabilityRepository,
                                           ScheduleService scheduleService) {
-        this(availabilityRepository, scheduleService, new InMemoryAppointmentRepository());
+        this(tenantProvider, availabilityRepository, scheduleService, new InMemoryAppointmentRepository());
     }
 
     /**
@@ -82,9 +87,11 @@ public class AvailabilityApplicationService {
      * resto do sistema. Eram duas agendas distintas em memória.
      */
     @Autowired
-    public AvailabilityApplicationService(AvailabilityRepository availabilityRepository,
+    public AvailabilityApplicationService(TenantProvider tenantProvider,
+                                          AvailabilityRepository availabilityRepository,
                                           ScheduleService scheduleService,
                                           AppointmentRepository appointmentRepository) {
+        this.tenantProvider = tenantProvider;
         this.availabilityRepository = availabilityRepository;
         this.scheduleService = scheduleService;
         this.appointmentRepository = appointmentRepository;
@@ -283,7 +290,9 @@ public class AvailabilityApplicationService {
         if (data == null) {
             return List.of();
         }
-        return horariosLivres(data, PROFISSIONAL_PADRAO).stream()
+        // Caminho LEGADO do menu textual: sem tenant no parâmetro, resolve o corrente.
+        // O Flow e /app usam a sobrecarga com BusinessId explícito.
+        return horariosLivres(tenantProvider.currentBusinessId(), data, PROFISSIONAL_PADRAO).stream()
                 .map(LocalTime::toString)
                 .toList();
     }
@@ -300,8 +309,10 @@ public class AvailabilityApplicationService {
      * Horários livres numa data para um profissional, em ordem crescente.
      * Vazio significa dia fechado, data no passado ou agenda cheia.
      */
-    public List<LocalTime> horariosLivres(LocalDate data, ProfessionalId profissional) {
-        if (data == null || profissional == null || data.isBefore(LocalDate.now())) {
+    public List<LocalTime> horariosLivres(BusinessId businessId, LocalDate data,
+                                          ProfessionalId profissional) {
+        if (businessId == null || data == null || profissional == null
+                || data.isBefore(LocalDate.now())) {
             return List.of();
         }
 
@@ -310,8 +321,11 @@ public class AvailabilityApplicationService {
             return List.of();
         }
 
+        // Escopo de tenant é OBRIGATÓRIO aqui: o professional_id do catálogo do Flow é
+        // sintético e compartilhado, então sem ele o agendamento de um negócio ocuparia
+        // o horário de outro.
         List<Appointment> ocupados = appointmentRepository
-                .findByProfessionalIdAndDate(profissional, data).stream()
+                .findByBusinessIdAndProfessionalIdAndDate(businessId, profissional, data).stream()
                 .filter(Appointment::isAtivo)
                 .toList();
 
@@ -334,13 +348,14 @@ public class AvailabilityApplicationService {
     }
 
     /** Datas SEM nenhum horário livre na janela, para desabilitar no calendário. */
-    public List<LocalDate> datasSemVaga(LocalDate de, LocalDate ate, ProfessionalId profissional) {
-        if (de == null || ate == null || profissional == null) {
+    public List<LocalDate> datasSemVaga(BusinessId businessId, LocalDate de, LocalDate ate,
+                                        ProfessionalId profissional) {
+        if (businessId == null || de == null || ate == null || profissional == null) {
             return List.of();
         }
         List<LocalDate> indisponiveis = new ArrayList<>();
         for (LocalDate dia = de; !dia.isAfter(ate); dia = dia.plusDays(1)) {
-            if (horariosLivres(dia, profissional).isEmpty()) {
+            if (horariosLivres(businessId, dia, profissional).isEmpty()) {
                 indisponiveis.add(dia);
             }
         }
@@ -348,13 +363,14 @@ public class AvailabilityApplicationService {
     }
 
     /** Datas COM ao menos um horário livre na janela — para o dropdown de datas do Flow. */
-    public List<LocalDate> datasComVaga(LocalDate de, LocalDate ate, ProfessionalId profissional) {
-        if (de == null || ate == null || profissional == null) {
+    public List<LocalDate> datasComVaga(BusinessId businessId, LocalDate de, LocalDate ate,
+                                        ProfessionalId profissional) {
+        if (businessId == null || de == null || ate == null || profissional == null) {
             return List.of();
         }
         List<LocalDate> disponiveis = new ArrayList<>();
         for (LocalDate dia = de; !dia.isAfter(ate); dia = dia.plusDays(1)) {
-            if (!horariosLivres(dia, profissional).isEmpty()) {
+            if (!horariosLivres(businessId, dia, profissional).isEmpty()) {
                 disponiveis.add(dia);
             }
         }
@@ -365,8 +381,9 @@ public class AvailabilityApplicationService {
      * Um horário específico continua livre? Consulta de APRESENTAÇÃO — não reserva nada,
      * e o resultado envelhece. A decisão final é sempre revalidada na confirmação.
      */
-    public boolean estaLivre(LocalDate data, LocalTime horario, ProfessionalId profissional) {
-        return horario != null && horariosLivres(data, profissional).contains(horario);
+    public boolean estaLivre(BusinessId businessId, LocalDate data, LocalTime horario,
+                             ProfessionalId profissional) {
+        return horario != null && horariosLivres(businessId, data, profissional).contains(horario);
     }
 
     private static boolean conflita(LocalTime inicio, List<Appointment> ocupados) {

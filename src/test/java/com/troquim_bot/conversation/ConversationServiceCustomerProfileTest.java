@@ -90,7 +90,7 @@ class ConversationServiceCustomerProfileTest {
                 appointmentService,
                 conversationStateService,
                 appointmentApplicationService,
-                new AppointmentBookingService(
+                new AppointmentBookingService(TestTenants.pilot(),
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
@@ -137,7 +137,7 @@ class ConversationServiceCustomerProfileTest {
                 appointmentService,
                 conversationStateService,
                 appointmentApplicationService,
-                new AppointmentBookingService(
+                new AppointmentBookingService(TestTenants.pilot(),
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
@@ -187,7 +187,7 @@ class ConversationServiceCustomerProfileTest {
                 appointmentService,
                 css,
                 aas,
-                new AppointmentBookingService(
+                new AppointmentBookingService(TestTenants.pilot(),
                         scheduleService,
                         appointmentService,
                         rsv,
@@ -296,7 +296,7 @@ class ConversationServiceCustomerProfileTest {
                 appointmentService,
                 new ConversationStateService(new InMemoryConversationStateRepository()),
                 appointmentApplicationService,
-                new AppointmentBookingService(
+                new AppointmentBookingService(TestTenants.pilot(),
                         scheduleService,
                         appointmentService,
                         reservationApplicationService,
@@ -331,7 +331,7 @@ class ConversationServiceCustomerProfileTest {
                                                         AppointmentApplicationService appointmentApplicationService,
                                                         AppointmentBookingService appointmentBookingService) {
         ScheduleService scheduleService = new ScheduleService();
-        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(
+        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(TestTenants.pilot(),
                 new com.troquim_bot.repository.InMemoryAvailabilityRepository(),
                 scheduleService
         );
@@ -350,7 +350,7 @@ class ConversationServiceCustomerProfileTest {
                 new StrictMvpMenuService(
                         conversationStateService,
                         availabilityApplicationService,
-                        new BookingApplicationService(
+                        new BookingApplicationService(TestTenants.pilot(),
                                 new ReservationApplicationService(new InMemoryReservationRepository()),
                                 new AppointmentApplicationService(),
                                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),

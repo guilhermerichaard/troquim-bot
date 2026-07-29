@@ -39,7 +39,7 @@ class AppointmentBookingServiceTest {
                 reservationRepository
         );
         customerProfileService = new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot());
-        bookingService = new AppointmentBookingService(
+        bookingService = new AppointmentBookingService(TestTenants.pilot(),
                 scheduleService,
                 appointmentService,
                 reservationApplicationService,
@@ -105,7 +105,7 @@ class AppointmentBookingServiceTest {
                 appointmentRepository,
                 reservationRepository
         );
-        bookingService = new AppointmentBookingService(
+        bookingService = new AppointmentBookingService(TestTenants.pilot(),
                 scheduleService,
                 appointmentService,
                 reservationApplicationService,
@@ -141,7 +141,7 @@ class AppointmentBookingServiceTest {
                 appointmentRepository,
                 reservationRepository
         );
-        bookingService = new AppointmentBookingService(
+        bookingService = new AppointmentBookingService(TestTenants.pilot(),
                 scheduleService,
                 appointmentService,
                 reservationApplicationService,

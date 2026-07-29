@@ -1,5 +1,6 @@
 package com.troquim_bot.application.reservation;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
@@ -46,7 +47,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveCriarReservaComSucesso() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
 
@@ -70,7 +71,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoCustomerIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 null, profId1, serviceId1, availabilityId1,
                 data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt));
     }
@@ -78,7 +79,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoProfessionalIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, null, serviceId1, availabilityId1,
                 data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt));
     }
@@ -86,7 +87,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoServiceIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, profId1, null, availabilityId1,
                 data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt));
     }
@@ -94,7 +95,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoAvailabilityIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, null,
                 data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt));
     }
@@ -102,7 +103,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoDataNula() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 null, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt));
     }
@@ -110,7 +111,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoStartTimeNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 data, null, LocalTime.of(9, 0), expiresAt));
     }
@@ -118,7 +119,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoEndTimeNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 data, LocalTime.of(8, 0), null, expiresAt));
     }
@@ -126,7 +127,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoExpiresAtNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 data, LocalTime.of(8, 0), LocalTime.of(9, 0), null));
     }
@@ -134,7 +135,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoStartTimeMaiorQueEndTime() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 data, LocalTime.of(10, 0), LocalTime.of(9, 0), expiresAt));
     }
@@ -142,7 +143,7 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoStartTimeIgualEndTime() {
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId1, profId1, serviceId1, availabilityId1,
                 data, LocalTime.of(8, 0), LocalTime.of(8, 0), expiresAt));
     }
@@ -150,13 +151,13 @@ class ReservationApplicationServiceTest {
     @Test
     void deveLancarExcecaoQuandoHorarioConflitante() {
         // Cria primeira reserva
-        reservationApplicationService.criarReserva(
+        reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(10, 0), expiresAt);
 
         // Tenta criar reserva no mesmo horário
         assertThrows(IllegalArgumentException.class, () ->
-            reservationApplicationService.criarReserva(
+            reservationApplicationService.criarReserva(TestTenants.PILOT,
                 customerId2, profId1, serviceId1, availabilityId1,
                 data, LocalTime.of(9, 0), LocalTime.of(11, 0), expiresAt));
     }
@@ -164,12 +165,12 @@ class ReservationApplicationServiceTest {
     @Test
     void devePermitirHorarioNaoConflitante() {
         // Cria primeira reserva
-        reservationApplicationService.criarReserva(
+        reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(10, 0), expiresAt);
 
         // Cria reserva em horário não conflitante
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(10, 0), LocalTime.of(12, 0), expiresAt);
 
@@ -180,12 +181,12 @@ class ReservationApplicationServiceTest {
     @Test
     void devePermitirHorarioConflitanteParaProfissionaisDiferentes() {
         // Cria reserva para profissional 1
-        reservationApplicationService.criarReserva(
+        reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(10, 0), expiresAt);
 
         // Cria reserva no mesmo horário para profissional 2
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId2, serviceId1, availabilityId1,
             data, LocalTime.of(9, 0), LocalTime.of(11, 0), expiresAt);
 
@@ -195,13 +196,13 @@ class ReservationApplicationServiceTest {
     @Test
     void devePermitirHorarioConflitanteEmDatasDiferentes() {
         // Cria reserva em uma data
-        reservationApplicationService.criarReserva(
+        reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(10, 0), expiresAt);
 
         // Cria reserva no mesmo horário em outra data
         LocalDate outraData = LocalDate.of(2026, 7, 11);
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             outraData, LocalTime.of(9, 0), LocalTime.of(11, 0), expiresAt);
 
@@ -212,7 +213,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveBuscarReservaPorId() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
         ReservationId id = reservation.getId();
@@ -241,10 +242,10 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveListarTodos() {
-        reservationApplicationService.criarReserva(
+        reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
-        reservationApplicationService.criarReserva(
+        reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(10, 0), LocalTime.of(11, 0), expiresAt);
 
@@ -264,19 +265,19 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveListarApenasAtivos() {
-        Reservation ativo1 = reservationApplicationService.criarReserva(
+        Reservation ativo1 = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
-        Reservation ativo2 = reservationApplicationService.criarReserva(
+        Reservation ativo2 = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(10, 0), LocalTime.of(11, 0), expiresAt);
-        Reservation cancelado = reservationApplicationService.criarReserva(
+        Reservation cancelado = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(14, 0), LocalTime.of(15, 0), expiresAt);
 
         reservationApplicationService.cancelarReserva(cancelado.getId());
 
-        List<Reservation> ativos = reservationApplicationService.listarAtivos();
+        List<Reservation> ativos = reservationApplicationService.listarAtivos(TestTenants.PILOT);
 
         assertEquals(2, ativos.size());
         assertTrue(ativos.stream().allMatch(Reservation::isAtivo));
@@ -286,7 +287,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveAtualizarData() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
 
@@ -306,7 +307,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveAtualizarStartTime() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(10, 0), expiresAt);
 
@@ -319,7 +320,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveAtualizarEndTime() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(10, 0), expiresAt);
 
@@ -332,7 +333,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveAtualizarExpiresAt() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
 
@@ -346,7 +347,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveCancelarReserva() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
 
@@ -366,7 +367,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveReativarReserva() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
         reservationApplicationService.cancelarReserva(reservation.getId());
@@ -387,7 +388,7 @@ class ReservationApplicationServiceTest {
 
     @Test
     void deveRetornarTrueQuandoExiste() {
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(9, 0), expiresAt);
 
@@ -409,13 +410,13 @@ class ReservationApplicationServiceTest {
     @Test
     void reservaCanceladaNaoImpedeCriacaoDeNova() {
         // Cria e cancela uma reserva
-        Reservation reservation = reservationApplicationService.criarReserva(
+        Reservation reservation = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId1, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(8, 0), LocalTime.of(10, 0), expiresAt);
         reservationApplicationService.cancelarReserva(reservation.getId());
 
         // Deve ser possível criar outra no mesmo horário (a anterior está cancelada)
-        Reservation nova = reservationApplicationService.criarReserva(
+        Reservation nova = reservationApplicationService.criarReserva(TestTenants.PILOT,
             customerId2, profId1, serviceId1, availabilityId1,
             data, LocalTime.of(9, 0), LocalTime.of(11, 0), expiresAt);
 

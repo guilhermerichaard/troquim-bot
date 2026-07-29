@@ -1,6 +1,7 @@
 package com.troquim_bot.infrastructure.persistence;
 
 import com.troquim_bot.appointment.Appointment;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.AvailabilityId;
@@ -104,9 +105,34 @@ public class JpaAppointmentRepository implements AppointmentRepository {
 
     // ==================== MAPEAMENTO ====================
 
+    @Override
+    public List<Appointment> findByBusinessIdAndProfessionalIdAndDate(
+            BusinessId businessId, ProfessionalId professionalId, LocalDate date) {
+        if (businessId == null || professionalId == null || date == null) {
+            return List.of();
+        }
+        return springDataRepository
+                .findByBusinessIdAndProfessionalIdAndDate(
+                        businessId.getValue(), professionalId.getValue(), date)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Appointment> findByBusinessId(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return springDataRepository.findByBusinessId(businessId.getValue()).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     private AppointmentJpaEntity toEntity(Appointment appointment) {
         return new AppointmentJpaEntity(
                 appointment.getId().getValue(),
+                appointment.getBusinessId().getValue(),
                 appointment.getCustomerId().getValue(),
                 appointment.getProfessionalId().getValue(),
                 appointment.getServiceId().getValue(),
@@ -134,6 +160,7 @@ public class JpaAppointmentRepository implements AppointmentRepository {
 
         return new Appointment(
                 appointmentId,
+                BusinessId.from(entity.getBusinessId()),
                 customerId,
                 professionalId,
                 serviceId,

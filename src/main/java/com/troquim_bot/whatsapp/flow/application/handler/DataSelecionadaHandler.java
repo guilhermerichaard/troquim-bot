@@ -36,7 +36,7 @@ public class DataSelecionadaHandler implements FlowActionHandler {
 
     @Override
     public FlowResponse tratar(FlowRequest request, FlowSession session) {
-        FlowContextoResolvido resolvido = resolver.ateData(request);
+        FlowContextoResolvido resolvido = resolver.ateData(request, session);
         return resolvido.valido()
                 ? presenter.agenda(resolvido.contexto(), null)
                 : resolvido.falha();

@@ -1,5 +1,6 @@
 package com.troquim_bot.infrastructure.persistence;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
@@ -46,7 +47,7 @@ class JpaReservationRepositoryTest {
         LocalTime endTime = LocalTime.of(11, 0);
         LocalDateTime expiresAt = LocalDateTime.of(2026, 7, 10, 9, 0);
 
-        Reservation reservation = new Reservation(id, customerId, professionalId, serviceId,
+        Reservation reservation = new Reservation(id, TestTenants.PILOT, customerId, professionalId, serviceId,
                 availabilityId, date, startTime, endTime, expiresAt);
 
         reservationRepository.save(reservation);
@@ -75,7 +76,7 @@ class JpaReservationRepositoryTest {
         LocalTime endTime = LocalTime.of(15, 0);
         LocalDateTime expiresAt = LocalDateTime.of(2026, 7, 10, 13, 0);
 
-        Reservation reservation = new Reservation(id, customerId, professionalId, serviceId,
+        Reservation reservation = new Reservation(id, TestTenants.PILOT, customerId, professionalId, serviceId,
                 availabilityId, date, startTime, endTime, expiresAt);
 
         reservationRepository.save(reservation);
@@ -102,7 +103,7 @@ class JpaReservationRepositoryTest {
         LocalTime endTime = LocalTime.of(10, 0);
         LocalDateTime expiresAt = LocalDateTime.of(2026, 7, 10, 8, 0);
 
-        Reservation reservation = new Reservation(id, customerId, professionalId, serviceId,
+        Reservation reservation = new Reservation(id, TestTenants.PILOT, customerId, professionalId, serviceId,
                 availabilityId, date, startTime, endTime, expiresAt);
 
         reservationRepository.save(reservation);
@@ -122,9 +123,9 @@ class JpaReservationRepositoryTest {
         LocalTime endTime2 = LocalTime.of(10, 0);
         LocalDateTime expiresAt = LocalDateTime.of(2026, 7, 10, 7, 0);
 
-        reservationRepository.save(new Reservation(id1, customerId, professionalId, serviceId,
+        reservationRepository.save(new Reservation(id1, TestTenants.PILOT, customerId, professionalId, serviceId,
                 availabilityId, date, startTime1, endTime1, expiresAt));
-        reservationRepository.save(new Reservation(id2, customerId, professionalId, serviceId,
+        reservationRepository.save(new Reservation(id2, TestTenants.PILOT, customerId, professionalId, serviceId,
                 availabilityId, date, startTime2, endTime2, expiresAt));
 
         List<Reservation> all = reservationRepository.findAll();
@@ -147,13 +148,13 @@ class JpaReservationRepositoryTest {
         LocalDateTime expiresAt = LocalDateTime.of(2026, 7, 15, 9, 0);
 
         // Reserva do profId na data
-        reservationRepository.save(new Reservation(id1, customerId, profId, serviceId,
+        reservationRepository.save(new Reservation(id1, TestTenants.PILOT, customerId, profId, serviceId,
                 availabilityId, date, startTime, endTime, expiresAt));
         // Outra reserva do profId na data
-        reservationRepository.save(new Reservation(id2, customerId, profId, serviceId,
+        reservationRepository.save(new Reservation(id2, TestTenants.PILOT, customerId, profId, serviceId,
                 availabilityId, date, startTime.plusHours(1), endTime.plusHours(1), expiresAt));
         // Reserva do profId em outra data (não deve aparecer)
-        reservationRepository.save(new Reservation(id3, customerId, profId, serviceId,
+        reservationRepository.save(new Reservation(id3, TestTenants.PILOT, customerId, profId, serviceId,
                 availabilityId, outraData, startTime, endTime, expiresAt));
 
         List<Reservation> results = reservationRepository.findByProfessionalIdAndDate(profId, date);
@@ -161,7 +162,7 @@ class JpaReservationRepositoryTest {
 
         // Reserva de outro profissional na mesma data (não deve aparecer)
         ReservationId id4 = ReservationId.generate();
-        reservationRepository.save(new Reservation(id4, customerId, outroProfId, serviceId,
+        reservationRepository.save(new Reservation(id4, TestTenants.PILOT, customerId, outroProfId, serviceId,
                 availabilityId, date, startTime, endTime, expiresAt));
 
         results = reservationRepository.findByProfessionalIdAndDate(profId, date);
@@ -176,7 +177,7 @@ class JpaReservationRepositoryTest {
         LocalTime endTime = LocalTime.of(17, 0);
         LocalDateTime expiresAt = LocalDateTime.of(2026, 7, 10, 15, 0);
 
-        Reservation reservation = new Reservation(id, customerId, professionalId, serviceId,
+        Reservation reservation = new Reservation(id, TestTenants.PILOT, customerId, professionalId, serviceId,
                 availabilityId, date, startTime, endTime, expiresAt);
 
         reservationRepository.save(reservation);
@@ -195,7 +196,7 @@ class JpaReservationRepositoryTest {
         LocalTime endTime = LocalTime.of(11, 30);
         LocalDateTime expiresAt = LocalDateTime.of(2026, 8, 1, 9, 0);
 
-        Reservation reservation = new Reservation(id, customerId, professionalId, serviceId,
+        Reservation reservation = new Reservation(id, TestTenants.PILOT, customerId, professionalId, serviceId,
                 availabilityId, date, startTime, endTime, expiresAt);
 
         reservationRepository.save(reservation);

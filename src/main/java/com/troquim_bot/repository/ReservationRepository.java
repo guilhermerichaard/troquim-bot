@@ -1,6 +1,7 @@
 package com.troquim_bot.repository;
 
 import com.troquim_bot.professional.ProfessionalId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.reservation.Reservation;
 import com.troquim_bot.reservation.ReservationId;
 
@@ -41,6 +42,12 @@ public interface ReservationRepository {
      * Busca todas as Reservations de um profissional em uma data.
      */
     List<Reservation> findByProfessionalIdAndDate(ProfessionalId professionalId, LocalDate date);
+
+    /** Reservas do negócio para um profissional numa data (escopo de conflito). */
+    List<Reservation> findByBusinessIdAndProfessionalIdAndDate(
+            BusinessId businessId, ProfessionalId professionalId, LocalDate date);
+
+    List<Reservation> findByBusinessId(BusinessId businessId);
 
     /**
      * Remove uma Reservation por ID.

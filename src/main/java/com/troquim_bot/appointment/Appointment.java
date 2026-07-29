@@ -1,6 +1,7 @@
 package com.troquim_bot.appointment;
 
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.reservation.ReservationId;
@@ -12,15 +13,21 @@ import java.time.LocalTime;
 
 /**
  * Aggregate Root que representa um agendamento confirmado.
- * 
+ *
  * Responsabilidades:
  * - Gerenciar informações do agendamento (cliente, profissional, serviço, horário)
  * - Controlar o ciclo de vida (PENDENTE, CONFIRMADO, CANCELADO, CONCLUIDO)
  * - Proteger invariants de negócio (não criar no passado, não permitir conflitos)
+ *
+ * O {@link BusinessId} é obrigatório e imutável: um agendamento pertence a um negócio,
+ * e é esse vínculo que impede a agenda de um tenant aparecer para outro. Como o
+ * catálogo do Flow usa um professional_id sintético compartilhado, sem ele a checagem
+ * de disponibilidade cruzaria agendamentos de negócios diferentes.
  */
 public class Appointment {
 
     private final AppointmentId id;
+    private final BusinessId businessId;
     private final CustomerId customerId;
     private final ProfessionalId professionalId;
     private final ServiceId serviceId;
@@ -37,10 +44,11 @@ public class Appointment {
      * Construtor para criação de novo Appointment (sem reservation).
      * Inicia com status PENDENTE.
      */
-    public Appointment(AppointmentId id, CustomerId customerId, ProfessionalId professionalId,
+    public Appointment(AppointmentId id, BusinessId businessId, CustomerId customerId,
+                       ProfessionalId professionalId,
                        ServiceId serviceId, AvailabilityId availabilityId,
                        LocalDate date, LocalTime startTime, LocalTime endTime) {
-        this(id, customerId, professionalId, serviceId, availabilityId, null,
+        this(id, businessId, customerId, professionalId, serviceId, availabilityId, null,
              date, startTime, endTime, AppointmentStatus.PENDENTE,
              LocalDateTime.now(), LocalDateTime.now());
     }
@@ -49,10 +57,11 @@ public class Appointment {
      * Construtor para criação de novo Appointment a partir de Reservation.
      * Inicia com status PENDENTE.
      */
-    public Appointment(AppointmentId id, CustomerId customerId, ProfessionalId professionalId,
+    public Appointment(AppointmentId id, BusinessId businessId, CustomerId customerId,
+                       ProfessionalId professionalId,
                        ServiceId serviceId, AvailabilityId availabilityId, ReservationId reservationId,
                        LocalDate date, LocalTime startTime, LocalTime endTime) {
-        this(id, customerId, professionalId, serviceId, availabilityId, reservationId,
+        this(id, businessId, customerId, professionalId, serviceId, availabilityId, reservationId,
              date, startTime, endTime, AppointmentStatus.PENDENTE,
              LocalDateTime.now(), LocalDateTime.now());
     }
@@ -61,12 +70,16 @@ public class Appointment {
      * Construtor para reconstituição de Appointment existente (ex: do banco de dados).
      * Usado apenas pela infraestrutura.
      */
-    public Appointment(AppointmentId id, CustomerId customerId, ProfessionalId professionalId,
+    public Appointment(AppointmentId id, BusinessId businessId, CustomerId customerId,
+                       ProfessionalId professionalId,
                        ServiceId serviceId, AvailabilityId availabilityId, ReservationId reservationId,
                        LocalDate date, LocalTime startTime, LocalTime endTime,
                        AppointmentStatus status, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         if (id == null) {
             throw new IllegalArgumentException("AppointmentId é obrigatório");
+        }
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
         }
         if (customerId == null) {
             throw new IllegalArgumentException("CustomerId é obrigatório");
@@ -97,6 +110,7 @@ public class Appointment {
         }
 
         this.id = id;
+        this.businessId = businessId;
         this.customerId = customerId;
         this.professionalId = professionalId;
         this.serviceId = serviceId;
@@ -111,6 +125,15 @@ public class Appointment {
     }
 
     // ==================== GETTERS ====================
+
+    public BusinessId getBusinessId() {
+        return businessId;
+    }
+
+    /** O agendamento pertence a este negócio? */
+    public boolean pertenceAoTenant(BusinessId businessId) {
+        return businessId != null && businessId.equals(this.businessId);
+    }
 
     public AppointmentId getId() {
         return id;

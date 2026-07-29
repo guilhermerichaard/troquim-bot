@@ -1,5 +1,6 @@
 package com.troquim_bot.schedule;
 
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.availability.AvailabilityId;
@@ -34,13 +35,16 @@ public class AppointmentBookingService {
     private final ReservationApplicationService reservationApplicationService;
     private final AppointmentApplicationService appointmentApplicationService;
     private final CustomerProfileService customerProfileService;
+    private final TenantProvider tenantProvider;
 
     @Autowired
-    public AppointmentBookingService(ScheduleService scheduleService,
+    public AppointmentBookingService(TenantProvider tenantProvider,
+                                     ScheduleService scheduleService,
                                      AppointmentService appointmentService,
                                      ReservationApplicationService reservationApplicationService,
                                      AppointmentApplicationService appointmentApplicationService,
                                      CustomerProfileService customerProfileService) {
+        this.tenantProvider = tenantProvider;
         this.scheduleService = scheduleService;
         this.appointmentService = appointmentService;
         this.reservationApplicationService = reservationApplicationService;
@@ -90,6 +94,7 @@ public class AppointmentBookingService {
         CustomerId customerId = customerProfileService.resolverIdOficial(customerNumber);
 
         Reservation reservation = reservationApplicationService.criarReserva(
+                tenantProvider.currentBusinessId(),
                 customerId,
                 DEFAULT_PROFESSIONAL_ID,
                 ServiceId.from(stableUuid("service:" + valorSeguro(service))),

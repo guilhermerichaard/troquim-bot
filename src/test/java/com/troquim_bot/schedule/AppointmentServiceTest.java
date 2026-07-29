@@ -1,5 +1,6 @@
 package com.troquim_bot.schedule;
 
+import com.troquim_bot.support.TestTenants;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

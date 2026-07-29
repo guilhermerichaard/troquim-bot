@@ -1,5 +1,6 @@
 package com.troquim_bot.controller;
 
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.controller.dto.CreateServiceRequest;
 import com.troquim_bot.controller.dto.UpdateServiceRequest;
 import com.troquim_bot.application.service.ServiceApplicationService;
