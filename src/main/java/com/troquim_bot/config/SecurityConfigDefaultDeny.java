@@ -22,20 +22,26 @@ public class SecurityConfigDefaultDeny {
 
     private final String adminApiKey;
     private final Environment environment;
+    private final com.troquim_bot.owner.application.OwnerAuthService ownerAuthService;
 
     public SecurityConfigDefaultDeny(@Qualifier("adminApiKey") String adminApiKey,
-                                     Environment environment) {
+                                     Environment environment,
+                                     com.troquim_bot.owner.application.OwnerAuthService ownerAuthService) {
         this.adminApiKey = adminApiKey;
         this.environment = environment;
+        this.ownerAuthService = ownerAuthService;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         BearerTokenFilter bearerTokenFilter = new BearerTokenFilter(adminApiKey);
+        com.troquim_bot.owner.api.OwnerSessionCookieFilter ownerSessionCookieFilter =
+                new com.troquim_bot.owner.api.OwnerSessionCookieFilter(ownerAuthService);
         boolean devProfile = environment.acceptsProfiles(Profiles.of("dev"));
 
         http
             .addFilterBefore(bearerTokenFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(ownerSessionCookieFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> {
                 auth.requestMatchers(HttpMethod.POST,
                         "/webhook/whatsapp",
@@ -67,6 +73,16 @@ public class SecurityConfigDefaultDeny {
                 // conta da Meta ao tenant, entao nunca pode ser iniciado anonimamente.
                 auth.requestMatchers("/api/v1/admin/**")
                     .hasRole("ADMIN");
+                // Login/logout do dono sao o proprio ponto de entrada: publicos por
+                // definicao. Autenticacao de verdade acontece dentro do controller.
+                auth.requestMatchers(HttpMethod.POST,
+                        "/api/v1/owner/login", "/api/v1/owner/logout")
+                    .permitAll();
+                // Area privada do dono (/app): so' com sessao valida, resolvida pelo
+                // OwnerSessionCookieFilter. O businessId vem SEMPRE dessa sessao, nunca
+                // de tenant fixo.
+                auth.requestMatchers("/app/**", "/api/v1/app/**")
+                    .hasRole("OWNER");
                 auth.anyRequest().denyAll();
             })
             .csrf(csrf -> csrf.disable())

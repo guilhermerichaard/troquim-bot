@@ -30,3 +30,16 @@ Application Service do Flow). Bug corrigido: construtor no-arg de `BusinessAppli
 (mesmo defeito de `/customers`).
 - Testes: `AppointmentTenantIsolationTest` (3) + suíte 810 verde.
 - SHA local: c47fcc2
+
+## Fase 2 — identidade do dono  [CONCLUÍDA]
+Módulo `owner/{domain,application,infrastructure,api}`. `OwnerUser` pertence a 1
+`BusinessId`. Login e-mail+senha (BCrypt) → cookie HttpOnly/Secure/SameSite=Strict com
+token opaco 256 bits; sessão persistida só como SHA-256 do token. `OwnerSessionCookieFilter`
+(mesmo slot do `BearerTokenFilter`) injeta `ROLE_OWNER` + `AuthenticatedOwner` como atributo
+do request. `/app/**` e `/api/v1/app/**` agora exigem `ROLE_OWNER` em
+`SecurityConfigDefaultDeny`. V9: `owner_users`, `owner_sessions` (PK = hash do token).
+- Achado: eu mesmo dupliquei o serviço numa resend de instruções no meio da sessão
+  (`OwnerAuthenticationService` + `V9__owner_users_and_sessions.sql`, órfãos, removidos
+  antes do commit — colidiriam na versão do Flyway).
+- Testes: `OwnerAuthIsolationTest` (8) verde.
+- SHA local: 3e34216
