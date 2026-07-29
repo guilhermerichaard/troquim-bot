@@ -51,9 +51,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@org.springframework.test.context.TestPropertySource(properties = {
+        "troquim.integrations.whatsapp.embedded-signup.enabled=true",
+        "troquim.integrations.whatsapp.embedded-signup.app-id=app-id-de-teste",
+        "troquim.integrations.whatsapp.embedded-signup.config-id=973012265764230",
+        "troquim.integrations.whatsapp.embedded-signup.app-secret=segredo-que-nunca-pode-vazar",
+        "troquim.integrations.whatsapp.embedded-signup.graph-api-version=vtest",
+        "troquim.integrations.whatsapp.embedded-signup.base-url=http://localhost:59999"
+})
 @Transactional
 @DisplayName("/app - acesso negado e isolamento entre donos")
 class OwnerAppAccessTest {
+
+    private static final String APP_SECRET = "segredo-que-nunca-pode-vazar";
 
     @Autowired private MockMvc mockMvc;
     @Autowired private OwnerUserRepository ownerUserRepository;
@@ -170,5 +180,61 @@ class OwnerAppAccessTest {
         assertTrue(paginaBruno.contains("nao conectado")
                 || paginaBruno.contains("não conectado"),
                 "Bruno nunca conectou: precisa mostrar status vazio, nunca herdar de outro tenant");
+    }
+
+    @Test
+    @DisplayName("HTML de /app expoe o config_id (publico) mas jamais o app secret")
+    void appSecretNuncaVazaNoHtml() throws Exception {
+        var cookieAna = cookieDoLogin("ana@teste.com", "senha-ana-123");
+
+        String pagina = mockMvc.perform(get("/app").cookie(cookieAna))
+                .andReturn().getResponse().getContentAsString();
+
+        assertTrue(pagina.contains("973012265764230"), "config_id e' publico e deve aparecer no HTML");
+        assertFalse(pagina.contains(APP_SECRET), "O App Secret NUNCA pode chegar ao HTML");
+        assertFalse(pagina.toLowerCase().contains("secret"),
+                "Nem o nome do campo deve aparecer no HTML renderizado");
+    }
+
+    @Test
+    @DisplayName("resposta JSON de start/finish tambem nunca inclui o app secret")
+    void appSecretNuncaVazaNoJson() throws Exception {
+        var cookieAna = cookieDoLogin("ana@teste.com", "senha-ana-123");
+
+        MvcResult inicio = mockMvc.perform(post("/api/v1/app/whatsapp/connection/start").cookie(cookieAna))
+                .andReturn();
+        assertEquals(200, inicio.getResponse().getStatus());
+        String corpo = inicio.getResponse().getContentAsString();
+
+        assertFalse(corpo.contains(APP_SECRET));
+        assertFalse(corpo.toLowerCase().contains("secret"));
+        assertTrue(corpo.contains("973012265764230"));
+    }
+
+    @Test
+    @DisplayName("code invalido falha sem persistir conexao parcial")
+    void codeInvalidoNaoDeixaConexaoParcial() throws Exception {
+        var cookieAna = cookieDoLogin("ana@teste.com", "senha-ana-123");
+
+        MvcResult inicio = mockMvc.perform(post("/api/v1/app/whatsapp/connection/start").cookie(cookieAna))
+                .andReturn();
+        String state = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(inicio.getResponse().getContentAsString()).get("state").asText();
+
+        // A Graph API real nao esta configurada neste teste (base-url aponta para uma
+        // porta inerte): a troca de code falha exatamente como um code invalido falharia.
+        mockMvc.perform(post("/api/v1/app/whatsapp/connection/finish").cookie(cookieAna)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"state\":\"" + state + "\",\"code\":\"codigo-qualquer\"}"))
+                .andExpect(result -> assertEquals(400, result.getResponse().getStatus()));
+
+        String pagina = mockMvc.perform(get("/app").cookie(cookieAna))
+                .andReturn().getResponse().getContentAsString();
+        // A folha de estilo sempre declara a regra ".s-conectado{...}"; o que importa e'
+        // a classe de fato APLICADA ao status renderizado, nao a substring solta.
+        assertFalse(pagina.contains("class=\"status s-conectado\""),
+                "Falha na troca nao pode deixar o canal como conectado");
+        assertTrue(pagina.contains("class=\"status s-falhou\""),
+                "O status renderizado precisa ser FALHOU");
     }
 }

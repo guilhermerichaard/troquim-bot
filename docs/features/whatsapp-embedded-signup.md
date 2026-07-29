@@ -3,9 +3,9 @@
 Vínculo entre um tenant do TroQuim e a conta WhatsApp Business dele, via **Facebook
 Login for Business / WhatsApp Embedded Signup**.
 
-Estado atual: **backend pronto (Fases 1–2), sem UI**. Não existe superfície autenticada
-no produto — a landing é pública e o admin autentica por Bearer em header. A Fase 3 (o
-botão) depende de decidir onde vive o painel; ver §6.
+Estado atual: **completo e ligado ao `/app`** (dono autenticado por sessão). O botão
+"Conectar WhatsApp Business" vive na área privada do dono (ver `docs/ai/HANDOFF.md`,
+Fase 3), não mais só no endpoint administrativo.
 
 ## 1. Divisão pública/secreta
 
@@ -44,27 +44,53 @@ navegador                    backend                        Meta
 O `state` é validado **antes** de qualquer chamada à Meta: um code avulso, sem início
 correspondente naquele tenant, não gera sequer tráfego externo.
 
-## 3. Endpoints (todos sob `ROLE_ADMIN`)
+## 3. Endpoints — dois entrypoints, um serviço
 
-| Método | Rota | Devolve |
-| --- | --- | --- |
-| POST | `/api/v1/admin/whatsapp/connections/start` | `state`, `appId`, `configId`, `status` |
-| POST | `/api/v1/admin/whatsapp/connections/finish` | `status`, `wabaId`, `phoneNumberId` |
-| GET | `/api/v1/admin/whatsapp/connections/current` | `status`, `wabaId`, `phoneNumberId`, `conectado` |
+`ConectarWhatsAppChannelService` não resolve tenant sozinho: quem chama prova
+explicitamente de qual negócio e (quando houver) de qual dono está falando. Dois
+controllers chamam o mesmo serviço, sem duplicar nenhuma regra:
 
-`finish` aceita `{state, code, wabaId?, phoneNumberId?}`. Entrada inválida — corpo
-vazio, sem `state`, sem `code`, nonce desconhecido, vencido, já consumido ou de outro
-tenant — responde **400 seco, sem corpo**: distinguir os casos ajudaria quem estivesse
-sondando.
+| Método | Rota | Identidade | Devolve |
+| --- | --- | --- | --- |
+| POST | `/api/v1/admin/whatsapp/connections/start` | `ROLE_ADMIN` (Bearer) | `state`, `appId`, `configId`, `status` |
+| POST | `/api/v1/admin/whatsapp/connections/finish` | `ROLE_ADMIN` | `status`, `wabaId`, `phoneNumberId` |
+| GET | `/api/v1/admin/whatsapp/connections/current` | `ROLE_ADMIN` | `status`, `wabaId`, `phoneNumberId`, `conectado` |
+| DELETE | `/api/v1/admin/whatsapp/connections/current` | `ROLE_ADMIN` | `204` |
+| POST | `/api/v1/app/whatsapp/connection/start` | `ROLE_OWNER` (sessão) | `state`, `appId`, `configId`, `status` |
+| POST | `/api/v1/app/whatsapp/connection/finish` | `ROLE_OWNER` | `status`, `wabaId`, `phoneNumberId` |
+| DELETE | `/api/v1/app/whatsapp/connection` | `ROLE_OWNER` | `204` |
 
-Desligado (`enabled=false`), as três rotas respondem **503**.
+O caminho do dono (`/api/v1/app/**`) é o que a página `/app` usa de fato; o
+administrativo continua existindo para operação/suporte sem exigir login de dono.
+
+`finish` aceita `{state, code, wabaId?, phoneNumberId?}` no admin, e `{state, code}` no
+caminho do dono (WABA/phone number vêm da própria sessão do Embedded Signup nesse
+fluxo). Entrada inválida — corpo vazio, sem `state`, sem `code`, nonce desconhecido,
+vencido, já consumido, de outro tenant ou de outro dono — responde **400 seco, sem
+corpo**: distinguir os casos ajudaria quem estivesse sondando.
+
+Desligado (`enabled=false`), todas as rotas de conexão respondem **503**. Sem sessão
+válida, o caminho do dono responde **401/403** antes mesmo de checar a feature flag —
+`SecurityConfigDefaultDeny` barra em `/api/v1/app/**` como um todo.
 
 ## 4. Garantias
 
 - **Um tenant, uma conexão.** `business_id` é UNIQUE (V7). Reconectar reaproveita a
   linha; não acumula credencial antiga.
-- **Nonce de uso único.** Consumido na finalização e descartado também no fracasso —
-  repetir exige um novo início. Reiniciar invalida o nonce anterior no mesmo instante.
+- **Nonce de uso único, vinculado a negócio E dono.** Consumido na finalização e
+  descartado também no fracasso — repetir exige um novo início. Reiniciar invalida o
+  nonce anterior no mesmo instante. Quando iniciado por um dono autenticado, o nonce
+  também é amarrado ao `ownerUserId` (V10): finalizar com um dono diferente do que
+  iniciou é recusado igual a um nonce desconhecido — mesmo estando no tenant certo.
+- **"State assinado" — decisão de design.** O nonce é um valor aleatório de 256 bits
+  persistido (não um JWT/HMAC stateless). Escolha deliberada: dá a mesma garantia de
+  inforjabilidade de uma assinatura (256 bits de entropia são computacionalmente
+  impossíveis de adivinhar), soma expiração + vínculo a negócio e dono, e ganha algo que
+  um token assinado stateless não dá de graça — **revogação real no servidor** (o
+  `revogar` apaga a linha; um JWT assinado continuaria "válido" até expirar, a menos que
+  se mantivesse uma blocklist — reintroduzindo estado de qualquer forma). Também não
+  expõe claims (tenant/dono) no próprio valor do token, ao contrário de um JWT decodificável
+  no cliente.
 - **Credencial cifrada em repouso.** AES-256-GCM, IV novo por escrita, `key_version`
   gravado para permitir rotação. A chave vem de `TROQUIM_CHANNEL_CRYPTO_KEY` e não tem
   default: uma chave padrão em código valeria o mesmo que não cifrar.
@@ -72,9 +98,14 @@ Desligado (`enabled=false`), as três rotas respondem **503**.
   Meta, nenhum número é vinculado. Não há caminho automático em dev.
 - **Coexistência não é flag nossa.** Quando o número já pertence ao WhatsApp Business
   App, quem decide é a Meta, dentro do próprio Embedded Signup. O resultado chega pronto.
+- **Revogação real.** `revogar(businessId)` remove a linha por inteiro — o canal volta a
+  "não conectado", o mesmo estado de quem nunca conectou. Reconectar depois é um início
+  limpo, sem herdar WABA/phone number antigos.
 - **Segredo não vaza pelas saídas baratas.** `toString` de `ChannelConnection` e de
-  `EncryptedCredential` omite credencial e nonce; nenhum DTO de resposta tem campo de
-  token; os logs registram só tenant, status e o tipo da exceção.
+  `EncryptedCredential` omite credencial e nonce; nenhum DTO de resposta (JSON ou HTML)
+  tem campo de token ou de App Secret; os logs registram só tenant, status e o tipo da
+  exceção. Coberto ponta a ponta por `OwnerAppAccessTest` (HTML) e
+  `WhatsAppChannelConnectionEndpointTest`/`ChannelCredentialSigiloTest` (JSON/logs).
 
 ## 5. Pré-requisitos da Meta ainda necessários
 
@@ -99,29 +130,35 @@ Nada disto está no código — é configuração no painel da Meta e no `.env` 
 Itens 6–8 dependem de decisões que ainda não foram tomadas (onde a página será servida,
 qual número, qual WABA), então ficam registrados como pendência explícita.
 
-## 6. O que falta (Fase 3)
+## 6. A página (`/app`)
 
-O botão precisa de uma superfície **autenticada**: quem clica tem de estar associado a um
-tenant. Hoje não existe login em lugar nenhum do produto — a landing é pública e o admin
-usa Bearer em header, que navegador não envia sozinho num clique.
-
-Quando houver essa decisão, a página faz:
+`GET /app` (protegida por `ROLE_OWNER`) renderiza o botão e o JS do Embedded Signup
+inline — ver `OwnerAppPageRenderer`. O script só carrega o SDK da Meta
+(`connect.facebook.net/pt_BR/sdk.js`) **depois** do clique, nunca na carga da página:
 
 ```js
-FB.login(resposta => enviarAoBackend(resposta.authResponse.code, state), {
-  config_id: configId,            // veio do /start
-  response_type: 'code',
-  override_default_response_type: true,
-});
+fetch('/api/v1/app/whatsapp/connection/start', {method: 'POST'})
+  .then(r => r.json())
+  .then(inicio => {
+    // SDK da Meta carregado aqui, so' agora
+    FB.login(resposta => {
+      fetch('/api/v1/app/whatsapp/connection/finish', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({state: inicio.state, code: resposta.authResponse.code}),
+      }).then(() => window.location.reload());
+    }, {config_id: inicio.configId, response_type: 'code', override_default_response_type: true});
+  });
 ```
 
-e envia ao backend **apenas** `code` + `state`. Nenhuma regra de negócio no frontend:
-ele não decide status, não interpreta WABA e não conhece o App Secret.
+Nenhuma regra de negócio no frontend: ele não decide status, não interpreta WABA e não
+conhece o App Secret — só repassa `code` + `state` ao backend.
 
-## 7. Multi-tenancy: limite atual
+## 7. Multi-tenancy: resolvido via identidade do dono
 
-`PilotTenantProvider` devolve sempre o mesmo `TROQUIM_PILOT_BUSINESS_ID`. Os dados já
-são escopados por `business_id` e o isolamento está coberto por teste
-(`ChannelConnectionTenantIsolationTest`), mas enquanto não houver autenticação que
-resolva o tenant, na prática existe um só. O módulo está pronto para o dia em que houver
-mais — não é preciso remodelar nada, só trocar o `TenantProvider`.
+`OwnerAuthService` resolve o tenant de qualquer rota de `/app` a partir da SESSÃO do
+dono autenticado (ver Fase 2 em `docs/ai/HANDOFF.md`) — `PilotTenantProvider` não é mais
+usado neste caminho. O isolamento é coberto ponta a ponta por `OwnerAppAccessTest`
+(HTTP real: login → cookie → `/app`) e por unidade em `ChannelConnectionTenantIsolationTest`.
+O caminho administrativo (Bearer) continua usando `TenantProvider`, correto para um
+operador sem login de dono — os dois nunca se misturam porque o serviço não resolve
+tenant sozinho em nenhum dos dois casos.
