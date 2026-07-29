@@ -24,6 +24,7 @@ public class JpaChannelConnectionStore implements ChannelConnectionStore {
                 .orElseGet(() -> new WhatsAppChannelConnectionJpaEntity(
                         conexao.id(), conexao.businessId()));
 
+        entidade.setOwnerUserId(conexao.ownerUserId().orElse(null));
         entidade.setStatus(conexao.status());
         entidade.setStateToken(conexao.stateToken().orElse(null));
         entidade.setStateExpiraEm(conexao.stateExpiraEm().orElse(null));
@@ -62,6 +63,14 @@ public class JpaChannelConnectionStore implements ChannelConnectionStore {
         return repository.findByStateToken(stateToken).map(JpaChannelConnectionStore::paraConexao);
     }
 
+    @Override
+    public void remover(UUID businessId) {
+        if (businessId == null) {
+            return;
+        }
+        repository.findByBusinessId(businessId).ifPresent(repository::delete);
+    }
+
     private static ChannelConnection paraConexao(WhatsAppChannelConnectionJpaEntity e) {
         Optional<EncryptedCredential> credencial =
                 e.getCredencialCifrada() == null || e.getCredencialIv() == null
@@ -73,6 +82,7 @@ public class JpaChannelConnectionStore implements ChannelConnectionStore {
         return new ChannelConnection(
                 e.getId(),
                 e.getBusinessId(),
+                Optional.ofNullable(e.getOwnerUserId()),
                 e.getStatus(),
                 Optional.ofNullable(e.getStateToken()),
                 Optional.ofNullable(e.getStateExpiraEm()),

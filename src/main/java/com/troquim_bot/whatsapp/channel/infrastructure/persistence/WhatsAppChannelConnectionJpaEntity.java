@@ -32,6 +32,9 @@ public class WhatsAppChannelConnectionJpaEntity {
     @Column(name = "business_id", nullable = false, unique = true)
     private UUID businessId;
 
+    @Column(name = "owner_user_id")
+    private UUID ownerUserId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private ChannelConnectionStatus status;
@@ -81,6 +84,14 @@ public class WhatsAppChannelConnectionJpaEntity {
 
     public UUID getBusinessId() {
         return businessId;
+    }
+
+    public UUID getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public void setOwnerUserId(UUID ownerUserId) {
+        this.ownerUserId = ownerUserId;
     }
 
     public ChannelConnectionStatus getStatus() {

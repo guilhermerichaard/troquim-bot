@@ -24,4 +24,7 @@ public interface ChannelConnectionStore {
      * Service antes de qualquer escrita.
      */
     Optional<ChannelConnection> buscarPorState(String stateToken);
+
+    /** Remove a conexão do tenant. Efeito de {@code revogar}: volta a "não conectado". */
+    void remover(UUID businessId);
 }

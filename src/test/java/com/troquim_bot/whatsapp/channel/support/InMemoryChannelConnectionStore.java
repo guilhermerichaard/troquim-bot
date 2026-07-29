@@ -40,6 +40,11 @@ public class InMemoryChannelConnectionStore implements ChannelConnectionStore {
                 .findFirst();
     }
 
+    @Override
+    public void remover(UUID businessId) {
+        porId.values().removeIf(c -> c.pertenceAoTenant(businessId));
+    }
+
     public int total() {
         return porId.size();
     }

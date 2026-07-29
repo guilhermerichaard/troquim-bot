@@ -4,6 +4,7 @@ import com.troquim_bot.whatsapp.channel.application.ChannelConnection;
 import com.troquim_bot.whatsapp.channel.application.ChannelConnectionStatus;
 import com.troquim_bot.whatsapp.channel.application.ConectarWhatsAppChannelService;
 import com.troquim_bot.whatsapp.channel.application.ConectarWhatsAppChannelService.ConexaoInvalidaException;
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.whatsapp.channel.infrastructure.meta.MetaEmbeddedSignupProperties;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,11 +37,14 @@ public class WhatsAppChannelConnectionController {
 
     private final ConectarWhatsAppChannelService service;
     private final MetaEmbeddedSignupProperties properties;
+    private final TenantProvider tenantProvider;
 
     public WhatsAppChannelConnectionController(ConectarWhatsAppChannelService service,
-                                               MetaEmbeddedSignupProperties properties) {
+                                               MetaEmbeddedSignupProperties properties,
+                                               TenantProvider tenantProvider) {
         this.service = service;
         this.properties = properties;
+        this.tenantProvider = tenantProvider;
     }
 
     /**
@@ -54,7 +58,7 @@ public class WhatsAppChannelConnectionController {
         if (!properties.isEnabled()) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
-        var resultado = service.iniciar();
+        var resultado = service.iniciar(tenantProvider.currentBusinessId().getValue(), Optional.empty());
         return ResponseEntity.ok(new IniciarResponse(
                 resultado.state(),
                 properties.getAppId(),
@@ -76,6 +80,7 @@ public class WhatsAppChannelConnectionController {
             return ResponseEntity.badRequest().build();
         }
         var resultado = service.finalizar(
+                tenantProvider.currentBusinessId().getValue(), Optional.empty(),
                 request.state().trim(),
                 request.code().trim(),
                 normalizar(request.wabaId()),
@@ -90,7 +95,7 @@ public class WhatsAppChannelConnectionController {
     /** Status corrente do canal do tenant. Nunca inclui credencial. */
     @GetMapping("/current")
     public ResponseEntity<StatusResponse> atual() {
-        Optional<ChannelConnection> conexao = service.consultar();
+        Optional<ChannelConnection> conexao = service.consultar(tenantProvider.currentBusinessId().getValue());
         if (conexao.isEmpty()) {
             return ResponseEntity.ok(new StatusResponse(null, null, null, false));
         }
@@ -100,6 +105,13 @@ public class WhatsAppChannelConnectionController {
                 c.wabaId().orElse(null),
                 c.phoneNumberId().orElse(null),
                 c.status() == ChannelConnectionStatus.CONECTADO));
+    }
+
+    /** Revoga a conexão do tenant. Idempotente: já revogada continua 204. */
+    @org.springframework.web.bind.annotation.DeleteMapping("/current")
+    public ResponseEntity<Void> revogar() {
+        service.revogar(tenantProvider.currentBusinessId().getValue());
+        return ResponseEntity.noContent().build();
     }
 
     /**

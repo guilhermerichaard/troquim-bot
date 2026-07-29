@@ -43,3 +43,21 @@ do request. `/app/**` e `/api/v1/app/**` agora exigem `ROLE_OWNER` em
   antes do commit — colidiriam na versão do Flyway).
 - Testes: `OwnerAuthIsolationTest` (8) verde.
 - SHA local: 3e34216
+
+## Fase 3 — /app privado mínimo  [CONCLUÍDA]
+`GET /app`: nome do negócio, próximos agendamentos, status do canal WhatsApp, botão
+"Conectar WhatsApp Business". HTML server-rendered (sem template engine, sem novo
+projeto de frontend). `OwnerDashboardService` compõe `AgendaDoNegocioService` (mesma
+fronteira do Flow), `CustomerApplicationService` e `ConectarWhatsAppChannelService` —
+não decide nada, só agrega.
+- Refatoração pré-requisito: `ConectarWhatsAppChannelService` deixou de resolver tenant
+  sozinho (`TenantProvider` removido do serviço); `iniciar/finalizar/consultar/revogar`
+  agora recebem `BusinessId` explícito. Dois entrypoints sobre o mesmo serviço, sem
+  regra duplicada: admin (Bearer) e `OwnerChannelConnectionController` (sessão do dono)
+  em `/api/v1/app/whatsapp/connection/*`.
+- `ChannelConnection` ganhou `ownerUserId` opcional (V10): o nonce do Embedded Signup
+  passa a ser amarrado a QUEM iniciou, não só a qual negócio. Novo `revogar(businessId)`
+  remove a linha — status volta a "não conectado".
+- Testes: `OwnerAppAccessTest` (5) + 2 novos em `ChannelConnectionTenantIsolationTest`
+  (vínculo de dono, revogação). Suíte completa: 826 verde.
+- SHA local: a5a057d

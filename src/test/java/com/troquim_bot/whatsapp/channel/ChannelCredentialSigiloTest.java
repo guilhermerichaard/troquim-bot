@@ -48,14 +48,14 @@ class ChannelCredentialSigiloTest {
         InMemoryChannelConnectionStore store = new InMemoryChannelConnectionStore();
         var service = new ConectarWhatsAppChannelService(
                 store, new FakeChannelCredentialCipher(),
-                new FakeMetaOAuthGateway(TOKEN), TestTenants.pilot());
+                new FakeMetaOAuthGateway(TOKEN));
 
-        var inicio = service.iniciar();
+        var inicio = service.iniciar(TestTenants.PILOT.getValue(), java.util.Optional.empty());
         ChannelConnection pendente = store.buscarPorTenant(TestTenants.PILOT.getValue()).orElseThrow();
         assertFalse(pendente.toString().contains(inicio.state()),
                 "O nonce nao pode aparecer no toString");
 
-        service.finalizar(inicio.state(), "code-valido", "waba-1", "phone-1");
+        service.finalizar(TestTenants.PILOT.getValue(), java.util.Optional.empty(), inicio.state(), "code-valido", "waba-1", "phone-1");
         ChannelConnection conectada = store.buscarPorTenant(TestTenants.PILOT.getValue()).orElseThrow();
 
         String texto = conectada.toString();

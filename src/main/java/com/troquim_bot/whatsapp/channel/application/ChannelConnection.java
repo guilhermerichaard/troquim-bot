@@ -17,6 +17,7 @@ import java.util.UUID;
  */
 public record ChannelConnection(UUID id,
                                 UUID businessId,
+                                Optional<UUID> ownerUserId,
                                 ChannelConnectionStatus status,
                                 Optional<String> stateToken,
                                 Optional<LocalDateTime> stateExpiraEm,
@@ -27,10 +28,17 @@ public record ChannelConnection(UUID id,
                                 LocalDateTime criadoEm,
                                 LocalDateTime atualizadoEm) {
 
-    /** Início do Embedded Signup: reserva o tenant e emite o nonce. */
-    public static ChannelConnection pendente(UUID id, UUID businessId, String stateToken,
+    /**
+     * Início do Embedded Signup: reserva o tenant e emite o nonce.
+     *
+     * {@code ownerUserId} amarra o nonce a QUEM iniciou, além do negócio: a finalização
+     * exige o mesmo dono, não só o mesmo tenant. Vazio quando iniciado por um caminho
+     * sem identidade de dono (ex.: operação administrativa).
+     */
+    public static ChannelConnection pendente(UUID id, UUID businessId, Optional<UUID> ownerUserId,
+                                             String stateToken,
                                              LocalDateTime stateExpiraEm, LocalDateTime agora) {
-        return new ChannelConnection(id, businessId, ChannelConnectionStatus.PENDENTE,
+        return new ChannelConnection(id, businessId, ownerUserId, ChannelConnectionStatus.PENDENTE,
                 Optional.of(stateToken), Optional.of(stateExpiraEm),
                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                 agora, agora);
@@ -42,7 +50,7 @@ public record ChannelConnection(UUID id,
      */
     public ChannelConnection conectada(String wabaId, String phoneNumberId,
                                        EncryptedCredential credencial, LocalDateTime agora) {
-        return new ChannelConnection(id, businessId, ChannelConnectionStatus.CONECTADO,
+        return new ChannelConnection(id, businessId, ownerUserId, ChannelConnectionStatus.CONECTADO,
                 Optional.empty(), Optional.empty(),
                 Optional.ofNullable(wabaId), Optional.ofNullable(phoneNumberId),
                 Optional.of(credencial), Optional.empty(), criadoEm, agora);
@@ -53,7 +61,7 @@ public record ChannelConnection(UUID id,
      * início, senão um code recusado poderia ser repetido indefinidamente.
      */
     public ChannelConnection falhou(String motivo, LocalDateTime agora) {
-        return new ChannelConnection(id, businessId, ChannelConnectionStatus.FALHOU,
+        return new ChannelConnection(id, businessId, ownerUserId, ChannelConnectionStatus.FALHOU,
                 Optional.empty(), Optional.empty(), wabaId, phoneNumberId, credencial,
                 Optional.ofNullable(motivo), criadoEm, agora);
     }
@@ -67,6 +75,11 @@ public record ChannelConnection(UUID id,
 
     public boolean pertenceAoTenant(UUID businessId) {
         return businessId != null && businessId.equals(this.businessId);
+    }
+
+    /** O nonce foi emitido para este dono? Ausente = iniciado sem identidade de dono. */
+    public boolean pertenceAoDono(UUID ownerUserId) {
+        return ownerUserId != null && this.ownerUserId.map(ownerUserId::equals).orElse(false);
     }
 
     /**

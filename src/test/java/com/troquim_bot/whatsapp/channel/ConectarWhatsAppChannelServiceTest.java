@@ -36,13 +36,13 @@ class ConectarWhatsAppChannelServiceTest {
         store = new InMemoryChannelConnectionStore();
         gateway = new FakeMetaOAuthGateway("token-da-meta");
         service = new ConectarWhatsAppChannelService(
-                store, new FakeChannelCredentialCipher(), gateway, TestTenants.pilot());
+                store, new FakeChannelCredentialCipher(), gateway);
     }
 
     @Test
     @DisplayName("iniciar registra PENDENTE e emite um nonce; nada e' conectado")
     void iniciarNaoConectaNada() {
-        var resultado = service.iniciar();
+        var resultado = service.iniciar(TestTenants.PILOT.getValue(), java.util.Optional.empty());
 
         assertEquals(ChannelConnectionStatus.PENDENTE, resultado.status());
         assertFalse(resultado.state().isBlank());
@@ -56,9 +56,9 @@ class ConectarWhatsAppChannelServiceTest {
     @Test
     @DisplayName("fluxo completo: finalizar cifra a credencial e marca CONECTADO")
     void fluxoCompleto() {
-        var inicio = service.iniciar();
+        var inicio = service.iniciar(TestTenants.PILOT.getValue(), java.util.Optional.empty());
 
-        var fim = service.finalizar(inicio.state(), "code-valido", "waba-1", "phone-1");
+        var fim = service.finalizar(TestTenants.PILOT.getValue(), java.util.Optional.empty(), inicio.state(), "code-valido", "waba-1", "phone-1");
 
         assertEquals(ChannelConnectionStatus.CONECTADO, fim.status());
         assertEquals("waba-1", fim.wabaId().orElseThrow());
@@ -73,21 +73,21 @@ class ConectarWhatsAppChannelServiceTest {
     @Test
     @DisplayName("state desconhecido e' recusado sem chamar a Meta")
     void stateDesconhecido() {
-        service.iniciar();
+        service.iniciar(TestTenants.PILOT.getValue(), java.util.Optional.empty());
 
         assertThrows(ConexaoInvalidaException.class,
-                () -> service.finalizar("state-inventado", "code-valido", null, null));
+                () -> service.finalizar(TestTenants.PILOT.getValue(), java.util.Optional.empty(), "state-inventado", "code-valido", null, null));
         assertEquals(0, gateway.chamadas());
     }
 
     @Test
     @DisplayName("o mesmo nonce nao serve duas vezes (replay)")
     void nonceNaoServeDuasVezes() {
-        var inicio = service.iniciar();
-        service.finalizar(inicio.state(), "code-valido", "waba-1", "phone-1");
+        var inicio = service.iniciar(TestTenants.PILOT.getValue(), java.util.Optional.empty());
+        service.finalizar(TestTenants.PILOT.getValue(), java.util.Optional.empty(), inicio.state(), "code-valido", "waba-1", "phone-1");
 
         assertThrows(ConexaoInvalidaException.class,
-                () -> service.finalizar(inicio.state(), "code-valido", "waba-1", "phone-1"),
+                () -> service.finalizar(TestTenants.PILOT.getValue(), java.util.Optional.empty(), inicio.state(), "code-valido", "waba-1", "phone-1"),
                 "Reapresentar o nonce ja consumido deve falhar");
     }
 
@@ -96,12 +96,12 @@ class ConectarWhatsAppChannelServiceTest {
     void codeRecusado() {
         ConectarWhatsAppChannelService comRecusa = new ConectarWhatsAppChannelService(
                 store, new FakeChannelCredentialCipher(),
-                FakeMetaOAuthGateway.queRecusa(), TestTenants.pilot());
+                FakeMetaOAuthGateway.queRecusa());
 
-        var inicio = comRecusa.iniciar();
+        var inicio = comRecusa.iniciar(TestTenants.PILOT.getValue(), java.util.Optional.empty());
 
         assertThrows(ConexaoInvalidaException.class,
-                () -> comRecusa.finalizar(inicio.state(), "code-ruim", null, null));
+                () -> comRecusa.finalizar(TestTenants.PILOT.getValue(), java.util.Optional.empty(), inicio.state(), "code-ruim", null, null));
 
         ChannelConnection conexao = store.buscarPorTenant(TestTenants.PILOT.getValue()).orElseThrow();
         assertEquals(ChannelConnectionStatus.FALHOU, conexao.status());
@@ -113,15 +113,15 @@ class ConectarWhatsAppChannelServiceTest {
     @Test
     @DisplayName("reiniciar reaproveita a linha do tenant e invalida o nonce anterior")
     void reiniciarInvalidaNonceAnterior() {
-        var primeiro = service.iniciar();
-        var segundo = service.iniciar();
+        var primeiro = service.iniciar(TestTenants.PILOT.getValue(), java.util.Optional.empty());
+        var segundo = service.iniciar(TestTenants.PILOT.getValue(), java.util.Optional.empty());
 
         assertEquals(1, store.total(), "Um tenant tem no maximo uma conexao");
         assertThrows(ConexaoInvalidaException.class,
-                () -> service.finalizar(primeiro.state(), "code-valido", null, null),
+                () -> service.finalizar(TestTenants.PILOT.getValue(), java.util.Optional.empty(), primeiro.state(), "code-valido", null, null),
                 "O nonce antigo deixa de valer assim que outro e' emitido");
 
-        var fim = service.finalizar(segundo.state(), "code-valido", null, null);
+        var fim = service.finalizar(TestTenants.PILOT.getValue(), java.util.Optional.empty(), segundo.state(), "code-valido", null, null);
         assertEquals(ChannelConnectionStatus.CONECTADO, fim.status());
     }
 }
