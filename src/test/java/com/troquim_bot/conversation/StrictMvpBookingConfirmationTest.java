@@ -1,5 +1,6 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.support.TestDias;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.booking.BookingApplicationService;
@@ -30,6 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Customer, Reservation e Appointment persistidos e finalizar o estado.
  */
 class StrictMvpBookingConfirmationTest {
+
+    /** Dia util sempre futuro: o teste nao pode depender do dia/hora reais (ver TestDias). */
+    private static final String DIA = TestDias.futuroComAgenda();
 
     private ReservationApplicationService reservationApp;
     private AppointmentApplicationService appointmentApp;
@@ -70,7 +74,7 @@ class StrictMvpBookingConfirmationTest {
         enviar(numero, "oi");      // menu principal
         enviar(numero, "1");       // agendar
         enviar(numero, "cabelo");  // serviço
-        enviar(numero, "sexta");   // dia
+        enviar(numero, DIA);   // dia
         enviar(numero, "5");       // horário índice 5 = 13:00
         enviar(numero, "Maria");   // nome
     }

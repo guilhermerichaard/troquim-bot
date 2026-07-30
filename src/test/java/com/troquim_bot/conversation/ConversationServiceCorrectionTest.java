@@ -1,5 +1,6 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.support.TestDias;
 import com.troquim_bot.ai.config.AiConfiguration;
 import com.troquim_bot.ai.intent.IntentService;
 import com.troquim_bot.ai.llm.OllamaService;
@@ -28,16 +29,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ConversationServiceCorrectionTest {
 
+    /** Dia util sempre futuro: o teste nao pode depender do dia/hora reais (ver TestDias). */
+    private static final String DIA = TestDias.futuroComAgenda();
+
     @Test
     void agendaDepoisQualMeuAgendamentoRetornaAppointmentReal() {
         Fixture fixture = criarFixtureComNome("5511000000001");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
-        assertEquals("Você tem um agendamento para unha na segunda às 13h.",
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 13h.",
                 fixture.conversationService.gerarResposta(fixture.numero, "qual meu agendamento"));
     }
 
@@ -46,10 +50,10 @@ class ConversationServiceCorrectionTest {
         Fixture fixture = criarFixtureComNome("5511000000002");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
-        assertEquals("Você tem um agendamento para unha na segunda às 13h.",
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 13h.",
                 fixture.conversationService.gerarResposta(fixture.numero, "agendei?"));
     }
 
@@ -58,10 +62,10 @@ class ConversationServiceCorrectionTest {
         Fixture fixture = criarFixtureComNome("5511000000003");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
-        assertEquals("Você tem um agendamento para unha na segunda às 13h.",
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 13h.",
                 fixture.conversationService.gerarResposta(fixture.numero, "pode verificar se eu agendei unha?"));
     }
 
@@ -70,9 +74,9 @@ class ConversationServiceCorrectionTest {
         Fixture fixture = criarFixtureComNome("5511000000004");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "segunda às 13");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, DIA + " às 13");
 
-        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na " + DIA + " às 13h foi reservado.", resposta);
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
     }
 
@@ -80,9 +84,9 @@ class ConversationServiceCorrectionTest {
     void segundaUnhaAs13CriaBookingReal() {
         Fixture fixture = criarFixtureComNome("5511000000005");
 
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "segunda unha às 13");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, DIA + " unha às 13");
 
-        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na " + DIA + " às 13h foi reservado.", resposta);
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
     }
 
@@ -90,9 +94,9 @@ class ConversationServiceCorrectionTest {
     void unhaSegundaAs13CriaBookingReal() {
         Fixture fixture = criarFixtureComNome("5511000000006");
 
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "unha segunda às 13");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "unha " + DIA + " às 13");
 
-        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na " + DIA + " às 13h foi reservado.", resposta);
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
     }
 
@@ -101,20 +105,20 @@ class ConversationServiceCorrectionTest {
         Fixture fixture = criarFixtureComNome("5511000000007");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "segunda às 13");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, DIA + " às 13");
 
         assertFalse(resposta.contains("Como você prefere que eu te chame?"));
-        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na " + DIA + " às 13h foi reservado.", resposta);
     }
 
     @Test
     void dadosCompletosNaoRetornamTextoAntigoDeDisponibilidade() {
         Fixture fixture = criarFixtureComNome("5511000000008");
 
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "agendar unha segunda às 13");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "agendar unha " + DIA + " às 13");
 
         assertFalse(resposta.toLowerCase().contains("vou verificar"));
-        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 13h foi reservado.", resposta);
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na " + DIA + " às 13h foi reservado.", resposta);
     }
 
     @Test
@@ -152,8 +156,8 @@ class ConversationServiceCorrectionTest {
     void temHorarioParaServicoEDiaConsultaDisponibilidadeReal() {
         Fixture fixture = criarFixtureSemNome("5511000000013");
 
-        assertEquals("Tenho horários para unha na segunda: 9h, 10h, 11h, 12h, 13h, 14h, 15h, 16h e 17h.",
-                fixture.conversationService.gerarResposta(fixture.numero, "Tem horário para unha segunda?"));
+        assertEquals("Tenho horários para unha na " + DIA + ": 9h, 10h, 11h, 12h, 13h, 14h, 15h, 16h e 17h.",
+                fixture.conversationService.gerarResposta(fixture.numero, "Tem horário para unha " + DIA + "?"));
     }
 
     @Test

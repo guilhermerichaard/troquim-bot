@@ -1,5 +1,6 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.support.TestDias;
 import com.troquim_bot.ai.config.AiConfiguration;
 import com.troquim_bot.ai.intent.IntentService;
 import com.troquim_bot.ai.llm.OllamaService;
@@ -29,6 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConversationServiceRegressionTest {
+
+    /** Dia util sempre futuro: o teste nao pode depender do dia/hora reais (ver TestDias). */
+    private static final String DIA = TestDias.futuroComAgenda();
 
     // Cenário 1: Sábado às 17h deve ser recusado
     @Test
@@ -88,14 +92,14 @@ class ConversationServiceRegressionTest {
         Fixture fixture = criarFixtureComNome("5511000000005", "Gui");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         String resposta1 = fixture.conversationService.gerarResposta(fixture.numero, "Meu agendamento");
-        assertEquals("Você tem um agendamento para unha na segunda às 13h.", resposta1);
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 13h.", resposta1);
 
         String resposta2 = fixture.conversationService.gerarResposta(fixture.numero, "Agendei?");
-        assertEquals("Você tem um agendamento para unha na segunda às 13h.", resposta2);
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 13h.", resposta2);
     }
 
     // Cenário 6: Agendamento válido deve confirmar de verdade
@@ -103,10 +107,10 @@ class ConversationServiceRegressionTest {
     void agendamentoValidoConfirmaDeVerdade() {
         Fixture fixture = criarFixtureComNome("5511000000006", "Gui");
 
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "Agendar unha terça 13");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "Agendar unha " + DIA + " 13");
 
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
-        assertEquals("Perfeito, Gui. Seu horário para unha na terça às 13h foi reservado.", resposta);
+        assertEquals("Perfeito, Gui. Seu horário para unha na " + DIA + " às 13h foi reservado.", resposta);
         assertFalse(resposta.toLowerCase().contains("estou registrando sua solicitação"));
     }
 

@@ -1,5 +1,6 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.support.TestDias;
 import com.troquim_bot.ai.config.AiConfiguration;
 import com.troquim_bot.ai.intent.IntentService;
 import com.troquim_bot.ai.llm.OllamaService;
@@ -28,6 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConversationServiceCancelamentoTest {
 
+    /** Dia util sempre futuro: o teste nao pode depender do dia/hora reais (ver TestDias). */
+    private static final String DIA = TestDias.futuroComAgenda();
+    /** Segundo dia util futuro, distinto de DIA. */
+    private static final String OUTRO_DIA = TestDias.outroFuturoComAgenda();
+
     @Test
     void cancelarAgendamentoSemAgendamentoAtivo() {
         Fixture fixture = criarFixtureSemNome("5511000000001");
@@ -43,7 +49,7 @@ class ConversationServiceCancelamentoTest {
 
         // Cria um agendamento
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
@@ -61,12 +67,12 @@ class ConversationServiceCancelamentoTest {
 
         // Cria primeiro agendamento
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         // Cria segundo agendamento
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar cabelo");
-        fixture.conversationService.gerarResposta(fixture.numero, "terça");
+        fixture.conversationService.gerarResposta(fixture.numero, OUTRO_DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "14h");
 
         assertEquals(2, fixture.appointmentApplicationService.listarTodos().size());
@@ -86,7 +92,7 @@ class ConversationServiceCancelamentoTest {
         Fixture fixture = criarFixtureComNome("5511000000004");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         String resposta = fixture.conversationService.gerarResposta(fixture.numero, "cancelar");
@@ -99,7 +105,7 @@ class ConversationServiceCancelamentoTest {
         Fixture fixture = criarFixtureComNome("5511000000005");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         String resposta = fixture.conversationService.gerarResposta(fixture.numero, "excluir agendamento");
@@ -112,7 +118,7 @@ class ConversationServiceCancelamentoTest {
         Fixture fixture = criarFixtureComNome("5511000000006");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         String resposta = fixture.conversationService.gerarResposta(fixture.numero, "apagar agendamento");

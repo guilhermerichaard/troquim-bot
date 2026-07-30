@@ -1,5 +1,6 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.support.TestDias;
 import com.troquim_bot.ai.config.AiConfiguration;
 import com.troquim_bot.ai.intent.IntentService;
 import com.troquim_bot.ai.llm.OllamaService;
@@ -34,6 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ConversationServiceCustomerProfileTest {
 
+    /** Dia util sempre futuro: o teste nao pode depender do dia/hora reais (ver TestDias). */
+    private static final String DIA = TestDias.futuroComAgenda();
+
     @Test
     void salvaNomeEUsaPerfilEmAtendimentosFuturos() {
         InMemoryCustomerRepository repository = new InMemoryCustomerRepository();
@@ -65,10 +69,10 @@ class ConversationServiceCustomerProfileTest {
 
         conversationService.gerarResposta(numero, "Oi");
         conversationService.gerarResposta(numero, "quero manicure");
-        conversationService.gerarResposta(numero, "sexta");
+        conversationService.gerarResposta(numero, DIA);
         String resposta = conversationService.gerarResposta(numero, "16h");
 
-        assertEquals("Perfeito, Guilherme. Seu horário para manicure na sexta às 16h foi reservado.", resposta);
+        assertEquals("Perfeito, Guilherme. Seu horário para manicure na " + DIA + " às 16h foi reservado.", resposta);
     }
 
     @Test
@@ -103,10 +107,10 @@ class ConversationServiceCustomerProfileTest {
         customerProfileService.salvarNome(numero, "Guilherme");
 
         conversationService.gerarResposta(numero, "quero unha");
-        conversationService.gerarResposta(numero, "segunda");
+        conversationService.gerarResposta(numero, DIA);
         String resposta = conversationService.gerarResposta(numero, "10h");
 
-        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 10h foi reservado.", resposta);
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na " + DIA + " às 10h foi reservado.", resposta);
 
         assertEquals(1, reservationApplicationService.listarTodos().size());
         Reservation reservation = reservationApplicationService.listarTodos().get(0);
@@ -148,10 +152,10 @@ class ConversationServiceCustomerProfileTest {
 
         String numero = "5511777777777";
         customerProfileService.salvarNome(numero, "Guilherme");
-        scheduleService.reservarHorario("segunda", "10:00", "5511000000000");
+        scheduleService.reservarHorario(DIA, "10:00", "5511000000000");
 
         conversationService.gerarResposta(numero, "quero unha");
-        conversationService.gerarResposta(numero, "segunda");
+        conversationService.gerarResposta(numero, DIA);
         String resposta = conversationService.gerarResposta(numero, "10h");
 
         assertEquals("Esse horário não está disponível. Qual outro horário você prefere?", resposta);
@@ -163,7 +167,7 @@ class ConversationServiceCustomerProfileTest {
         AppointmentDraft draft = state.getDraftAtual();
         assertNotNull(draft);
         assertEquals("unha", draft.getServico());
-        assertEquals("segunda", draft.getDia());
+        assertEquals(DIA, draft.getDia());
         assertNull(draft.getHorario());
         assertEquals(ConversationStep.AGUARDANDO_HORARIO, state.getStep());
     }
@@ -198,16 +202,16 @@ class ConversationServiceCustomerProfileTest {
 
         String numero = "5511333333333";
         customerProfileService.salvarNome(numero, "Guilherme");
-        scheduleService.reservarHorario("segunda", "10:00", "5511000000000");
+        scheduleService.reservarHorario(DIA, "10:00", "5511000000000");
 
         cs.gerarResposta(numero, "quero unha");
-        cs.gerarResposta(numero, "segunda");
+        cs.gerarResposta(numero, DIA);
         assertEquals("Esse horário não está disponível. Qual outro horário você prefere?",
                 cs.gerarResposta(numero, "10h"));
 
         String resposta = cs.gerarResposta(numero, "11h");
 
-        assertEquals("Perfeito, Guilherme. Seu horário para unha na segunda às 11h foi reservado.", resposta);
+        assertEquals("Perfeito, Guilherme. Seu horário para unha na " + DIA + " às 11h foi reservado.", resposta);
         assertEquals(1, aas.listarTodos().size());
         assertEquals(1, rsv.listarTodos().size());
     }
@@ -224,7 +228,7 @@ class ConversationServiceCustomerProfileTest {
         String numero = "5511444444444";
 
         conversationService.gerarResposta(numero, "quero unha");
-        conversationService.gerarResposta(numero, "segunda");
+        conversationService.gerarResposta(numero, DIA);
         String respostaAntesDoNome = conversationService.gerarResposta(numero, "15h");
 
         assertEquals("Perfeito. Como você prefere que eu te chame?", respostaAntesDoNome);
@@ -232,7 +236,7 @@ class ConversationServiceCustomerProfileTest {
 
         String respostaComNome = conversationService.gerarResposta(numero, "Meu nome é Ana");
 
-        assertEquals("Perfeito, Ana. Seu horário para unha na segunda às 15h foi reservado.", respostaComNome);
+        assertEquals("Perfeito, Ana. Seu horário para unha na " + DIA + " às 15h foi reservado.", respostaComNome);
         assertEquals(0, appointmentService.listarAgendamentosDoCliente(numero).size());
     }
 
@@ -246,13 +250,13 @@ class ConversationServiceCustomerProfileTest {
         customerProfileService.salvarNome(numero, "Guilherme");
 
         conversationService.gerarResposta(numero, "quero unha");
-        conversationService.gerarResposta(numero, "segunda");
+        conversationService.gerarResposta(numero, DIA);
         conversationService.gerarResposta(numero, "15h");
 
         assertEquals("Boa tarde, Guilherme! Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
         assertEquals("Seu nome está salvo como Guilherme.", conversationService.gerarResposta(numero, "Qual meu nome?"));
         assertEquals("Lembro sim, Guilherme. Como posso ajudar?", conversationService.gerarResposta(numero, "Lembra de mim?"));
-        assertEquals("Você tem um agendamento para unha na segunda às 15h.",
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 15h.",
                 conversationService.gerarResposta(numero, "Agendou mesmo?"));
     }
 
@@ -267,17 +271,17 @@ class ConversationServiceCustomerProfileTest {
         customerProfileService.salvarNome(numero, "Guilherme");
 
         conversationService.gerarResposta(numero, "quero unha");
-        conversationService.gerarResposta(numero, "terça");
+        conversationService.gerarResposta(numero, DIA);
         conversationService.gerarResposta(numero, "15h");
 
         assertEquals(0, appointmentService.listarAgendamentosDoCliente(numero).size());
-        assertEquals("Você tem um agendamento para unha na terça às 15h.",
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 15h.",
                 conversationService.gerarResposta(numero, "qual meu agendamento?"));
-        assertEquals("Você tem um agendamento para unha na terça às 15h.",
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 15h.",
                 conversationService.gerarResposta(numero, "qual horário?"));
-        assertEquals("Você tem um agendamento para unha na terça às 15h.",
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 15h.",
                 conversationService.gerarResposta(numero, "qual serviço?"));
-        assertEquals("Você tem um agendamento para unha na terça às 15h.",
+        assertEquals("Você tem um agendamento para unha na " + DIA + " às 15h.",
                 conversationService.gerarResposta(numero, "marquei para quando?"));
     }
 

@@ -1,5 +1,6 @@
 package com.troquim_bot.customer;
 
+import com.troquim_bot.support.TestDias;
 import com.troquim_bot.ai.intent.IntentType;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
@@ -38,6 +39,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * mesmo id — nunca {@code CustomerId.fromPhone}.
  */
 class CustomerIdentityConsolidationTest {
+
+    /** Dia util sempre futuro: o teste nao pode depender do dia/hora reais (ver TestDias). */
+    private static final String DIA = TestDias.futuroComAgenda();
 
     private static final PhoneNumber PHONE = new PhoneNumber("5511900000001");
 
@@ -103,7 +107,7 @@ class CustomerIdentityConsolidationTest {
         BookingApplicationService booking = new BookingApplicationService(TestTenants.pilot(), reservationApp, appointmentApp, profiles,
                 new InMemoryBookingIdempotencyStore());
 
-        BookingResult resultado = booking.confirmar("5511900000001", "Maria Silva", "cabelo", "sexta", "13h");
+        BookingResult resultado = booking.confirmar("5511900000001", "Maria Silva", "cabelo", DIA, "13h");
         assertTrue(resultado.isConfirmado(), "O agendamento deveria ser confirmado");
 
         CustomerId oficial = customerRepository.findByBusinessAndPhone(TestTenants.PILOT, PHONE)

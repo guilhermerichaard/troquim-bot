@@ -1,5 +1,6 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.support.TestDias;
 import com.troquim_bot.ai.config.AiConfiguration;
 import com.troquim_bot.ai.intent.IntentService;
 import com.troquim_bot.ai.llm.OllamaService;
@@ -27,6 +28,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ConversationServiceUXRegressionTest {
 
+    /** Dia util sempre futuro: o teste nao pode depender do dia/hora reais (ver TestDias). */
+    private static final String DIA = TestDias.futuroComAgenda();
+
     @Test
     void agendarUnhaNaoReutilizaDiaHorarioAntigo() {
         // Cenário 1: "agendar unha" não pode reutilizar dia/horário antigo
@@ -34,7 +38,7 @@ class ConversationServiceUXRegressionTest {
 
         // Primeiro agendamento completo
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
@@ -48,10 +52,10 @@ class ConversationServiceUXRegressionTest {
 
     @Test
     void unhaSegundaAs13ReservaDiretamente() {
-        // Cenário 2: "unha segunda as 13" deve reservar diretamente
+        // Cenário 2: "unha " + DIA + " as 13" deve reservar diretamente
         Fixture fixture = criarFixtureComNome("5511000000002");
 
-        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "unha segunda as 13");
+        String resposta = fixture.conversationService.gerarResposta(fixture.numero, "unha " + DIA + " as 13");
 
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size(),
             "Deve criar um agendamento");
@@ -66,7 +70,7 @@ class ConversationServiceUXRegressionTest {
 
         // Inicia fluxo de agendamento
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
 
         // Responde "11" como horário
         String resposta = fixture.conversationService.gerarResposta(fixture.numero, "11");
@@ -94,7 +98,7 @@ class ConversationServiceUXRegressionTest {
         Fixture fixture = criarFixtureComNome("5511000000005");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         assertEquals(1, fixture.appointmentApplicationService.listarTodos().size());
@@ -110,7 +114,7 @@ class ConversationServiceUXRegressionTest {
         Fixture fixture = criarFixtureComNome("5511000000006");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         String resposta = fixture.conversationService.gerarResposta(fixture.numero, "apagar agendamento");
@@ -123,7 +127,7 @@ class ConversationServiceUXRegressionTest {
         Fixture fixture = criarFixtureComNome("5511000000007");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         String resposta = fixture.conversationService.gerarResposta(fixture.numero, "remover agendamento");
@@ -136,13 +140,13 @@ class ConversationServiceUXRegressionTest {
         Fixture fixture = criarFixtureComNome("5511000000008");
 
         fixture.conversationService.gerarResposta(fixture.numero, "quero agendar unha");
-        fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        fixture.conversationService.gerarResposta(fixture.numero, DIA);
         fixture.conversationService.gerarResposta(fixture.numero, "13h");
 
         String resposta = fixture.conversationService.gerarResposta(fixture.numero, "qual meu agendamento");
 
         assertTrue(resposta.contains("unha"), "Deve mostrar o serviço agendado");
-        assertTrue(resposta.contains("segunda"), "Deve mostrar o dia");
+        assertTrue(resposta.contains(DIA), "Deve mostrar o dia");
         assertTrue(resposta.contains("13h") || resposta.contains("13"), "Deve mostrar o horário");
     }
 
@@ -155,7 +159,7 @@ class ConversationServiceUXRegressionTest {
         assertTrue(r1.toLowerCase().contains("dia") || r1.toLowerCase().contains("qual"),
             "Passo 1: deve perguntar o dia. Resposta: " + r1);
 
-        String r2 = fixture.conversationService.gerarResposta(fixture.numero, "segunda");
+        String r2 = fixture.conversationService.gerarResposta(fixture.numero, DIA);
         assertTrue(r2.toLowerCase().contains("horario") || r2.toLowerCase().contains("qual") || r2.toLowerCase().contains("tenho"),
             "Passo 2: deve perguntar o horário ou listar disponíveis. Resposta: " + r2);
 
