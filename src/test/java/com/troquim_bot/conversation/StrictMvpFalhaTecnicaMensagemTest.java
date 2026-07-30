@@ -21,6 +21,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -138,12 +140,41 @@ class StrictMvpFalhaTecnicaMensagemTest {
 
     private String percorrerAteConfirmar(String numero) {
         enviar(numero, "oi");
-        enviar(numero, "1");        // agendar
-        enviar(numero, "cabelo");   // serviço
-        enviar(numero, "quarta");   // dia
-        enviar(numero, "1");        // primeiro horário livre
+        enviar(numero, "1");                     // agendar
+        enviar(numero, "cabelo");                // serviço
+        enviar(numero, diaFuturoComAgenda());    // dia — nunca hoje (ver o método)
+        enviar(numero, "1");                     // primeiro horário livre
         enviar(numero, "Ana Souza");
-        return enviar(numero, "1"); // confirma
+        return enviar(numero, "1");              // confirma
+    }
+
+    /**
+     * Nome de um dia da semana que é SEMPRE futuro e SEMPRE tem agenda.
+     *
+     * Um dia fixo ("quarta") tornava o teste dependente do relógio: quando aquele dia
+     * calhava de ser hoje, {@code proximaDataPara} resolvia para a data de HOJE e
+     * {@code AvailabilityApplicationService} descartava os horários já passados. Depois
+     * do último slot do dia a agenda ficava vazia, a conversa travava em AGUARDANDO_DIA
+     * e os testes falhavam por hora do relógio — não por regra de negócio.
+     *
+     * Partir de amanhã garante uma data futura (nenhum horário no passado a filtrar), e
+     * pular domingo garante um dia com horários no gabarito. Determinístico para
+     * qualquer data de execução, sem tocar em nenhuma regra de produção.
+     */
+    private static String diaFuturoComAgenda() {
+        LocalDate data = LocalDate.now().plusDays(1);
+        while (data.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            data = data.plusDays(1);
+        }
+        return switch (data.getDayOfWeek()) {
+            case MONDAY -> "segunda";
+            case TUESDAY -> "terca";
+            case WEDNESDAY -> "quarta";
+            case THURSDAY -> "quinta";
+            case FRIDAY -> "sexta";
+            case SATURDAY -> "sabado";
+            case SUNDAY -> throw new IllegalStateException("domingo nao tem agenda");
+        };
     }
 
     private String enviar(String numero, String mensagem) {
