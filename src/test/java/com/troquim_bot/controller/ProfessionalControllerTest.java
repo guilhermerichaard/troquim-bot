@@ -1,10 +1,13 @@
 package com.troquim_bot.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.troquim_bot.controller.dto.CreateProfessionalRequest;
 import com.troquim_bot.controller.dto.UpdateProfessionalRequest;
 import com.troquim_bot.repository.InMemoryProfessionalRepository;
 import com.troquim_bot.application.professional.ProfessionalApplicationService;
 import com.troquim_bot.professional.Professional;
+import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.professional.ProfessionalId;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +38,7 @@ class ProfessionalControllerTest {
     @BeforeEach
     void setUp() {
         professionalRepository = new InMemoryProfessionalRepository();
-        professionalApplicationService = new ProfessionalApplicationService(professionalRepository);
+        professionalApplicationService = new ProfessionalApplicationService(professionalRepository, TestTenants.pilot());
         ProfessionalController professionalController = new ProfessionalController(professionalApplicationService);
         mockMvc = MockMvcBuilders.standaloneSetup(professionalController).build();
     }
@@ -48,11 +51,11 @@ class ProfessionalControllerTest {
         Set<String> especialidades1 = new HashSet<>();
         especialidades1.add("Corte");
         especialidades1.add("Barba");
-        professionalApplicationService.criarProfessional("João Silva", especialidades1, "(11) 11111-1111");
+        professionalApplicationService.criarProfissional("João Silva", java.util.Set.of(), especialidades1, "(11) 11111-1111");
 
         Set<String> especialidades2 = new HashSet<>();
         especialidades2.add("Coloração");
-        professionalApplicationService.criarProfessional("Maria Santos", especialidades2, "(11) 22222-2222");
+        professionalApplicationService.criarProfissional("Maria Santos", java.util.Set.of(), especialidades2, "(11) 22222-2222");
 
         // Testa GET /professionals
         mockMvc.perform(get("/professionals"))
@@ -81,11 +84,7 @@ class ProfessionalControllerTest {
         Set<String> especialidades = new HashSet<>();
         especialidades.add("Corte");
         especialidades.add("Barba");
-        Professional professional = professionalApplicationService.criarProfessional(
-            "João Silva", 
-            especialidades, 
-            "(11) 11111-1111"
-        );
+        Professional professional = professionalApplicationService.criarProfissional("João Silva", java.util.Set.of(), especialidades, "(11) 11111-1111");
 
         // Testa GET /professionals/{id}
         mockMvc.perform(get("/professionals/" + professional.getId().getValue()))
@@ -156,20 +155,42 @@ class ProfessionalControllerTest {
             .andExpect(status().isBadRequest());
     }
 
+    // MUDANÇA DELIBERADA DE CONTRATO: `especialidades` deixou de ser obrigatória.
+    // Ela era exigida por ser o vínculo de fato entre profissional e serviço — papel que
+    // agora pertence a `servicosHabilitados`, por ServiceId. Como `especialidades` virou
+    // texto livre DESCRITIVO, exigi-la obrigaria a inventar conteúdo no provisionamento.
+    // O que protege o agendamento não é este campo: é a habilitação explícita por ID,
+    // coberta em CatalogoTenantScopeTest.
+
     @Test
-    void deveRetornar400QuandoEspecialidadesVazias() throws Exception {
+    void deveAceitarEspecialidadesVaziasPoisNaoSaoVinculoDeServico() throws Exception {
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"João\",\"specialties\":[],\"phone\":\"(11) 11111-1111\"}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isCreated());
     }
 
     @Test
-    void deveRetornar400QuandoEspecialidadesNulas() throws Exception {
+    void deveAceitarEspecialidadesNulasPoisNaoSaoVinculoDeServico() throws Exception {
         mockMvc.perform(post("/professionals")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"João\",\"phone\":\"(11) 11111-1111\"}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    void profissionalCriadoNaoAtendeNenhumServicoAteSerHabilitado() throws Exception {
+        mockMvc.perform(post("/professionals")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"João\",\"specialties\":[\"Corte\"],\"phone\":\"(11) 11111-1111\"}"))
+            .andExpect(status().isCreated());
+
+        // Mesmo com "Corte" em especialidades, nenhum serviço fica habilitado: o texto
+        // livre não cria vínculo. Sem habilitação por ServiceId, o profissional não é
+        // ofertado para serviço nenhum.
+        assertThat(professionalRepository.listarAtivos(TestTenants.PILOT))
+            .isNotEmpty()
+            .allSatisfy(p -> assertThat(p.getServicosHabilitados()).isEmpty());
     }
 
     @Test
@@ -195,11 +216,7 @@ class ProfessionalControllerTest {
         // Cria professional inicial
         Set<String> especialidades = new HashSet<>();
         especialidades.add("Corte");
-        Professional professional = professionalApplicationService.criarProfessional(
-            "João Silva", 
-            especialidades, 
-            "(11) 11111-1111"
-        );
+        Professional professional = professionalApplicationService.criarProfissional("João Silva", java.util.Set.of(), especialidades, "(11) 11111-1111");
 
         // Atualiza todos os campos
         Set<String> novasEspecialidades = new HashSet<>();
@@ -222,11 +239,7 @@ class ProfessionalControllerTest {
         // Cria professional inicial
         Set<String> especialidades = new HashSet<>();
         especialidades.add("Corte");
-        Professional professional = professionalApplicationService.criarProfessional(
-            "João Silva", 
-            especialidades, 
-            "(11) 11111-1111"
-        );
+        Professional professional = professionalApplicationService.criarProfissional("João Silva", java.util.Set.of(), especialidades, "(11) 11111-1111");
 
         // Atualiza apenas o nome
         mockMvc.perform(put("/professionals/" + professional.getId().getValue())
@@ -251,11 +264,7 @@ class ProfessionalControllerTest {
     void deveRetornar400QuandoRequestNullNoUpdate() throws Exception {
         Set<String> especialidades = new HashSet<>();
         especialidades.add("Corte");
-        Professional professional = professionalApplicationService.criarProfessional(
-            "João Silva", 
-            especialidades, 
-            "(11) 11111-1111"
-        );
+        Professional professional = professionalApplicationService.criarProfissional("João Silva", java.util.Set.of(), especialidades, "(11) 11111-1111");
 
         mockMvc.perform(put("/professionals/" + professional.getId().getValue())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -270,11 +279,7 @@ class ProfessionalControllerTest {
         // Cria professional ativo
         Set<String> especialidades = new HashSet<>();
         especialidades.add("Corte");
-        Professional professional = professionalApplicationService.criarProfessional(
-            "João Silva", 
-            especialidades, 
-            "(11) 11111-1111"
-        );
+        Professional professional = professionalApplicationService.criarProfissional("João Silva", java.util.Set.of(), especialidades, "(11) 11111-1111");
 
         // Testa DELETE /professionals/{id}
         mockMvc.perform(delete("/professionals/" + professional.getId().getValue()))
@@ -298,15 +303,15 @@ class ProfessionalControllerTest {
         // Cria 3 professionals
         Set<String> esp1 = new HashSet<>();
         esp1.add("Corte");
-        professionalApplicationService.criarProfessional("João", esp1, "(11) 11111-1111");
+        professionalApplicationService.criarProfissional("João", java.util.Set.of(), esp1, "(11) 11111-1111");
 
         Set<String> esp2 = new HashSet<>();
         esp2.add("Barba");
-        professionalApplicationService.criarProfessional("Maria", esp2, "(11) 22222-2222");
+        professionalApplicationService.criarProfissional("Maria", java.util.Set.of(), esp2, "(11) 22222-2222");
 
         Set<String> esp3 = new HashSet<>();
         esp3.add("Coloração");
-        professionalApplicationService.criarProfessional("Pedro", esp3, "(11) 33333-3333");
+        professionalApplicationService.criarProfissional("Pedro", java.util.Set.of(), esp3, "(11) 33333-3333");
 
         // Verifica GET /professionals retorna todos
         mockMvc.perform(get("/professionals"))
@@ -320,11 +325,7 @@ class ProfessionalControllerTest {
         // Cria professional
         Set<String> especialidades = new HashSet<>();
         especialidades.add("Corte");
-        Professional professional = professionalApplicationService.criarProfessional(
-            "João Silva", 
-            especialidades, 
-            "(11) 11111-1111"
-        );
+        Professional professional = professionalApplicationService.criarProfissional("João Silva", java.util.Set.of(), especialidades, "(11) 11111-1111");
 
         // Faz GET /professionals
         mockMvc.perform(get("/professionals"))

@@ -78,8 +78,12 @@ public class ProfessionalController {
         }
 
         try {
-            Professional professional = professionalApplicationService.criarProfessional(
+            // Sem serviços habilitados na criação: o vínculo profissional x serviço é
+            // explícito e feito depois. Um profissional recém-criado NÃO atende nada
+            // até ser habilitado — jamais "atende tudo" por omissão.
+            Professional professional = professionalApplicationService.criarProfissional(
                 request.getName(),
+                java.util.Set.of(),
                 request.getSpecialties(),
                 request.getPhone()
             );
@@ -106,11 +110,11 @@ public class ProfessionalController {
             ProfessionalId professionalId = ProfessionalId.from(java.util.UUID.fromString(id));
             
             // Check if professional exists
-            if (!professionalApplicationService.existeProfessional(professionalId)) {
+            if (!professionalApplicationService.existe(professionalId)) {
                 return ResponseEntity.notFound().build();
             }
 
-            Professional professional = professionalApplicationService.atualizarProfessional(
+            Professional professional = professionalApplicationService.atualizarProfissional(
                 professionalId,
                 request.getName(),
                 request.getSpecialties(),
@@ -133,11 +137,11 @@ public class ProfessionalController {
             ProfessionalId professionalId = ProfessionalId.from(java.util.UUID.fromString(id));
             
             // Check if professional exists
-            if (!professionalApplicationService.existeProfessional(professionalId)) {
+            if (!professionalApplicationService.existe(professionalId)) {
                 return ResponseEntity.notFound().build();
             }
 
-            professionalApplicationService.inativarProfessional(professionalId);
+            professionalApplicationService.inativarProfissional(professionalId);
 
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
