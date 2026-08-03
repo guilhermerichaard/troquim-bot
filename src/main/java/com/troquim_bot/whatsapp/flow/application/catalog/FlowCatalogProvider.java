@@ -1,87 +1,134 @@
 package com.troquim_bot.whatsapp.flow.application.catalog;
 
+import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.professional.ProfessionalId;
+import com.troquim_bot.service.ServiceId;
 import com.troquim_bot.whatsapp.flow.infrastructure.crypto.ConditionalOnWhatsAppFlow;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Fronteira de catálogo do Flow: a ÚNICA fonte de serviços e profissionais que as telas
- * conhecem.
+ * ADAPTER do catálogo para o vocabulário do Flow.
  *
- * PENDÊNCIA CONHECIDA — o projeto ainda não tem catálogo persistido: não há seed de
- * Service nem de Professional, e o menu de conversa (StrictMvpMenuService) trabalha com
- * as mesmas cinco chaves fixas. Este provider concentra essa limitação num ponto só, com
- * as MESMAS chaves canônicas usadas pelo booking, para que trocar por um catálogo real
- * (repositório + seed por tenant) seja mudança local. Nenhum handler conhece a lista.
+ * NÃO TEM CATÁLOGO PRÓPRIO. Toda pergunta sobre "quais serviços" e "quem atende" é
+ * delegada a {@link ConsultarCatalogo}, o caso de uso neutro da Application que lê o
+ * catálogo persistido por {@link BusinessId}. A lista fixa de cinco serviços que morava
+ * aqui deixou de existir: ela era um segundo catálogo, invisível ao dono do negócio e
+ * idêntico para todos os tenants.
  *
- * Duração padrão de 1h porque é a duração que o domínio efetivamente aplica hoje ao criar
- * Reservation/Appointment. Preço não é exposto porque não existe no domínio.
+ * Sem fallback. Se o negócio não configurou catálogo, a resposta é "não configurado" —
+ * jamais um catálogo de emergência.
+ *
+ * A única regra desta classe é de TRADUÇÃO: UUID textual ↔ identidade de domínio. O
+ * parsing é ESTRITO — texto que não é UUID vira {@link Optional#empty()}, nunca um id
+ * derivado por hash ou normalização.
  */
 @Component
 @ConditionalOnWhatsAppFlow
 public class FlowCatalogProvider {
 
-    /** Mesmo id determinístico do profissional único do MVP usado pelo booking. */
-    public static final String PROFISSIONAL_QUALQUER_ID = "qualquer";
+    private final ConsultarCatalogo consultarCatalogo;
 
-    private static final Duration DURACAO_PADRAO = Duration.ofHours(1);
-
-    private static final ProfessionalId PROFISSIONAL_PADRAO = ProfessionalId.from(
-            UUID.nameUUIDFromBytes("professional:troquim-mvp-default".getBytes(StandardCharsets.UTF_8)));
-
-    private static final List<FlowServiceOption> SERVICOS = List.of(
-            new FlowServiceOption("unha", "Unhas", DURACAO_PADRAO),
-            new FlowServiceOption("cabelo", "Cabelo", DURACAO_PADRAO),
-            new FlowServiceOption("sobrancelha", "Sobrancelha", DURACAO_PADRAO),
-            new FlowServiceOption("cilios", "Cílios", DURACAO_PADRAO),
-            new FlowServiceOption("pe e mao", "Pé e mão", DURACAO_PADRAO));
-
-    public List<FlowServiceOption> servicos() {
-        return SERVICOS;
-    }
-
-    /** Resolve um id vindo do cliente. Vazio = id desconhecido, tratado pelo handler. */
-    public Optional<FlowServiceOption> servicoPorId(String id) {
-        if (id == null || id.isBlank()) {
-            return Optional.empty();
-        }
-        String normalizado = id.trim().toLowerCase(Locale.ROOT);
-        return SERVICOS.stream().filter(s -> s.id().equals(normalizado)).findFirst();
+    public FlowCatalogProvider(ConsultarCatalogo consultarCatalogo) {
+        this.consultarCatalogo = consultarCatalogo;
     }
 
     /**
-     * Profissionais habilitados para um serviço. Hoje o salão-piloto tem um único
-     * profissional, então a lista independe do serviço — mas a assinatura já recebe o
-     * serviço para que a regra real de habilitação entre aqui sem mudar os handlers.
+     * Projeção do catálogo do negócio para as telas.
+     *
+     * {@code profissionais} é a UNIÃO dos profissionais habilitados nos serviços ofertáveis
+     * — usada só na renderização inicial da tela, quando ainda não há serviço escolhido. A
+     * decisão de quem atende O QUE continua sendo por serviço, em
+     * {@link #profissionaisPara}.
      */
-    public List<FlowProfessionalOption> profissionaisPara(FlowServiceOption servico) {
-        return List.of(new FlowProfessionalOption(
-                PROFISSIONAL_QUALQUER_ID, "Qualquer profissional", PROFISSIONAL_PADRAO));
+    public record CatalogoDoFlow(List<FlowServiceOption> servicos,
+                                 List<FlowProfessionalOption> profissionais) {
+
+        /** Estado explícito: o negócio não tem serviço ofertável hoje. */
+        public boolean naoConfigurado() {
+            return servicos.isEmpty();
+        }
+    }
+
+    public CatalogoDoFlow catalogo(BusinessId businessId) {
+        List<FlowServiceOption> servicos = new ArrayList<>();
+        LinkedHashSet<FlowProfessionalOption> profissionais = new LinkedHashSet<>();
+
+        for (ConsultarCatalogo.ItemDeCatalogo item : consultarCatalogo.consultar(businessId).itens()) {
+            servicos.add(paraOpcao(item));
+            item.profissionais().stream().map(FlowCatalogProvider::paraOpcao).forEach(profissionais::add);
+        }
+        return new CatalogoDoFlow(List.copyOf(servicos), List.copyOf(profissionais));
     }
 
     /**
-     * Resolve um profissional para um serviço. Vazio quando o id é desconhecido OU
-     * quando o profissional não atende aquele serviço — o cliente pode ter reenviado
-     * uma combinação inválida, e a tela não é autoridade sobre compatibilidade.
+     * Resolve o serviço a partir do id devolvido pela tela.
+     *
+     * Vazio quando: o texto não é UUID, o serviço não existe, pertence a outro negócio,
+     * está inativo ou não tem ninguém habilitado. Indistinguíveis de fora, de propósito.
      */
-    public Optional<FlowProfessionalOption> profissionalPara(FlowServiceOption servico, String id) {
-        if (id == null || id.isBlank()) {
+    public Optional<FlowServiceOption> servicoPorId(BusinessId businessId, String id) {
+        return comoUuid(id)
+                .flatMap(uuid -> consultarCatalogo.porServico(businessId, ServiceId.from(uuid)))
+                .map(FlowCatalogProvider::paraOpcao);
+    }
+
+    /** Profissionais ATIVOS habilitados para o serviço, pelo vínculo por ServiceId. */
+    public List<FlowProfessionalOption> profissionaisPara(BusinessId businessId, FlowServiceOption servico) {
+        if (servico == null) {
+            return List.of();
+        }
+        return consultarCatalogo.porServico(businessId, servico.servicoId())
+                .map(item -> item.profissionais().stream()
+                        .map(FlowCatalogProvider::paraOpcao)
+                        .toList())
+                .orElseGet(List::of);
+    }
+
+    /**
+     * Resolve um profissional NO CONTEXTO do serviço. Vazio quando o id não é UUID, é
+     * desconhecido, é de outro negócio, está inativo OU não atende aquele serviço — a tela
+     * não é autoridade sobre compatibilidade.
+     */
+    public Optional<FlowProfessionalOption> profissionalPara(BusinessId businessId,
+                                                             FlowServiceOption servico, String id) {
+        Optional<UUID> alvo = comoUuid(id);
+        if (alvo.isEmpty()) {
             return Optional.empty();
         }
-        String normalizado = id.trim().toLowerCase(Locale.ROOT);
-        return profissionaisPara(servico).stream()
-                .filter(p -> p.id().equals(normalizado))
+        ProfessionalId procurado = ProfessionalId.from(alvo.get());
+        return profissionaisPara(businessId, servico).stream()
+                .filter(p -> p.professionalId().equals(procurado))
                 .findFirst();
     }
 
-    public ProfessionalId profissionalPadrao() {
-        return PROFISSIONAL_PADRAO;
+    private static FlowServiceOption paraOpcao(ConsultarCatalogo.ItemDeCatalogo item) {
+        return new FlowServiceOption(item.id(), item.nome(), item.duracao());
+    }
+
+    private static FlowProfessionalOption paraOpcao(ConsultarCatalogo.ProfissionalDoCatalogo profissional) {
+        return new FlowProfessionalOption(profissional.id(), profissional.nome());
+    }
+
+    /**
+     * Parsing ESTRITO. Um id malformado é erro controlado do cliente, não motivo para
+     * derivar outro identificador — derivar produziria um agendamento apontando para um
+     * serviço que ninguém cadastrou.
+     */
+    private static Optional<UUID> comoUuid(String id) {
+        if (id == null || id.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(UUID.fromString(id.trim()));
+        } catch (IllegalArgumentException naoEhUuid) {
+            return Optional.empty();
+        }
     }
 }

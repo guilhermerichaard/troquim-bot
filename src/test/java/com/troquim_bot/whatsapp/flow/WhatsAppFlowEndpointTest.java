@@ -3,7 +3,13 @@ package com.troquim_bot.whatsapp.flow;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.booking.BookingIds;
+import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.application.catalog.ProvisionarNegocio;
+import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.repository.AppointmentRepository;
+import com.troquim_bot.service.ServiceId;
+import com.troquim_bot.support.CatalogoDeTeste;
 import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSession;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSessionStore;
@@ -28,6 +34,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,6 +46,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * Endpoint do WhatsApp Flow pela cadeia REAL (SecurityFilterChain + criptografia +
  * Application + persistência H2), profile test — CONTRATO CANÔNICO
  * (SERVICO → AGENDA → CLIENTE → CONFIRMACAO → SUCCESS reservada).
+ *
+ * O catálogo é PERSISTIDO: os ids de serviço e profissional usados aqui são lidos do
+ * catálogo depois de provisionado, nunca literais. Se alguém reintroduzir uma lista fixa
+ * no provider, estes testes continuam passando — mas os de identidade
+ * ({@link #serviceIdPersistidoEhODoCatalogo}) e os de {@code FlowCatalogProviderTest} não.
  *
  * O par de chaves RSA é gerado em memória por execução e injetado via
  * {@link DynamicPropertySource}. O lado cliente do protocolo é implementado
@@ -78,13 +90,27 @@ class WhatsAppFlowEndpointTest {
     private AppointmentRepository appointmentRepository;
     @Autowired
     private AppointmentApplicationService appointmentApplicationService;
+    @Autowired
+    private ProvisionarNegocio provisionarNegocio;
+    @Autowired
+    private ConsultarCatalogo consultarCatalogo;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private FlowSession sessao;
 
+    /** UUIDs REAIS do catálogo do piloto, lidos após o provisionamento. */
+    private String unhas;
+    private String cabelo;
+    private String profissional;
+
     @BeforeEach
     void abrirSessao() {
         appointmentRepository.findAll().forEach(a -> appointmentRepository.delete(a.getId()));
+        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+        unhas = CatalogoDeTeste.servicoId(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
+        cabelo = CatalogoDeTeste.servicoId(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.CABELO);
+        profissional = CatalogoDeTeste.profissionalId(
+                consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
         sessao = sessionStore.abrir(TELEFONE, TestTenants.PILOT.getValue(),
                 LocalDateTime.now().plusHours(1));
     }
@@ -159,10 +185,22 @@ class WhatsAppFlowEndpointTest {
     }
 
     @Test
+    @DisplayName("6b. UUID bem formado que não é do catálogo é recusado, sem derivar outro id")
+    void uuidDesconhecidoEhRecusado() throws Exception {
+        JsonNode resposta = trocar(dataExchange("SERVICO", """
+                "flow_action":"SERVICO_SELECIONADO","servico_id":"%s" """
+                .formatted(UUID.randomUUID())));
+
+        assertEquals("SERVICO", resposta.path("screen").asText());
+        assertFalse(resposta.path("data").path("error_message").asText().isEmpty());
+    }
+
+    @Test
     @DisplayName("7. profissional incompatível é recusado na tela SERVICO")
     void profissionalIncompativel() throws Exception {
         JsonNode resposta = trocar(dataExchange("SERVICO", """
-                "flow_action":"BUSCAR_DATAS","servico_id":"unha","profissional_id":"inexistente" """));
+                "flow_action":"BUSCAR_DATAS","servico_id":"%s","profissional_id":"%s" """
+                .formatted(unhas, UUID.randomUUID())));
         assertEquals("SERVICO", resposta.path("screen").asText());
         assertFalse(resposta.path("data").path("error_message").asText().isEmpty());
     }
@@ -171,8 +209,8 @@ class WhatsAppFlowEndpointTest {
     @DisplayName("8. data no passado volta à AGENDA com erro")
     void dataInvalida() throws Exception {
         JsonNode resposta = trocar(dataExchange("AGENDA", """
-                "flow_action":"DATA_SELECIONADA","servico_id":"unha","profissional_id":"qualquer",
-                "data":"2020-01-01" """));
+                "flow_action":"DATA_SELECIONADA","servico_id":"%s","profissional_id":"%s",
+                "data":"2020-01-01" """.formatted(unhas, profissional)));
         assertEquals("AGENDA", resposta.path("screen").asText());
         assertFalse(resposta.path("data").path("error_message").asText().isEmpty());
     }
@@ -184,8 +222,8 @@ class WhatsAppFlowEndpointTest {
     void semHorarios() throws Exception {
         LocalDate domingo = proximo(java.time.DayOfWeek.SUNDAY);
         JsonNode resposta = trocar(dataExchange("AGENDA", """
-                "flow_action":"DATA_SELECIONADA","servico_id":"unha","profissional_id":"qualquer",
-                "data":"%s" """.formatted(domingo)));
+                "flow_action":"DATA_SELECIONADA","servico_id":"%s","profissional_id":"%s",
+                "data":"%s" """.formatted(unhas, profissional, domingo)));
 
         assertEquals("AGENDA", resposta.path("screen").asText());
         assertFalse(resposta.path("data").path("horarios_habilitado").asBoolean());
@@ -196,15 +234,16 @@ class WhatsAppFlowEndpointTest {
     void consultaDisponibilidade() throws Exception {
         LocalDate util = proximo(java.time.DayOfWeek.WEDNESDAY);
         JsonNode horarios = trocar(dataExchange("AGENDA", """
-                "flow_action":"DATA_SELECIONADA","servico_id":"unha","profissional_id":"qualquer",
-                "data":"%s" """.formatted(util)));
+                "flow_action":"DATA_SELECIONADA","servico_id":"%s","profissional_id":"%s",
+                "data":"%s" """.formatted(unhas, profissional, util)));
 
         assertTrue(horarios.path("data").path("horarios_habilitado").asBoolean());
         assertTrue(horarios.path("data").path("horarios").size() > 0);
 
         // BUSCAR_DATAS monta o dropdown de datas ELEGÍVEIS — domingos não entram.
         JsonNode agenda = trocar(dataExchange("SERVICO", """
-                "flow_action":"BUSCAR_DATAS","servico_id":"unha","profissional_id":"qualquer" """));
+                "flow_action":"BUSCAR_DATAS","servico_id":"%s","profissional_id":"%s" """
+                .formatted(unhas, profissional)));
         LocalDate domingo = proximo(java.time.DayOfWeek.SUNDAY);
         List<String> ids = new ArrayList<>();
         agenda.path("data").path("datas").forEach(d -> ids.add(d.path("id").asText()));
@@ -224,6 +263,49 @@ class WhatsAppFlowEndpointTest {
         assertEquals(sessao.flowToken(), resposta.path("data")
                 .path("extension_message_response").path("params").path("flow_token").asText());
         assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
+    }
+
+    @Test
+    @DisplayName("11b. IDENTIDADE: o service_id persistido é EXATAMENTE o do catálogo")
+    void serviceIdPersistidoEhODoCatalogo() throws Exception {
+        LocalDate dia = proximo(java.time.DayOfWeek.WEDNESDAY);
+        assertEquals(SUCCESS, trocar(confirm(dia, "13:00")).path("screen").asText());
+
+        ServiceId doCatalogo = CatalogoDeTeste.item(
+                consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS).id();
+        Appointment agendado = appointmentApplicationService.listarAtivos(TestTenants.PILOT).get(0);
+
+        assertEquals(doCatalogo, agendado.getServiceId(),
+                "O appointment tem de apontar para o MESMO serviço que a tela ofereceu");
+        assertEquals(unhas, agendado.getServiceId().getValue().toString(),
+                "O UUID trafegado no Flow e o persistido são o mesmo texto");
+
+        // A armadilha concreta: derivar o id do texto recebido produziria OUTRO serviço,
+        // que não existe no catálogo de negócio nenhum.
+        assertNotEquals(BookingIds.serviceId(unhas), agendado.getServiceId(),
+                "O id persistido não pode ser o hash do UUID textual");
+        assertNotEquals(BookingIds.serviceId(CatalogoDeTeste.UNHAS), agendado.getServiceId(),
+                "O id persistido não pode ser derivado do NOME do serviço");
+    }
+
+    @Test
+    @DisplayName("11c. business_id no payload não substitui o BusinessId da sessão")
+    void businessIdDoPayloadEhIgnorado() throws Exception {
+        LocalDate dia = proximo(java.time.DayOfWeek.WEDNESDAY);
+
+        JsonNode resposta = trocar("""
+                {"version":"3.0","action":"data_exchange","screen":"CONFIRMACAO","flow_token":"%s",
+                 "data":{"flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"%s","profissional_id":"%s",
+                 "data":"%s","horario":"16:00","nome":"Ana Souza",
+                 "business_id":"%s","businessId":"%s"}}"""
+                .formatted(sessao.flowToken(), unhas, profissional, dia,
+                        TestTenants.OUTRO.getValue(), TestTenants.OUTRO.getValue()));
+
+        assertEquals(SUCCESS, resposta.path("screen").asText());
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size(),
+                "O agendamento pertence ao negócio da SESSÃO");
+        assertTrue(appointmentApplicationService.listarAtivos(TestTenants.OUTRO).isEmpty(),
+                "Nenhum campo do payload pode mover o agendamento para outro negócio");
     }
 
     @Test
@@ -336,41 +418,48 @@ class WhatsAppFlowEndpointTest {
 
         // on-select do serviço: re-renderiza SERVICO com profissional habilitado.
         JsonNode servico = trocar(dataExchange("SERVICO", """
-                "flow_action":"SERVICO_SELECIONADO","servico_id":"cabelo" """));
+                "flow_action":"SERVICO_SELECIONADO","servico_id":"%s" """.formatted(cabelo)));
         assertEquals("SERVICO", servico.path("screen").asText());
         assertTrue(servico.path("data").path("profissional_habilitado").asBoolean());
 
         // footer de SERVICO: navega para AGENDA.
         JsonNode agenda = trocar(dataExchange("SERVICO", """
-                "flow_action":"BUSCAR_DATAS","servico_id":"cabelo","profissional_id":"qualquer" """));
+                "flow_action":"BUSCAR_DATAS","servico_id":"%s","profissional_id":"%s" """
+                .formatted(cabelo, profissional)));
         assertEquals("AGENDA", agenda.path("screen").asText());
 
         // on-select da data: re-renderiza AGENDA com horários.
         JsonNode comHorarios = trocar(dataExchange("AGENDA", """
-                "flow_action":"DATA_SELECIONADA","servico_id":"cabelo","profissional_id":"qualquer",
-                "data":"%s" """.formatted(dia)));
+                "flow_action":"DATA_SELECIONADA","servico_id":"%s","profissional_id":"%s",
+                "data":"%s" """.formatted(cabelo, profissional, dia)));
         assertEquals("AGENDA", comHorarios.path("screen").asText());
         String horario = comHorarios.path("data").path("horarios").get(0).path("id").asText();
 
         // footer de AGENDA: navega para CLIENTE.
         JsonNode cliente = trocar(dataExchange("AGENDA", """
-                "flow_action":"HORARIO_SELECIONADO","servico_id":"cabelo","profissional_id":"qualquer",
-                "data":"%s","horario":"%s" """.formatted(dia, horario)));
+                "flow_action":"HORARIO_SELECIONADO","servico_id":"%s","profissional_id":"%s",
+                "data":"%s","horario":"%s" """.formatted(cabelo, profissional, dia, horario)));
         assertEquals("CLIENTE", cliente.path("screen").asText());
 
         // footer de CLIENTE: navega para CONFIRMACAO.
         JsonNode confirmacao = trocar(dataExchange("CLIENTE", """
-                "flow_action":"MONTAR_RESUMO","servico_id":"cabelo","profissional_id":"qualquer",
-                "data":"%s","horario":"%s","nome":"Ana Souza" """.formatted(dia, horario)));
+                "flow_action":"MONTAR_RESUMO","servico_id":"%s","profissional_id":"%s",
+                "data":"%s","horario":"%s","nome":"Ana Souza" """
+                .formatted(cabelo, profissional, dia, horario)));
         assertEquals("CONFIRMACAO", confirmacao.path("screen").asText());
-        assertEquals("Cabelo", confirmacao.path("data").path("resumo_servico").asText());
+        assertEquals(CatalogoDeTeste.CABELO, confirmacao.path("data").path("resumo_servico").asText());
 
         // footer de CONFIRMACAO: confirma e encerra em SUCCESS.
         JsonNode sucesso = trocar(dataExchange("CONFIRMACAO", """
-                "flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"cabelo","profissional_id":"qualquer",
-                "data":"%s","horario":"%s","nome":"Ana Souza" """.formatted(dia, horario)));
+                "flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"%s","profissional_id":"%s",
+                "data":"%s","horario":"%s","nome":"Ana Souza" """
+                .formatted(cabelo, profissional, dia, horario)));
         assertEquals(SUCCESS, sucesso.path("screen").asText());
         assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
+
+        // Identidade preservada por todo o percurso, inclusive na tela intermediária.
+        assertEquals(CatalogoDeTeste.item(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.CABELO).id(),
+                appointmentApplicationService.listarAtivos(TestTenants.PILOT).get(0).getServiceId());
     }
 
     // ==================== 18-20. Preview do editor da Meta ====================
@@ -379,7 +468,7 @@ class WhatsAppFlowEndpointTest {
     @DisplayName("18. token de preview navega (não cai no 427 do editor)")
     void previewNavega() throws Exception {
         JsonNode resposta = trocar(dataExchangeToken(PREVIEW_TOKEN, "SERVICO", """
-                "flow_action":"SERVICO_SELECIONADO","servico_id":"cabelo" """));
+                "flow_action":"SERVICO_SELECIONADO","servico_id":"%s" """.formatted(cabelo)));
         assertEquals("SERVICO", resposta.path("screen").asText());
         assertTrue(resposta.path("data").path("profissional_habilitado").asBoolean(),
                 "O preview deve exercitar a habilitação progressiva como o Flow real");
@@ -404,7 +493,8 @@ class WhatsAppFlowEndpointTest {
         FlowTestCrypto.Sessao cripto = CRYPTO.novaSessao();
         String corpo = """
                 {"version":"3.0","action":"data_exchange","screen":"SERVICO",
-                 "flow_token":"outro-token-qualquer","data":{"flow_action":"SERVICO_SELECIONADO","servico_id":"cabelo"}}""";
+                 "flow_token":"outro-token-qualquer","data":{"flow_action":"SERVICO_SELECIONADO","servico_id":"%s"}}"""
+                .formatted(cabelo);
 
         mockMvc.perform(post(ROTA).contentType(MediaType.APPLICATION_JSON)
                         .content(CRYPTO.envelope(corpo, cripto)))
@@ -451,9 +541,9 @@ class WhatsAppFlowEndpointTest {
     private String confirmToken(String token, LocalDate dia, String horario) {
         return """
                 {"version":"3.0","action":"data_exchange","screen":"CONFIRMACAO","flow_token":"%s",
-                 "data":{"flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"unha","profissional_id":"qualquer",
+                 "data":{"flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"%s","profissional_id":"%s",
                  "data":"%s","horario":"%s","nome":"Ana Souza"}}"""
-                .formatted(token, dia, horario);
+                .formatted(token, unhas, profissional, dia, horario);
     }
 
     private static LocalDate proximo(java.time.DayOfWeek alvo) {

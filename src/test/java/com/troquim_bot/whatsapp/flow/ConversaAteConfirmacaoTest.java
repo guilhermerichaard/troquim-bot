@@ -1,9 +1,12 @@
 package com.troquim_bot.whatsapp.flow;
 
+import com.troquim_bot.support.CatalogoDeTeste;
 import com.troquim_bot.support.TestTenants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.application.catalog.ProvisionarNegocio;
 import com.troquim_bot.application.messaging.FlowMessage;
 import com.troquim_bot.application.messaging.OutboundFlowGateway;
 import com.troquim_bot.application.messaging.OutboundResult;
@@ -103,15 +106,29 @@ class ConversaAteConfirmacaoTest {
     @Autowired
     private AppointmentRepository appointmentRepository;
 
+    @Autowired
+    private ProvisionarNegocio provisionarNegocio;
+
+    @Autowired
+    private ConsultarCatalogo consultarCatalogo;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private String flowToken;
+
+    /** Ids REAIS do catálogo persistido — o Flow não tem mais lista própria. */
+    private String unhas;
+    private String profissional;
 
     @BeforeEach
     void limpar() {
         GatewayDeTeste.ENVIADAS.clear();
         appointmentRepository.findAll().forEach(a -> appointmentRepository.delete(a.getId()));
         conversationStateService.limparEstado(TELEFONE);
+        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+        unhas = CatalogoDeTeste.servicoId(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
+        profissional = CatalogoDeTeste.profissionalId(
+                consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
     }
 
     @Test
@@ -141,36 +158,41 @@ class ConversaAteConfirmacaoTest {
         // 4. Percorre as telas do contrato canônico.
         LocalDate dia = proximaQuinta();
         assertEquals("SERVICO", trocar(dataExchange("SERVICO", """
-                "flow_action":"SERVICO_SELECIONADO","servico_id":"unha" """)).path("screen").asText());
+                "flow_action":"SERVICO_SELECIONADO","servico_id":"%s" """
+                .formatted(unhas))).path("screen").asText());
         assertEquals("AGENDA", trocar(dataExchange("SERVICO", """
-                "flow_action":"BUSCAR_DATAS","servico_id":"unha",
-                "profissional_id":"qualquer" """)).path("screen").asText());
+                "flow_action":"BUSCAR_DATAS","servico_id":"%s",
+                "profissional_id":"%s" """.formatted(unhas, profissional))).path("screen").asText());
 
         JsonNode horarios = trocar(dataExchange("AGENDA", """
-                "flow_action":"DATA_SELECIONADA","servico_id":"unha","profissional_id":"qualquer",
-                "data":"%s" """.formatted(dia)));
+                "flow_action":"DATA_SELECIONADA","servico_id":"%s","profissional_id":"%s",
+                "data":"%s" """.formatted(unhas, profissional, dia)));
         assertEquals("AGENDA", horarios.path("screen").asText());
         String horario = horarios.path("data").path("horarios").get(0).path("id").asText();
 
         assertEquals("CLIENTE", trocar(dataExchange("AGENDA", """
-                "flow_action":"HORARIO_SELECIONADO","servico_id":"unha","profissional_id":"qualquer",
-                "data":"%s","horario":"%s" """.formatted(dia, horario))).path("screen").asText());
+                "flow_action":"HORARIO_SELECIONADO","servico_id":"%s","profissional_id":"%s",
+                "data":"%s","horario":"%s" """
+                .formatted(unhas, profissional, dia, horario))).path("screen").asText());
         assertEquals("CONFIRMACAO", trocar(dataExchange("CLIENTE", """
-                "flow_action":"MONTAR_RESUMO","servico_id":"unha","profissional_id":"qualquer",
+                "flow_action":"MONTAR_RESUMO","servico_id":"%s","profissional_id":"%s",
                 "data":"%s","horario":"%s","nome":"Ana Souza" """
-                .formatted(dia, horario))).path("screen").asText());
+                .formatted(unhas, profissional, dia, horario))).path("screen").asText());
 
-        // 5. Confirma: o agendamento é persistido de verdade.
+        // 5. Confirma: o agendamento é persistido de verdade, com o serviço DO CATÁLOGO.
         JsonNode sucesso = trocar(confirm(dia, horario));
         assertEquals("SUCCESS", sucesso.path("screen").asText());
         assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
+        assertEquals(CatalogoDeTeste.item(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS).id(),
+                appointmentApplicationService.listarAtivos(TestTenants.PILOT).get(0).getServiceId(),
+                "O agendamento aponta para o serviço que a tela ofereceu");
 
         // 6. A disponibilidade compartilhada já reflete o agendamento: o horário some da
         //    lista que a MESMA fronteira devolve. Se conversa e Flow tivessem fontes
         //    diferentes, este horário continuaria aparecendo como livre.
         JsonNode horariosDepois = trocar(dataExchange("AGENDA", """
-                "flow_action":"DATA_SELECIONADA","servico_id":"unha","profissional_id":"qualquer",
-                "data":"%s" """.formatted(dia)));
+                "flow_action":"DATA_SELECIONADA","servico_id":"%s","profissional_id":"%s",
+                "data":"%s" """.formatted(unhas, profissional, dia)));
         List<String> livres = new ArrayList<>();
         horariosDepois.path("data").path("horarios").forEach(h -> livres.add(h.path("id").asText()));
         assertFalse(livres.contains(horario),
@@ -211,8 +233,9 @@ class ConversaAteConfirmacaoTest {
 
     private String confirm(LocalDate dia, String horario) {
         return dataExchange("CONFIRMACAO", """
-                "flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"unha","profissional_id":"qualquer",
-                "data":"%s","horario":"%s","nome":"Ana Souza" """.formatted(dia, horario));
+                "flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"%s","profissional_id":"%s",
+                "data":"%s","horario":"%s","nome":"Ana Souza" """
+                .formatted(unhas, profissional, dia, horario));
     }
 
     private static LocalDate proximaQuinta() {

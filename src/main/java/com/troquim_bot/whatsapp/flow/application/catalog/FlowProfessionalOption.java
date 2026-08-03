@@ -5,10 +5,23 @@ import com.troquim_bot.professional.ProfessionalId;
 /**
  * Profissional oferecido na tela PROFISSIONAL.
  *
- * @param id            chave estável exposta ao cliente (nunca o UUID interno cru,
- *                      para não vazar identificadores de persistência no contrato)
- * @param titulo        rótulo exibido
- * @param professionalId identidade de domínio correspondente
+ * Como no serviço, a identidade é a REAL do catálogo persistido: o id trafegado é o UUID
+ * do {@link ProfessionalId}, e é ele que volta do Flow para ser revalidado contra a
+ * habilitação por serviço. Não existe mais o id sintético "qualquer" — ele pressupunha um
+ * profissional único por negócio, premissa que o catálogo por tenant não tem.
+ *
+ * @param professionalId identidade de domínio
+ * @param titulo         rótulo exibido (nome do profissional)
  */
-public record FlowProfessionalOption(String id, String titulo, ProfessionalId professionalId) {
+public record FlowProfessionalOption(ProfessionalId professionalId, String titulo) {
+
+    public FlowProfessionalOption {
+        if (professionalId == null) {
+            throw new IllegalArgumentException("ProfessionalId é obrigatório numa opção do Flow");
+        }
+    }
+
+    public String id() {
+        return professionalId.getValue().toString();
+    }
 }

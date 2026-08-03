@@ -139,24 +139,58 @@ public class BookingApplicationService {
     }
 
     /**
-     * Confirma o agendamento para uma DATA de calendario explicita.
+     * LEGADO — confirmacao a partir de uma CHAVE TEXTUAL de servico (ex.: "unha").
+     *
+     * O ServiceId aqui e DERIVADO do texto ({@link BookingIds#serviceId}), nao lido de
+     * catalogo nenhum: o servico gravado no appointment pode nao existir para o negocio.
+     * Continua existindo apenas para o caminho antigo da conversa, que ainda fala por
+     * texto. Nenhum caminho novo deve usa-lo — o catalogo persistido entra pelo metodo
+     * tipado, via {@code ConfirmarAgendamentoDoCatalogo}.
+     *
+     * @deprecated use {@link #confirmarEm(String, String, ServiceId, String, ProfessionalId,
+     *             LocalDate, LocalTime, Duration, BookingCommandKey)}, que recebe o
+     *             ServiceId real do catalogo.
+     */
+    @Deprecated
+    @Transactional
+    public BookingResult confirmarEm(String telefone, String nomeCliente, String servico,
+                                     ProfessionalId profissional, LocalDate data, LocalTime inicio,
+                                     Duration duracao, BookingCommandKey chave) {
+        return confirmarEm(telefone, nomeCliente, BookingIds.serviceId(servico), servico,
+                profissional, data, inicio, duracao, chave);
+    }
+
+    /**
+     * Confirma o agendamento para uma DATA de calendario explicita, com o ServiceId REAL.
      *
      * Existe porque o WhatsApp Flow coleta a data num CalendarPicker (data absoluta),
      * enquanto {@link #confirmar} recebe nome de dia da semana e resolve a proxima
      * ocorrencia. As duas portas de entrada compartilham a MESMA orquestracao e a
      * mesma deteccao de conflito: o Flow nao reimplementa confirmacao.
      *
-     * A idempotencia aqui e por SLOT (mesmo cliente, mesma data, mesmo horario) —
-     * reconfirmar o mesmo agendamento devolve sucesso sem duplicar, mas um horario
-     * diferente segue sendo um agendamento novo.
+     * IDENTIDADE DO SERVICO: o {@code servico} recebido e' gravado tal e qual em
+     * {@code appointment.service_id}. Nao ha derivacao, hash, slug nem fallback aqui — se
+     * o id estiver errado, quem tinha de recusar era o caso de uso que valida o catalogo,
+     * nao este metodo inventando outro id.
+     *
+     * {@code rotuloServico} e' apresentacao (mensagem ao cliente e recibo de idempotencia)
+     * e NAO participa de nenhuma decisao.
+     *
+     * A idempotencia aqui e por COMANDO (ver {@link BookingCommandKey}) — reconfirmar o
+     * mesmo comando devolve o desfecho gravado sem duplicar.
      *
      * O AvailabilityId e derivado da data ISO (nao do nome do dia), evitando a colisao
      * entre semanas que o caminho por dia da semana tem.
      */
     @Transactional
-    public BookingResult confirmarEm(String telefone, String nomeCliente, String servico,
-                                     ProfessionalId profissional, LocalDate data, LocalTime inicio,
+    public BookingResult confirmarEm(String telefone, String nomeCliente, ServiceId servico,
+                                     String rotuloServico, ProfessionalId profissional,
+                                     LocalDate data, LocalTime inicio,
                                      Duration duracao, BookingCommandKey chave) {
+        if (servico == null) {
+            throw new IllegalArgumentException(
+                    "ServiceId e obrigatorio: o caminho tipado nao deriva id de texto");
+        }
         if (chave == null) {
             throw new IllegalArgumentException(
                     "BookingCommandKey e obrigatoria: sem ela nao ha idempotencia de comando");
@@ -195,7 +229,7 @@ public class BookingApplicationService {
         LocalTime fim = inicio.plus(duracao == null ? DURACAO_PADRAO : duracao);
 
         Customer customer = customerProfileService.resolverOuConstruir(telefone, nomeCliente);
-        ServiceId serviceId = BookingIds.serviceId(servico);
+        // O ServiceId chega pronto e segue intacto ate' o appointment. Nenhuma derivacao.
         AvailabilityId availabilityId = AvailabilityId.from(uuidDeterministico(
                 "availability:" + profissional + ":" + data + ":" + inicio));
         LocalDateTime expiraEm = LocalDateTime.of(data, inicio);
@@ -213,13 +247,13 @@ public class BookingApplicationService {
                 // Desfecho negativo tambem e' gravado: repetir o mesmo comando deve dar a
                 // mesma resposta, sem varrer a agenda de novo.
                 idempotencyStore.concluir(chave, null, conflito.status(),
-                        servico, data.toString(), inicio.toString(), nomeCliente);
+                        rotuloServico, data.toString(), inicio.toString(), nomeCliente);
                 return conflito;
             }
         }
 
-        return reservarEAgendar(tenant, customer, profissional, serviceId, availabilityId,
-                data, inicio, fim, expiraEm, servico, data.toString(), inicio.toString(),
+        return reservarEAgendar(tenant, customer, profissional, servico, availabilityId,
+                data, inicio, fim, expiraEm, rotuloServico, data.toString(), inicio.toString(),
                 nomeCliente, chave);
     }
 
