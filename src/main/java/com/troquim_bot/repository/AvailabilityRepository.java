@@ -2,53 +2,48 @@ package com.troquim_bot.repository;
 
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
- * Repository abstraction para persistência de Availability.
- * 
- * Esta é uma interface pura sem dependência de frameworks.
- * A implementação concreta será definida na camada de infraestrutura.
+ * Port de persistência da disponibilidade dos profissionais.
+ *
+ * TENANT OBRIGATÓRIO EM TODA OPERAÇÃO — inclusive na busca por id e na remoção.
+ * Deliberadamente NÃO existem mais {@code findAll()}, {@code findById(AvailabilityId)} nem
+ * {@code findByProfessionalId(ProfessionalId)}: assinaturas sem {@link BusinessId} deixam o
+ * vazamento entre negócios acontecer sem que ninguém precise errar duas vezes. O tenant é
+ * argumento explícito — nunca contexto implícito, ThreadLocal ou dedução da Infrastructure.
+ *
+ * Interface pura, sem dependência de frameworks. A implementação vive na Infrastructure.
  */
 public interface AvailabilityRepository {
 
-    /**
-     * Salva um Availability (cria ou atualiza).
-     */
-    Availability save(Availability availability);
+    Availability salvar(Availability availability);
 
     /**
-     * Busca um Availability por ID.
-     * 
-     * @return Availability se encontrado, null caso contrário
+     * Vazio quando o id não existe OU pertence a outro negócio — os dois casos são
+     * indistinguíveis de fora, de propósito.
      */
-    Availability findById(AvailabilityId id);
+    Optional<Availability> buscarPorId(BusinessId businessId, AvailabilityId id);
+
+    boolean existe(BusinessId businessId, AvailabilityId id);
+
+    /** Todas as disponibilidades do negócio, ativas e inativas. */
+    List<Availability> listarPorNegocio(BusinessId businessId);
+
+    List<Availability> listarPorProfissional(BusinessId businessId, ProfessionalId professionalId);
 
     /**
-     * Verifica se existe um Availability com o ID informado.
+     * Disponibilidades ATIVAS do profissional naquele dia da semana — a consulta que a
+     * geração de horários efetivamente usa.
      */
-    boolean exists(AvailabilityId id);
+    List<Availability> listarAtivasPorProfissionalEDia(BusinessId businessId,
+                                                        ProfessionalId professionalId,
+                                                        DiaSemana dayOfWeek);
 
-    /**
-     * Busca todos os Availabilities.
-     */
-    List<Availability> findAll();
-
-    /**
-     * Busca todos os Availabilities de um profissional.
-     */
-    List<Availability> findByProfessionalId(ProfessionalId professionalId);
-
-    /**
-     * Busca todos os Availabilities de um profissional em um dia específico.
-     */
-    List<Availability> findByProfessionalIdAndDayOfWeek(ProfessionalId professionalId, DiaSemana dayOfWeek);
-
-    /**
-     * Remove um Availability por ID.
-     */
-    void delete(AvailabilityId id);
+    void remover(BusinessId businessId, AvailabilityId id);
 }

@@ -1,11 +1,15 @@
 package com.troquim_bot.whatsapp.flow;
 
+import com.troquim_bot.support.CatalogoDeTeste;
 import com.troquim_bot.support.TestTenants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.application.catalog.ProvisionarNegocio;
 import com.troquim_bot.whatsapp.flow.infrastructure.persistence.SpringDataWhatsAppFlowSessionRepository;
 import com.troquim_bot.whatsapp.flow.support.FlowTestCrypto;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,25 +66,44 @@ class WhatsAppFlowPreviewNaoPersisteSessaoTest {
     private SpringDataWhatsAppFlowSessionRepository sessionRepository;
     @Autowired
     private AppointmentApplicationService appointmentApplicationService;
+    @Autowired
+    private ProvisionarNegocio provisionarNegocio;
+    @Autowired
+    private ConsultarCatalogo consultarCatalogo;
+
+    /**
+     * O preview não tem tenant próprio: navega sobre o catálogo do negócio corrente. Sem
+     * catálogo provisionado não haveria serviço algum para o editor da Meta exercitar.
+     */
+    @BeforeEach
+    void provisionarCatalogo() {
+        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+    }
 
     @Test
     @DisplayName("navegar e confirmar pelo token de preview não grava sessão nem agendamento")
     void previewNaoDeixaRastro() throws Exception {
         long sessoesAntes = sessionRepository.count();
+        String cabelo = CatalogoDeTeste.servicoId(
+                consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.CABELO);
+        String unhas = CatalogoDeTeste.servicoId(
+                consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
+        String profissional = CatalogoDeTeste.profissionalId(
+                consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
 
         // 1. Navegação: escolher serviço avança de tela (o preview existe para isso).
         JsonNode navegacao = trocar("""
                 {"version":"3.0","action":"data_exchange","screen":"SERVICO","flow_token":"%s",
-                 "data":{"flow_action":"SERVICO_SELECIONADO","servico_id":"cabelo"}}"""
-                .formatted(PREVIEW_TOKEN));
+                 "data":{"flow_action":"SERVICO_SELECIONADO","servico_id":"%s"}}"""
+                .formatted(PREVIEW_TOKEN, cabelo));
         assertEquals("SERVICO", navegacao.path("screen").asText());
 
         // 2. Confirmação: encerra em SUCCESS simulado.
         JsonNode confirmacao = trocar("""
                 {"version":"3.0","action":"data_exchange","screen":"CONFIRMACAO","flow_token":"%s",
-                 "data":{"flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"unha","profissional_id":"qualquer",
+                 "data":{"flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"%s","profissional_id":"%s",
                  "data":"%s","horario":"10:00","nome":"Ana Souza"}}"""
-                .formatted(PREVIEW_TOKEN, proximaQuarta()));
+                .formatted(PREVIEW_TOKEN, unhas, profissional, proximaQuarta()));
         assertEquals("SUCCESS", confirmacao.path("screen").asText());
 
         // 3. O que importa: nada foi gravado.

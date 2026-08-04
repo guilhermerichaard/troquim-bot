@@ -2,85 +2,102 @@ package com.troquim_bot.repository;
 
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
 
 /**
- * Implementação em memória do AvailabilityRepository.
+ * Duplo em memória da disponibilidade profissional.
  *
- * Registrado como bean: {@link com.troquim_bot.application.availability.AvailabilityApplicationService}
- * passou a receber suas dependências por injeção (antes o Spring escolhia o construtor
- * vazio e o serviço criava instâncias próprias). Sendo a única implementação existente,
- * é ela que satisfaz a porta — e agora há UMA instância compartilhada, não uma por
- * serviço.
+ * LEGÍTIMO SOMENTE em {@code test} e {@code dev-inmemory}. Fora desses perfis a aplicação
+ * recusa subir com ele (ver {@code CatalogoPersistenceGuard}): expediente que some a cada
+ * restart é pior do que expediente ausente, porque a agenda parece funcionar.
+ *
+ * A chave é sempre o PAR (negócio, id). Guardar só o id reproduziria em memória exatamente o
+ * vazamento entre tenants que a porta existe para impedir.
  */
 @Repository
+@Profile({"test", "dev-inmemory"})
 public class InMemoryAvailabilityRepository implements AvailabilityRepository {
 
-    private final ConcurrentMap<AvailabilityId, Availability> availabilities = new ConcurrentHashMap<>();
+    private final Map<Chave, Availability> armazenamento = new ConcurrentHashMap<>();
+
+    private record Chave(BusinessId businessId, AvailabilityId id) {
+    }
 
     @Override
-    public Availability save(Availability availability) {
+    public Availability salvar(Availability availability) {
         if (availability == null) {
-            throw new IllegalArgumentException("Availability não pode ser nulo");
+            throw new IllegalArgumentException("Availability não pode ser nula");
         }
-        availabilities.put(availability.getId(), availability);
+        armazenamento.put(new Chave(availability.getBusinessId(), availability.getId()), availability);
         return availability;
     }
 
     @Override
-    public Availability findById(AvailabilityId id) {
-        if (id == null) {
-            return null;
+    public Optional<Availability> buscarPorId(BusinessId businessId, AvailabilityId id) {
+        if (businessId == null || id == null) {
+            return Optional.empty();
         }
-        return availabilities.get(id);
+        return Optional.ofNullable(armazenamento.get(new Chave(businessId, id)));
     }
 
     @Override
-    public boolean exists(AvailabilityId id) {
-        if (id == null) {
-            return false;
+    public boolean existe(BusinessId businessId, AvailabilityId id) {
+        return buscarPorId(businessId, id).isPresent();
+    }
+
+    @Override
+    public List<Availability> listarPorNegocio(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
         }
-        return availabilities.containsKey(id);
+        List<Availability> encontradas = new ArrayList<>();
+        armazenamento.forEach((chave, valor) -> {
+            if (chave.businessId().equals(businessId)) {
+                encontradas.add(valor);
+            }
+        });
+        return List.copyOf(encontradas);
     }
 
     @Override
-    public List<Availability> findAll() {
-        return new ArrayList<>(availabilities.values());
-    }
-
-    @Override
-    public List<Availability> findByProfessionalId(ProfessionalId professionalId) {
+    public List<Availability> listarPorProfissional(BusinessId businessId, ProfessionalId professionalId) {
         if (professionalId == null) {
             return List.of();
         }
-        return availabilities.values().stream()
-            .filter(a -> professionalId.equals(a.getProfessionalId()))
-            .collect(Collectors.toList());
+        return listarPorNegocio(businessId).stream()
+                .filter(a -> a.getProfessionalId().equals(professionalId))
+                .toList();
     }
 
     @Override
-    public List<Availability> findByProfessionalIdAndDayOfWeek(ProfessionalId professionalId, DiaSemana dayOfWeek) {
-        if (professionalId == null || dayOfWeek == null) {
+    public List<Availability> listarAtivasPorProfissionalEDia(BusinessId businessId,
+                                                               ProfessionalId professionalId,
+                                                               DiaSemana dayOfWeek) {
+        if (dayOfWeek == null) {
             return List.of();
         }
-        return availabilities.values().stream()
-            .filter(a -> professionalId.equals(a.getProfessionalId()) && dayOfWeek == a.getDayOfWeek())
-            .collect(Collectors.toList());
+        return listarPorProfissional(businessId, professionalId).stream()
+                .filter(Availability::isAtivo)
+                .filter(a -> a.getDayOfWeek() == dayOfWeek)
+                .toList();
     }
 
     @Override
-    public void delete(AvailabilityId id) {
-        if (id != null) {
-            availabilities.remove(id);
+    public void remover(BusinessId businessId, AvailabilityId id) {
+        if (businessId == null || id == null) {
+            return;
         }
+        armazenamento.remove(new Chave(businessId, id));
     }
 }

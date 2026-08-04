@@ -38,7 +38,7 @@ public class ServicoSelecionadoHandler implements FlowActionHandler {
     public FlowResponse tratar(FlowRequest request, FlowSession session) {
         FlowContextoResolvido resolvido = resolver.ateServico(request, session);
         return resolvido.valido()
-                ? presenter.servico(true, null)
+                ? presenter.servico(resolvido.contexto().businessId(), true, null)
                 : resolvido.falha();
     }
 }

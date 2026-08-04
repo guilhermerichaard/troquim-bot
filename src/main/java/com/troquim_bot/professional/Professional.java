@@ -1,22 +1,38 @@
 package com.troquim_bot.professional;
 
+import com.troquim_bot.business.BusinessId;
+import com.troquim_bot.service.ServiceId;
+
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
 /**
  * Aggregate Root que representa um profissional do salão.
- * 
+ *
  * Responsabilidades:
- * - Gerenciar dados do profissional (nome, especialidades, telefone)
+ * - Gerenciar dados do profissional (nome, telefone, habilitações)
  * - Controlar o ciclo de vida do profissional (ATIVO, INATIVO)
  * - Proteger invariants de negócio
+ *
+ * O {@link BusinessId} faz parte da identidade: profissional pertence a UM negócio.
+ *
+ * VÍNCULO PROFISSIONAL × SERVIÇO — {@code servicosHabilitados} é a associação OFICIAL,
+ * por {@link ServiceId}. {@code especialidades} continua existindo, mas é texto livre
+ * DESCRITIVO: não tem integridade referencial nem escopo de tenant e, por isso, NÃO
+ * pode ser usado para decidir quem atende o quê.
+ *
+ * A arquitetura suporta MÚLTIPLOS profissionais por negócio. Um negócio com um único
+ * profissional é um caso particular do modelo, não uma premissa dele.
  */
 public class Professional {
 
     private final ProfessionalId id;
+    private final BusinessId businessId;
     private String nome;
     private Set<String> especialidades;
+    private Set<ServiceId> servicosHabilitados;
     private String telefone;
     private ProfessionalStatus status;
     private final LocalDateTime criadoEm;
@@ -26,23 +42,27 @@ public class Professional {
      * Construtor para criação de novo Professional.
      * Inicia com status ATIVO.
      */
-    public Professional(ProfessionalId id, String nome, Set<String> especialidades, String telefone) {
+    public Professional(ProfessionalId id, BusinessId businessId, String nome,
+                        Set<ServiceId> servicosHabilitados, Set<String> especialidades, String telefone) {
         if (id == null) {
             throw new IllegalArgumentException("ProfessionalId é obrigatório");
         }
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         if (nome == null || nome.trim().isEmpty()) {
             throw new IllegalArgumentException("Nome do profissional é obrigatório");
-        }
-        if (especialidades == null || especialidades.isEmpty()) {
-            throw new IllegalArgumentException("Especialidades são obrigatórias");
         }
         if (telefone == null || telefone.trim().isEmpty()) {
             throw new IllegalArgumentException("Telefone é obrigatório");
         }
 
         this.id = id;
+        this.businessId = businessId;
         this.nome = nome.trim();
-        this.especialidades = new HashSet<>(especialidades);
+        this.servicosHabilitados = servicosHabilitados == null
+                ? new HashSet<>() : new HashSet<>(servicosHabilitados);
+        this.especialidades = especialidades == null ? new HashSet<>() : new HashSet<>(especialidades);
         this.telefone = telefone.trim();
         this.status = ProfessionalStatus.ATIVO;
         this.criadoEm = LocalDateTime.now();
@@ -53,28 +73,69 @@ public class Professional {
      * Construtor para reconstituição de Professional existente (ex: do banco de dados).
      * Usado apenas pela infraestrutura.
      */
-    public Professional(ProfessionalId id, String nome, Set<String> especialidades, String telefone,
+    public Professional(ProfessionalId id, BusinessId businessId, String nome,
+                        Set<ServiceId> servicosHabilitados, Set<String> especialidades, String telefone,
                         ProfessionalStatus status, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         if (id == null) {
             throw new IllegalArgumentException("ProfessionalId é obrigatório");
         }
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         if (nome == null || nome.trim().isEmpty()) {
             throw new IllegalArgumentException("Nome do profissional é obrigatório");
-        }
-        if (especialidades == null || especialidades.isEmpty()) {
-            throw new IllegalArgumentException("Especialidades são obrigatórias");
         }
         if (status == null) {
             throw new IllegalArgumentException("Status é obrigatório");
         }
 
         this.id = id;
+        this.businessId = businessId;
         this.nome = nome.trim();
-        this.especialidades = new HashSet<>(especialidades);
+        this.servicosHabilitados = servicosHabilitados == null
+                ? new HashSet<>() : new HashSet<>(servicosHabilitados);
+        this.especialidades = especialidades == null ? new HashSet<>() : new HashSet<>(especialidades);
         this.telefone = telefone != null ? telefone.trim() : null;
         this.status = status;
         this.criadoEm = criadoEm;
         this.atualizadoEm = atualizadoEm;
+    }
+
+    public BusinessId getBusinessId() {
+        return businessId;
+    }
+
+    /** Guarda de isolamento: usada por Application antes de expor ou agendar. */
+    public boolean pertenceAo(BusinessId outro) {
+        return outro != null && businessId.equals(outro);
+    }
+
+    public Set<ServiceId> getServicosHabilitados() {
+        return Collections.unmodifiableSet(new HashSet<>(servicosHabilitados));
+    }
+
+    /**
+     * Decide se este profissional atende um serviço. Profissional INATIVO não atende nada,
+     * mesmo habilitado — a regra vive aqui, não em quem consulta.
+     */
+    public boolean atende(ServiceId servico) {
+        return servico != null
+                && status == ProfessionalStatus.ATIVO
+                && servicosHabilitados.contains(servico);
+    }
+
+    public void habilitarPara(ServiceId servico) {
+        if (servico == null) {
+            throw new IllegalArgumentException("ServiceId é obrigatório para habilitar");
+        }
+        servicosHabilitados.add(servico);
+        tocar();
+    }
+
+    public void desabilitarPara(ServiceId servico) {
+        if (servico != null && servicosHabilitados.remove(servico)) {
+            tocar();
+        }
     }
 
     // ==================== GETTERS ====================

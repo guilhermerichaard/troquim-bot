@@ -1,7 +1,6 @@
 package com.troquim_bot.whatsapp.flow.application;
 
 import com.troquim_bot.whatsapp.flow.application.session.FlowSession;
-import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.whatsapp.flow.application.availability.FlowAvailabilityQuery;
 import com.troquim_bot.whatsapp.flow.application.catalog.FlowProfessionalOption;
@@ -31,27 +30,28 @@ public class FlowContextoResolver {
     private final FlowDataParser parser;
     private final FlowScreenPresenter presenter;
     private final FlowAvailabilityQuery disponibilidade;
-    private final TenantProvider tenantProvider;
+    private final FlowTenantDaSessao tenantDaSessao;
 
-    public FlowContextoResolver(TenantProvider tenantProvider,
+    public FlowContextoResolver(FlowTenantDaSessao tenantDaSessao,
                                 FlowDataParser parser, FlowScreenPresenter presenter,
                                 FlowAvailabilityQuery disponibilidade) {
         this.parser = parser;
         this.presenter = presenter;
         this.disponibilidade = disponibilidade;
-        this.tenantProvider = tenantProvider;
+        this.tenantDaSessao = tenantDaSessao;
     }
 
     public FlowContextoResolvido ateServico(FlowRequest request, FlowSession session) {
-        Optional<FlowServiceOption> servico = parser.servico(request);
+        BusinessId tenant = tenantDaSessao.de(session);
+        Optional<FlowServiceOption> servico = parser.servico(request, tenant);
         if (servico.isEmpty()) {
-            return FlowContextoResolvido.falhou(presenter.servico(false,
+            return FlowContextoResolvido.falhou(presenter.servico(tenant, false,
                     "Esse serviço não está disponível. Escolha uma das opções."));
         }
-        return FlowContextoResolvido.ok(FlowContexto.de(tenantDe(session), servico.get()));
+        return FlowContextoResolvido.ok(FlowContexto.de(tenant, servico.get()));
     }
 
-    /** Profissional é OPCIONAL: ausente → padrão do catálogo; inválido → erro. */
+    /** Profissional é OPCIONAL: ausente → primeiro habilitado; inválido → erro. */
     public FlowContextoResolvido ateProfissional(FlowRequest request, FlowSession session) {
         FlowContextoResolvido anterior = ateServico(request, session);
         if (!anterior.valido()) {
@@ -59,9 +59,10 @@ public class FlowContextoResolver {
         }
 
         FlowContexto ctx = anterior.contexto();
-        Optional<FlowProfessionalOption> profissional = parser.profissional(request, ctx.servico());
+        Optional<FlowProfessionalOption> profissional =
+                parser.profissional(request, ctx.businessId(), ctx.servico());
         if (profissional.isEmpty()) {
-            return FlowContextoResolvido.falhou(presenter.servico(true,
+            return FlowContextoResolvido.falhou(presenter.servico(ctx.businessId(), true,
                     "Esse profissional não atende o serviço escolhido. Escolha outro."));
         }
         return FlowContextoResolvido.ok(ctx.com(profissional.get()));
@@ -93,8 +94,8 @@ public class FlowContextoResolver {
         }
 
         FlowContexto ctx = resolvido.contexto();
-        if (!disponibilidade.estaLivre(ctx.businessId(), ctx.data(), ctx.horario(),
-                ctx.profissional().professionalId())) {
+        if (!disponibilidade.estaLivre(ctx.businessId(), ctx.servico().servicoId(), ctx.data(),
+                ctx.horario(), ctx.profissional().professionalId())) {
             return FlowContextoResolvido.falhou(presenter.agenda(ctx,
                     "Esse horário acabou de ser ocupado. Escolha outro, por favor."));
         }
@@ -123,19 +124,5 @@ public class FlowContextoResolver {
                     presenter.agenda(ctx, "Escolha um horário da lista."));
         }
         return FlowContextoResolvido.ok(ctx.com(horario.get()));
-    }
-
-    /**
-     * Tenant da troca. Vem SEMPRE da sessão — o payload do cliente nunca escolhe negócio.
-     *
-     * A sessão de preview do editor da Meta não tem tenant por construção; para ela cai
-     * no negócio corrente apenas para EXIBIR a agenda (leitura pública). O preview segue
-     * incapaz de agendar: a divergência de escrita continua no handler de confirmação.
-     */
-    private BusinessId tenantDe(FlowSession session) {
-        if (session != null && session.businessId() != null) {
-            return BusinessId.from(session.businessId());
-        }
-        return tenantProvider.currentBusinessId();
     }
 }

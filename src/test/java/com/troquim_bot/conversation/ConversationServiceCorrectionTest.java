@@ -1,5 +1,7 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.support.AvailabilityDeTeste;
+
 import com.troquim_bot.support.TestDias;
 import com.troquim_bot.ai.config.AiConfiguration;
 import com.troquim_bot.ai.intent.IntentService;
@@ -189,10 +191,7 @@ class ConversationServiceCorrectionTest {
                 appointmentRepository,
                 reservationRepository
         );
-        AvailabilityApplicationService availabilityApplicationService = new AvailabilityApplicationService(TestTenants.pilot(),
-                new com.troquim_bot.repository.InMemoryAvailabilityRepository(),
-                scheduleService
-        );
+        AvailabilityApplicationService availabilityApplicationService = AvailabilityDeTeste.legado(scheduleService);
         ConversationService conversationService = new ConversationService(
                 new IntentService(),
                 new QuickResponseService(),

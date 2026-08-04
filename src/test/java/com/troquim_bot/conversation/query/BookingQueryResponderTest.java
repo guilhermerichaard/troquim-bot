@@ -1,5 +1,7 @@
 package com.troquim_bot.conversation.query;
 
+import com.troquim_bot.support.AvailabilityDeTeste;
+
 import com.troquim_bot.ai.intent.IntentType;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
@@ -36,18 +38,41 @@ class BookingQueryResponderTest {
         assertEquals("Você ainda não tem uma solicitação de agendamento registrada.", resposta.get());
     }
 
+    /**
+     * FLAKE DE RELÓGIO CORRIGIDO (pré-existente, sem relação com o catálogo persistido).
+     *
+     * A versão anterior perguntava sempre por "segunda". Quando a suíte roda numa segunda
+     * à tarde, o dia consultado é HOJE, e {@code AvailabilityApplicationService} descarta
+     * horário que já passou — a grade de segunda termina às 17:00, então depois disso a
+     * lista vinha vazia e o teste falhava por hora do dia, não por regressão.
+     *
+     * A correção escolhe um dia da semana que nunca é hoje, mantendo a intenção original:
+     * havendo dia e serviço, o responder lista horários.
+     */
     @Test
     void responderConsultaDisponibilidade_quandoTemDiaEServicoListaHorarios() {
         BookingQueryResponder responder = criarResponder(new ScheduleService());
         ConversationState state = new ConversationState("5511999999999");
+        String dia = diaUtilQueNaoEhHoje();
 
         Optional<String> resposta = responder.responderConsultaDisponibilidade(
-                "Tem horário para unha segunda?",
+                "Tem horário para unha " + dia + "?",
                 state
         );
 
         assertTrue(resposta.isPresent());
-        assertTrue(resposta.get().startsWith("Tenho horários para unha na segunda:"));
+        assertTrue(resposta.get().startsWith("Tenho horários para unha na " + dia + ":"),
+                "resposta inesperada: " + resposta.get());
+    }
+
+    /**
+     * Dia útil determinístico e diferente de hoje, para a consulta cair sempre numa data
+     * futura — onde o filtro de horário já passado não se aplica.
+     */
+    private String diaUtilQueNaoEhHoje() {
+        return java.time.LocalDate.now().getDayOfWeek() == java.time.DayOfWeek.TUESDAY
+                ? "quarta"
+                : "terça";
     }
 
     private BookingQueryResponder criarResponder(ScheduleService scheduleService) {
@@ -56,10 +81,7 @@ class BookingQueryResponderTest {
                         new InMemoryAppointmentRepository(),
                         new InMemoryReservationRepository()
                 ),
-                new AvailabilityApplicationService(TestTenants.pilot(),
-                        new InMemoryAvailabilityRepository(),
-                        scheduleService
-                ),
+                AvailabilityDeTeste.legado(scheduleService),
                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())
         );
     }

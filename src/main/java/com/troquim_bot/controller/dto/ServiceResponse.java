@@ -48,7 +48,7 @@ public class ServiceResponse {
             service.getNome(),
             service.getDescricao(),
             ServiceDurationResponse.from(service.getDuracao()),
-            PriceResponse.from(service.getPreco()),
+            service.getPreco().map(PriceResponse::from).orElse(null),
             service.getStatus().name(),
             service.getCriadoEm(),
             service.getAtualizadoEm()

@@ -1,9 +1,9 @@
 package com.troquim_bot.whatsapp.flow.application.handler;
 
-import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.application.booking.BookingCommandKey;
-import com.troquim_bot.application.booking.BookingIds;
 import com.troquim_bot.application.booking.BookingResult;
+import com.troquim_bot.application.catalog.ConfirmarAgendamentoDoCatalogo;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.whatsapp.flow.application.FlowAction;
 import com.troquim_bot.whatsapp.flow.application.FlowContexto;
 import com.troquim_bot.whatsapp.flow.application.FlowContextoResolvido;
@@ -37,10 +37,16 @@ import java.util.Map;
  *       comando;</li>
  *   <li><b>regra do MVP</b> — um flow_token conclui no máximo UM agendamento; escolha
  *       diferente após confirmar → {@code SESSAO_JA_CONFIRMADA};</li>
- *   <li><b>domínio decide</b> — conflito real detectado na mesma transação que grava;</li>
+ *   <li><b>catálogo e domínio decidem</b> — {@code ConfirmarAgendamentoDoCatalogo} valida
+ *       tenant, serviço ativo e habilitação do profissional, e o conflito real é detectado
+ *       na mesma transação que grava;</li>
  *   <li><b>estado de apresentação</b> — a FlowSession registra o desfecho por último,
  *       fora do caminho crítico.</li>
  * </ol>
+ *
+ * NENHUMA REGRA DE NEGÓCIO VIVE AQUI. Este handler resolve a cadeia de telas, monta a
+ * identidade do comando e traduz desfecho em tela. Quem decide se o serviço pode ser
+ * agendado é a Application; o {@code businessId} vem exclusivamente da sessão validada.
  *
  * A tela reservada SUCCESS só é retornada se a persistência concluiu. Qualquer falha
  * devolve o cliente a uma tela declarada com mensagem — nunca um sucesso falso.
@@ -62,21 +68,35 @@ public class ConfirmarAgendamentoHandler implements FlowActionHandler {
     private static final String MENSAGEM_HORARIO_INDISPONIVEL =
             "Esse horário não está mais disponível. Escolha outro, por favor.";
 
+    /** Catálogo mudou entre telas: a escolha reenviada não é mais ofertável. */
+    private static final String MENSAGEM_SERVICO_INDISPONIVEL =
+            "Esse serviço não está mais disponível. Escolha uma das opções.";
+
+    private static final String MENSAGEM_PROFISSIONAL_INDISPONIVEL =
+            "Esse profissional não atende o serviço escolhido. Escolha outro.";
+
     private final FlowContextoResolver resolver;
     private final FlowDataParser parser;
     private final FlowScreenPresenter presenter;
-    private final BookingApplicationService bookingApplicationService;
+    private final ConfirmarAgendamentoDoCatalogo confirmarAgendamentoDoCatalogo;
     private final FlowSessionStore sessionStore;
 
     public ConfirmarAgendamentoHandler(FlowContextoResolver resolver, FlowDataParser parser,
                                        FlowScreenPresenter presenter,
-                                       BookingApplicationService bookingApplicationService,
+                                       ConfirmarAgendamentoDoCatalogo confirmarAgendamentoDoCatalogo,
                                        FlowSessionStore sessionStore) {
         this.resolver = resolver;
         this.parser = parser;
         this.presenter = presenter;
-        this.bookingApplicationService = bookingApplicationService;
+        this.confirmarAgendamentoDoCatalogo = confirmarAgendamentoDoCatalogo;
         this.sessionStore = sessionStore;
+    }
+
+    private static String mensagemDe(ConfirmarAgendamentoDoCatalogo.Recusa recusa) {
+        return switch (recusa) {
+            case SERVICO_INDISPONIVEL -> MENSAGEM_SERVICO_INDISPONIVEL;
+            case PROFISSIONAL_INDISPONIVEL -> MENSAGEM_PROFISSIONAL_INDISPONIVEL;
+        };
     }
 
     @Override
@@ -109,23 +129,27 @@ public class ConfirmarAgendamentoHandler implements FlowActionHandler {
 
         // 2. Chave do comando. Base = flow_token; fingerprint = payload canônico com IDs
         // estáveis. businessId, telefone, serviceId e professionalId vêm da SESSÃO e do
-        // catálogo — nunca do corpo enviado pelo cliente.
+        // catálogo — nunca do corpo enviado pelo cliente. O ServiceId é o REAL do catálogo,
+        // sem derivação: a chave fala do mesmo serviço que será gravado.
+        BusinessId tenant = BusinessId.from(session.businessId());
         BookingCommandKey chave = BookingCommandKey.de(
                 session.flowToken(),
                 session.businessId(),
                 session.telefone(),
-                BookingIds.serviceId(ctx.servico().id()),
+                ctx.servico().servicoId(),
                 ctx.profissional().professionalId(),
                 ctx.data(),
                 ctx.horario());
 
-        // 3. O domínio decide, na mesma transação em que grava.
-        BookingResult resultado;
+        // 3. A Application decide: catálogo (tenant, ativo, habilitação) e depois domínio,
+        // na mesma transação em que grava. Nenhuma dessas regras vive neste handler — ele
+        // só traduz o desfecho em tela.
+        ConfirmarAgendamentoDoCatalogo.Resultado desfecho;
         try {
-            resultado = bookingApplicationService.confirmarEm(
-                    session.telefone(), nome, ctx.servico().id(),
-                    ctx.profissional().professionalId(), ctx.data(), ctx.horario(),
-                    ctx.servico().duracao(), chave);
+            desfecho = confirmarAgendamentoDoCatalogo.confirmar(
+                    new ConfirmarAgendamentoDoCatalogo.Pedido(
+                            tenant, ctx.servico().servicoId(), ctx.profissional().professionalId(),
+                            session.telefone(), nome, ctx.data(), ctx.horario(), chave));
         } catch (RuntimeException e) {
             // Transação desfeita por inteiro (inclusive a reivindicação). Só o tipo é
             // logado — nenhum texto de exceção é interpretado, nenhum payload registrado.
@@ -133,6 +157,14 @@ public class ConfirmarAgendamentoHandler implements FlowActionHandler {
                     e.getClass().getSimpleName());
             return presenter.confirmacao(ctx, MENSAGEM_FALHA_TECNICA);
         }
+
+        if (desfecho.foiRecusado()) {
+            // O catálogo mudou entre telas (ou o payload foi adulterado): volta à escolha
+            // do serviço. Nada foi escrito.
+            return presenter.servico(tenant, true, mensagemDe(desfecho.recusa().orElseThrow()));
+        }
+
+        BookingResult resultado = desfecho.agendamento().orElseThrow();
 
         if (resultado.isSessaoJaConfirmada()) {
             // Regra do MVP: este Flow já rendeu um agendamento. Repetir AQUI nunca vai

@@ -1,5 +1,6 @@
 package com.troquim_bot.whatsapp.flow.application;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.whatsapp.flow.application.availability.FlowAvailabilityQuery;
 import com.troquim_bot.whatsapp.flow.application.catalog.FlowCatalogProvider;
 import com.troquim_bot.whatsapp.flow.application.catalog.FlowProfessionalOption;
@@ -46,6 +47,14 @@ public class FlowScreenPresenter {
     /** Opção inerte usada quando um data-source precisaria ficar vazio (a Meta rejeita). */
     private static final String OPCAO_INERTE_ID = "indisponivel";
 
+    /**
+     * Negócio sem catálogo ofertável. Condição EXPLÍCITA: o cliente lê que o negócio ainda
+     * não publicou serviços, em vez de receber uma lista de emergência que não existe na
+     * agenda de ninguém.
+     */
+    public static final String MENSAGEM_CATALOGO_NAO_CONFIGURADO =
+            "Este negócio ainda não publicou os serviços. Fale com o salão por aqui mesmo.";
+
     private static final Locale PT_BR = Locale.forLanguageTag("pt-BR");
     private static final DateTimeFormatter DATA_CURTA = DateTimeFormatter.ofPattern("dd/MM", PT_BR);
 
@@ -62,22 +71,40 @@ public class FlowScreenPresenter {
     }
 
     /**
-     * Tela SERVICO — serviço + profissional opcional.
+     * Tela SERVICO — serviço + profissional opcional, montada com o catálogo PERSISTIDO
+     * do negócio da sessão.
+     *
+     * Negócio sem catálogo ofertável não recebe lista de emergência: as opções ficam
+     * inertes e a mensagem diz o que de fato acontece. É o estado {@code naoConfigurado}
+     * do caso de uso virando tela — tradução, não regra.
      *
      * @param profissionalHabilitado {@code false} no INIT (habilita após escolher o
      *                               serviço, via SERVICO_SELECIONADO), {@code true} na
      *                               re-renderização com serviço já escolhido
      */
-    public FlowResponse servico(boolean profissionalHabilitado, String erro) {
+    public FlowResponse servico(BusinessId businessId, boolean profissionalHabilitado, String erro) {
+        FlowCatalogProvider.CatalogoDoFlow doNegocio = catalogo.catalogo(businessId);
+
         List<Map<String, Object>> servicos = new ArrayList<>();
-        for (FlowServiceOption s : catalogo.servicos()) {
+        for (FlowServiceOption s : doNegocio.servicos()) {
             servicos.add(opcao(s.id(), s.titulo(), s.duracaoLegivel()));
         }
+        List<Map<String, Object>> profissionais = new ArrayList<>();
+        for (FlowProfessionalOption p : doNegocio.profissionais()) {
+            profissionais.add(opcao(p.id(), p.titulo(), null));
+        }
 
-        Map<String, Object> data = base(erro);
+        String mensagem = erro;
+        if (doNegocio.naoConfigurado()) {
+            servicos.add(opcaoInerte("Nenhum serviço disponível"));
+            profissionais.add(opcaoInerte("Nenhum profissional disponível"));
+            mensagem = erro == null || erro.isBlank() ? MENSAGEM_CATALOGO_NAO_CONFIGURADO : erro;
+        }
+
+        Map<String, Object> data = base(mensagem);
         data.put("servicos", servicos);
-        data.put("profissionais", profissionaisTodos());
-        data.put("profissional_habilitado", profissionalHabilitado);
+        data.put("profissionais", profissionais);
+        data.put("profissional_habilitado", profissionalHabilitado && !doNegocio.naoConfigurado());
         return FlowResponse.tela(FlowScreen.SERVICO, data);
     }
 
@@ -92,8 +119,8 @@ public class FlowScreenPresenter {
         LocalDate limite = hoje.plusDays(Math.max(1, properties.getJanelaDias()));
 
         List<Map<String, Object>> datas = new ArrayList<>();
-        for (LocalDate dia : disponibilidade.datasDisponiveis(ctx.businessId(), hoje, limite,
-                ctx.profissional().professionalId())) {
+        for (LocalDate dia : disponibilidade.datasDisponiveis(ctx.businessId(),
+                ctx.servico().servicoId(), hoje, limite, ctx.profissional().professionalId())) {
             datas.add(opcao(dia.toString(), dataPorExtenso(dia), null));
         }
         if (datas.isEmpty()) {
@@ -104,8 +131,8 @@ public class FlowScreenPresenter {
         boolean temData = ctx.data() != null;
         List<Map<String, Object>> horarios = new ArrayList<>();
         if (temData) {
-            for (LocalTime h : disponibilidade.horariosLivres(ctx.businessId(), ctx.data(),
-                    ctx.profissional().professionalId())) {
+            for (LocalTime h : disponibilidade.horariosLivres(ctx.businessId(),
+                    ctx.servico().servicoId(), ctx.data(), ctx.profissional().professionalId())) {
                 horarios.add(opcao(h.toString(), h.toString(), null));
             }
         }
@@ -181,20 +208,6 @@ public class FlowScreenPresenter {
             data.put(FlowDataParser.CAMPO_OBSERVACOES, ctx.observacao());
         }
         return data;
-    }
-
-    private List<Map<String, Object>> profissionaisTodos() {
-        List<Map<String, Object>> profissionais = new ArrayList<>();
-        // MVP: a lista independe do serviço (um único profissional). A assinatura por
-        // serviço vive no catálogo; aqui é só a projeção inicial da tela.
-        for (FlowServiceOption s : catalogo.servicos()) {
-            for (FlowProfessionalOption p : catalogo.profissionaisPara(s)) {
-                if (profissionais.stream().noneMatch(x -> x.get("id").equals(p.id()))) {
-                    profissionais.add(opcao(p.id(), p.titulo(), null));
-                }
-            }
-        }
-        return profissionais;
     }
 
     private static Map<String, Object> base(String erro) {

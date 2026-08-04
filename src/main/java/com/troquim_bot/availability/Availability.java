@@ -1,5 +1,6 @@
 package com.troquim_bot.availability;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 
@@ -7,102 +8,97 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 /**
- * Aggregate Root que representa a disponibilidade de um profissional.
- * 
- * Responsabilidades:
- * - Gerenciar horários de disponibilidade (dia da semana, horário início/fim)
- * - Controlar o ciclo de vida da disponibilidade (ATIVO, INATIVO)
- * - Proteger invariants de negócio (startTime < endTime)
+ * Aggregate Root: os períodos em que um profissional está disponível num dia da semana.
+ *
+ * Assim como o expediente do negócio, a disponibilidade é COMPOSIÇÃO POR PERÍODOS — cada
+ * linha é um {@link IntervaloDeHorario}, e um profissional que para para almoçar tem duas
+ * linhas naquele dia. Dia sem linha ativa é dia em que ele não atende.
+ *
+ * O {@link BusinessId} é OBRIGATÓRIO e faz parte da identidade. Sem ele, dois negócios que
+ * compartilhassem o mesmo UUID de profissional (cenário adversário, e também o resultado de
+ * um bug de tenant em qualquer camada acima) misturariam agendas — e o sintoma apareceria
+ * como cliente marcada num horário que não existe.
+ *
+ * A disponibilidade do profissional NÃO amplia o expediente do negócio: quem manda é a
+ * interseção dos dois, calculada pelo caso de uso de consulta.
  */
 public class Availability {
 
     private final AvailabilityId id;
+    private final BusinessId businessId;
     private final ProfessionalId professionalId;
     private DiaSemana dayOfWeek;
-    private LocalTime startTime;
-    private LocalTime endTime;
+    private IntervaloDeHorario periodo;
     private AvailabilityStatus status;
     private final LocalDateTime criadoEm;
     private LocalDateTime atualizadoEm;
 
-    /**
-     * Construtor para criação de novo Availability.
-     * Inicia com status ATIVO.
-     */
-    public Availability(AvailabilityId id, ProfessionalId professionalId, DiaSemana dayOfWeek,
-                        LocalTime startTime, LocalTime endTime) {
-        if (id == null) {
-            throw new IllegalArgumentException("AvailabilityId é obrigatório");
-        }
-        if (professionalId == null) {
-            throw new IllegalArgumentException("ProfessionalId é obrigatório");
-        }
-        if (dayOfWeek == null) {
-            throw new IllegalArgumentException("Dia da semana é obrigatório");
-        }
-        if (startTime == null) {
-            throw new IllegalArgumentException("Horário de início é obrigatório");
-        }
-        if (endTime == null) {
-            throw new IllegalArgumentException("Horário de fim é obrigatório");
-        }
-        if (!startTime.isBefore(endTime)) {
-            throw new IllegalArgumentException("Horário de início deve ser menor que horário de fim");
-        }
+    /** Criação de nova disponibilidade. Inicia ATIVA. */
+    public Availability(AvailabilityId id, BusinessId businessId, ProfessionalId professionalId,
+                        DiaSemana dayOfWeek, IntervaloDeHorario periodo) {
+        this(id, businessId, professionalId, dayOfWeek, periodo, AvailabilityStatus.ATIVO,
+                LocalDateTime.now(), LocalDateTime.now());
+    }
 
-        this.id = id;
-        this.professionalId = professionalId;
-        this.dayOfWeek = dayOfWeek;
-        this.startTime = startTime;
-        this.endTime = endTime;
-        this.status = AvailabilityStatus.ATIVO;
-        this.criadoEm = LocalDateTime.now();
-        this.atualizadoEm = LocalDateTime.now();
+    /** Atalho de criação a partir de início e fim soltos. */
+    public Availability(AvailabilityId id, BusinessId businessId, ProfessionalId professionalId,
+                        DiaSemana dayOfWeek, LocalTime startTime, LocalTime endTime) {
+        this(id, businessId, professionalId, dayOfWeek, periodoDe(startTime, endTime));
     }
 
     /**
-     * Construtor para reconstituição de Availability existente (ex: do banco de dados).
-     * Usado apenas pela infraestrutura.
+     * Reconstituição a partir da persistência. Uso EXCLUSIVO do adapter.
      */
-    public Availability(AvailabilityId id, ProfessionalId professionalId, DiaSemana dayOfWeek,
-                        LocalTime startTime, LocalTime endTime,
+    public Availability(AvailabilityId id, BusinessId businessId, ProfessionalId professionalId,
+                        DiaSemana dayOfWeek, IntervaloDeHorario periodo,
                         AvailabilityStatus status, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         if (id == null) {
             throw new IllegalArgumentException("AvailabilityId é obrigatório");
         }
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         if (professionalId == null) {
             throw new IllegalArgumentException("ProfessionalId é obrigatório");
         }
         if (dayOfWeek == null) {
             throw new IllegalArgumentException("Dia da semana é obrigatório");
         }
-        if (startTime == null) {
-            throw new IllegalArgumentException("Horário de início é obrigatório");
-        }
-        if (endTime == null) {
-            throw new IllegalArgumentException("Horário de fim é obrigatório");
-        }
-        if (!startTime.isBefore(endTime)) {
-            throw new IllegalArgumentException("Horário de início deve ser menor que horário de fim");
+        if (periodo == null) {
+            throw new IllegalArgumentException("Período é obrigatório");
         }
         if (status == null) {
             throw new IllegalArgumentException("Status é obrigatório");
         }
 
         this.id = id;
+        this.businessId = businessId;
         this.professionalId = professionalId;
         this.dayOfWeek = dayOfWeek;
-        this.startTime = startTime;
-        this.endTime = endTime;
+        this.periodo = periodo;
         this.status = status;
         this.criadoEm = criadoEm;
         this.atualizadoEm = atualizadoEm;
+    }
+
+    private static IntervaloDeHorario periodoDe(LocalTime startTime, LocalTime endTime) {
+        if (startTime == null) {
+            throw new IllegalArgumentException("Horário de início é obrigatório");
+        }
+        if (endTime == null) {
+            throw new IllegalArgumentException("Horário de fim é obrigatório");
+        }
+        return IntervaloDeHorario.de(startTime, endTime);
     }
 
     // ==================== GETTERS ====================
 
     public AvailabilityId getId() {
         return id;
+    }
+
+    public BusinessId getBusinessId() {
+        return businessId;
     }
 
     public ProfessionalId getProfessionalId() {
@@ -113,12 +109,16 @@ public class Availability {
         return dayOfWeek;
     }
 
+    public IntervaloDeHorario getPeriodo() {
+        return periodo;
+    }
+
     public LocalTime getStartTime() {
-        return startTime;
+        return periodo.inicio();
     }
 
     public LocalTime getEndTime() {
-        return endTime;
+        return periodo.fim();
     }
 
     public AvailabilityStatus getStatus() {
@@ -135,31 +135,37 @@ public class Availability {
 
     // ==================== MÉTODOS DE NEGÓCIO ====================
 
-    /**
-     * Verifica se o Availability está ativo.
-     */
     public boolean isAtivo() {
         return status == AvailabilityStatus.ATIVO;
     }
 
+    /** Guarda de isolamento: usada pela Application antes de expor ou agendar. */
+    public boolean pertenceAo(BusinessId outro) {
+        return outro != null && businessId.equals(outro);
+    }
+
     /**
-     * Verifica se este horário conflita com outro horário.
-     * Dois horários conflitam se são do mesmo profissional, mesmo dia e se sobrepõem.
+     * Conflita com outra disponibilidade?
+     *
+     * Só faz sentido comparar dentro do MESMO negócio: dois salões podem ter profissionais
+     * homônimos — ou, no limite, o mesmo UUID — sem que um cadastro atrapalhe o outro.
      */
     public boolean conflitaCom(Availability other) {
+        if (other == null) {
+            return false;
+        }
+        if (!this.businessId.equals(other.businessId)) {
+            return false;
+        }
         if (!this.professionalId.equals(other.professionalId)) {
             return false;
         }
         if (this.dayOfWeek != other.dayOfWeek) {
             return false;
         }
-        // Verifica sobreposição: startA < endB && startB < endA
-        return this.startTime.isBefore(other.endTime) && other.startTime.isBefore(this.endTime);
+        return this.periodo.sobrepoe(other.periodo);
     }
 
-    /**
-     * Atualiza o dia da semana.
-     */
     public void atualizarDayOfWeek(DiaSemana dayOfWeek) {
         if (dayOfWeek == null) {
             throw new IllegalArgumentException("Dia da semana não pode ser nulo");
@@ -168,59 +174,32 @@ public class Availability {
         tocar();
     }
 
-    /**
-     * Atualiza o horário de início.
-     */
     public void atualizarStartTime(LocalTime startTime) {
-        if (startTime == null) {
-            throw new IllegalArgumentException("Horário de início não pode ser nulo");
-        }
-        if (!startTime.isBefore(this.endTime)) {
-            throw new IllegalArgumentException("Horário de início deve ser menor que horário de fim");
-        }
-        this.startTime = startTime;
+        this.periodo = periodoDe(startTime, periodo.fim());
         tocar();
     }
 
-    /**
-     * Atualiza o horário de fim.
-     */
     public void atualizarEndTime(LocalTime endTime) {
-        if (endTime == null) {
-            throw new IllegalArgumentException("Horário de fim não pode ser nulo");
-        }
-        if (!this.startTime.isBefore(endTime)) {
-            throw new IllegalArgumentException("Horário de início deve ser menor que horário de fim");
-        }
-        this.endTime = endTime;
+        this.periodo = periodoDe(periodo.inicio(), endTime);
         tocar();
     }
 
-    /**
-     * Atualiza dia e horários completos.
-     */
-    public void atualizarHorario(DiaSemana dayOfWeek, LocalTime startTime, LocalTime endTime) {
+    public void atualizarPeriodo(DiaSemana dayOfWeek, IntervaloDeHorario novoPeriodo) {
         if (dayOfWeek == null) {
             throw new IllegalArgumentException("Dia da semana não pode ser nulo");
         }
-        if (startTime == null) {
-            throw new IllegalArgumentException("Horário de início não pode ser nulo");
-        }
-        if (endTime == null) {
-            throw new IllegalArgumentException("Horário de fim não pode ser nulo");
-        }
-        if (!startTime.isBefore(endTime)) {
-            throw new IllegalArgumentException("Horário de início deve ser menor que horário de fim");
+        if (novoPeriodo == null) {
+            throw new IllegalArgumentException("Período não pode ser nulo");
         }
         this.dayOfWeek = dayOfWeek;
-        this.startTime = startTime;
-        this.endTime = endTime;
+        this.periodo = novoPeriodo;
         tocar();
     }
 
-    /**
-     * Inativa o Availability (transição para INATIVO).
-     */
+    public void atualizarHorario(DiaSemana dayOfWeek, LocalTime startTime, LocalTime endTime) {
+        atualizarPeriodo(dayOfWeek, periodoDe(startTime, endTime));
+    }
+
     public void inativar() {
         if (status == AvailabilityStatus.ATIVO) {
             this.status = AvailabilityStatus.INATIVO;
@@ -228,9 +207,6 @@ public class Availability {
         }
     }
 
-    /**
-     * Ativa o Availability (transição para ATIVO).
-     */
     public void ativar() {
         if (status == AvailabilityStatus.INATIVO) {
             this.status = AvailabilityStatus.ATIVO;

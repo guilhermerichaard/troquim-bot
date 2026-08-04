@@ -3,11 +3,14 @@ package com.troquim_bot.whatsapp.flow;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.booking.BookingResult;
+import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.application.catalog.ProvisionarNegocio;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AppointmentRepository;
+import com.troquim_bot.support.CatalogoDeTeste;
 import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSession;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSessionStore;
@@ -132,12 +135,24 @@ class WhatsAppFlowPersistenceFailureTest {
     @Autowired
     private FlowSessionStore sessionStore;
 
+    @Autowired
+    private ProvisionarNegocio provisionarNegocio;
+
+    @Autowired
+    private ConsultarCatalogo consultarCatalogo;
+
     // Mapper proprio: o Spring Boot 4 nao expoe um bean do Jackson 2 usado aqui.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     @DisplayName("falha de persistência não devolve SUCESSO")
     void naoConfirmaQuandoPersistenciaFalha() throws Exception {
+        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+        String unhas = CatalogoDeTeste.servicoId(
+                consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
+        String profissional = CatalogoDeTeste.profissionalId(
+                consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
+
         FlowSession sessao = sessionStore.abrir("5511977776666", TestTenants.PILOT.getValue(),
                 LocalDateTime.now().plusHours(1));
 
@@ -148,9 +163,9 @@ class WhatsAppFlowPersistenceFailureTest {
 
         String corpo = """
                 {"version":"3.0","action":"data_exchange","screen":"CONFIRMACAO","flow_token":"%s",
-                 "data":{"flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"unha","profissional_id":"qualquer",
+                 "data":{"flow_action":"CONFIRMAR_AGENDAMENTO","servico_id":"%s","profissional_id":"%s",
                  "data":"%s","horario":"10:00","nome":"Ana Souza"}}"""
-                .formatted(sessao.flowToken(), dia);
+                .formatted(sessao.flowToken(), unhas, profissional, dia);
 
         FlowTestCrypto.Sessao cripto = CRYPTO.novaSessao();
         MvcResult resultado = mockMvc.perform(post(ROTA).contentType(MediaType.APPLICATION_JSON)

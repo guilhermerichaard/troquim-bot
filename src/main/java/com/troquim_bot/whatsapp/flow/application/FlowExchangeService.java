@@ -35,15 +35,17 @@ public class FlowExchangeService {
     private final FlowSessionStore sessionStore;
     private final FlowPreviewSessions previewSessions;
     private final TenantProvider tenantProvider;
+    private final FlowTenantDaSessao tenantDaSessao;
 
     public FlowExchangeService(FlowHandlerRegistry registry, FlowScreenPresenter presenter,
                                FlowSessionStore sessionStore, FlowPreviewSessions previewSessions,
-                               TenantProvider tenantProvider) {
+                               TenantProvider tenantProvider, FlowTenantDaSessao tenantDaSessao) {
         this.registry = registry;
         this.presenter = presenter;
         this.sessionStore = sessionStore;
         this.previewSessions = previewSessions;
         this.tenantProvider = tenantProvider;
+        this.tenantDaSessao = tenantDaSessao;
     }
 
     public FlowExchangeOutcome processar(FlowRequest request) {
@@ -88,7 +90,7 @@ public class FlowExchangeService {
         // O contrato canônico não usa navegação por handler no BACK — a re-renderização
         // da entrada é suficiente para o Flow de 4 telas.
         if (request.isInit() || request.isBack()) {
-            return FlowExchangeOutcome.ok(presenter.servico(false, null));
+            return FlowExchangeOutcome.ok(presenter.servico(tenantDaSessao.de(session), false, null));
         }
 
         if (!request.isDataExchange()) {
@@ -100,8 +102,8 @@ public class FlowExchangeService {
             // Evento desconhecido: recomeça pela tela inicial em vez de estourar 500.
             // Um Flow publicado desatualizado não deve derrubar o endpoint.
             log.warn("Evento desconhecido recebido do WhatsApp Flow na tela {}", request.screen());
-            return FlowExchangeOutcome.ok(
-                    presenter.servico(false, "Vamos recomeçar? Escolha o serviço desejado."));
+            return FlowExchangeOutcome.ok(presenter.servico(tenantDaSessao.de(session), false,
+                    "Vamos recomeçar? Escolha o serviço desejado."));
         }
 
         return FlowExchangeOutcome.ok(handler.get().tratar(request, session));

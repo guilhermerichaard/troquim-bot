@@ -6,7 +6,9 @@ import com.troquim_bot.controller.dto.UpdateAvailabilityRequest;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
+import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.professional.ProfessionalId;
 
 import org.springframework.http.HttpStatus;
@@ -25,25 +27,35 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Controller REST para gerenciamento de Availabilities.
+ * Controller REST administrativo de disponibilidade.
+ *
+ * FRONTEIRA DO TENANT. É AQUI — e só aqui — que o negócio corrente é resolvido, a partir do
+ * {@link TenantProvider}, e passado explicitamente para baixo. A Application e o Domain
+ * nunca deduzem tenant: recebem-no por argumento. Enquanto esta API é administrativa e
+ * mono-tenant, o ponto de resolução fica visível num lugar só, em vez de espalhado como
+ * contexto implícito por todas as camadas.
  */
 @RestController
 @RequestMapping("/availability")
 public class AvailabilityController {
 
     private final AvailabilityApplicationService availabilityApplicationService;
+    private final TenantProvider tenantProvider;
 
-    public AvailabilityController(AvailabilityApplicationService availabilityApplicationService) {
+    public AvailabilityController(AvailabilityApplicationService availabilityApplicationService,
+                                  TenantProvider tenantProvider) {
         this.availabilityApplicationService = availabilityApplicationService;
+        this.tenantProvider = tenantProvider;
     }
 
     /**
      * GET /availability
-     * Lista todas as disponibilidades.
+     * Lista as disponibilidades DO NEGÓCIO CORRENTE. Não existe listagem global.
      */
     @GetMapping
     public ResponseEntity<List<AvailabilityResponse>> listarTodos() {
-        List<Availability> availabilities = availabilityApplicationService.listarTodos();
+        List<Availability> availabilities =
+                availabilityApplicationService.listarPorNegocio(tenantProvider.currentBusinessId());
         List<AvailabilityResponse> response = availabilities.stream()
             .map(AvailabilityResponse::from)
             .toList();
@@ -52,13 +64,15 @@ public class AvailabilityController {
 
     /**
      * GET /availability/{id}
-     * Busca uma disponibilidade por ID.
+     * Busca uma disponibilidade por ID, dentro do negócio corrente.
      */
     @GetMapping("/{id}")
     public ResponseEntity<AvailabilityResponse> buscarPorId(@PathVariable String id) {
         try {
             UUID uuid = UUID.fromString(id);
-            Availability availability = availabilityApplicationService.buscarPorId(AvailabilityId.from(uuid))
+            // Id de outro negócio devolve 404, e não 403: não revela que o id existe.
+            Availability availability = availabilityApplicationService
+                .buscarPorId(tenantProvider.currentBusinessId(), AvailabilityId.from(uuid))
                 .orElse(null);
 
             if (availability == null) {
@@ -89,6 +103,7 @@ public class AvailabilityController {
             LocalTime endTime = LocalTime.parse(request.getEndTime());
 
             Availability availability = availabilityApplicationService.criarDisponibilidade(
+                tenantProvider.currentBusinessId(),
                 professionalId,
                 dayOfWeek,
                 startTime,
@@ -114,26 +129,27 @@ public class AvailabilityController {
         try {
             UUID uuid = UUID.fromString(id);
             AvailabilityId availabilityId = AvailabilityId.from(uuid);
+            BusinessId tenant = tenantProvider.currentBusinessId();
 
             // Atualiza apenas campos fornecidos
             if (request.getDayOfWeek() != null && request.getStartTime() != null && request.getEndTime() != null) {
                 DiaSemana dayOfWeek = DiaSemana.valueOf(request.getDayOfWeek());
                 LocalTime startTime = LocalTime.parse(request.getStartTime());
                 LocalTime endTime = LocalTime.parse(request.getEndTime());
-                availabilityApplicationService.atualizarHorario(availabilityId, dayOfWeek, startTime, endTime);
+                availabilityApplicationService.atualizarHorario(tenant, availabilityId, dayOfWeek, startTime, endTime);
             } else {
                 if (request.getDayOfWeek() != null) {
-                    availabilityApplicationService.atualizarDayOfWeek(availabilityId, DiaSemana.valueOf(request.getDayOfWeek()));
+                    availabilityApplicationService.atualizarDayOfWeek(tenant, availabilityId, DiaSemana.valueOf(request.getDayOfWeek()));
                 }
                 if (request.getStartTime() != null) {
-                    availabilityApplicationService.atualizarStartTime(availabilityId, LocalTime.parse(request.getStartTime()));
+                    availabilityApplicationService.atualizarStartTime(tenant, availabilityId, LocalTime.parse(request.getStartTime()));
                 }
                 if (request.getEndTime() != null) {
-                    availabilityApplicationService.atualizarEndTime(availabilityId, LocalTime.parse(request.getEndTime()));
+                    availabilityApplicationService.atualizarEndTime(tenant, availabilityId, LocalTime.parse(request.getEndTime()));
                 }
             }
 
-            Availability availability = availabilityApplicationService.buscarPorId(availabilityId)
+            Availability availability = availabilityApplicationService.buscarPorId(tenant, availabilityId)
                 .orElseThrow(() -> new IllegalArgumentException("Disponibilidade não encontrada"));
 
             return ResponseEntity.ok(AvailabilityResponse.from(availability));
@@ -152,7 +168,8 @@ public class AvailabilityController {
             UUID uuid = UUID.fromString(id);
             AvailabilityId availabilityId = AvailabilityId.from(uuid);
 
-            availabilityApplicationService.inativarDisponibilidade(availabilityId);
+            availabilityApplicationService.inativarDisponibilidade(
+                tenantProvider.currentBusinessId(), availabilityId);
 
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {

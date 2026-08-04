@@ -1,5 +1,6 @@
 package com.troquim_bot.whatsapp.flow.application;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.whatsapp.flow.application.catalog.FlowCatalogProvider;
 import com.troquim_bot.whatsapp.flow.application.catalog.FlowProfessionalOption;
 import com.troquim_bot.whatsapp.flow.application.catalog.FlowServiceOption;
@@ -46,22 +47,31 @@ public class FlowDataParser {
         this.catalogo = catalogo;
     }
 
-    public Optional<FlowServiceOption> servico(FlowRequest request) {
-        return request.texto(CAMPO_SERVICO).flatMap(catalogo::servicoPorId);
+    /**
+     * Resolve o serviço contra o catálogo PERSISTIDO do negócio da sessão.
+     *
+     * O {@code businessId} é argumento explícito, nunca deduzido do payload: o mesmo
+     * {@code servico_id} resolve em negócios diferentes para serviços diferentes — ou,
+     * na maioria dos casos, para nada. O id trafegado é o UUID do serviço, e o catálogo
+     * o interpreta de forma ESTRITA: texto que não seja UUID vira vazio.
+     */
+    public Optional<FlowServiceOption> servico(FlowRequest request, BusinessId businessId) {
+        return request.texto(CAMPO_SERVICO).flatMap(id -> catalogo.servicoPorId(businessId, id));
     }
 
     /**
      * Resolve o profissional NO CONTEXTO do serviço. O campo é OPCIONAL no contrato:
-     * ausente → o padrão do catálogo para aquele serviço ("Qualquer profissional").
-     * Presente porém inválido/incompatível → vazio, e o handler devolve erro — um id
-     * que não atende o serviço nunca passa em silêncio.
+     * ausente → o primeiro profissional habilitado para aquele serviço. Presente porém
+     * inválido/incompatível → vazio, e o handler devolve erro — um id que não atende o
+     * serviço nunca passa em silêncio.
      */
-    public Optional<FlowProfessionalOption> profissional(FlowRequest request, FlowServiceOption servico) {
+    public Optional<FlowProfessionalOption> profissional(FlowRequest request, BusinessId businessId,
+                                                         FlowServiceOption servico) {
         Optional<String> id = request.texto(CAMPO_PROFISSIONAL);
         if (id.isEmpty()) {
-            return catalogo.profissionaisPara(servico).stream().findFirst();
+            return catalogo.profissionaisPara(businessId, servico).stream().findFirst();
         }
-        return catalogo.profissionalPara(servico, id.get());
+        return catalogo.profissionalPara(businessId, servico, id.get());
     }
 
     /**

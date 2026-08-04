@@ -34,7 +34,7 @@ class ServiceControllerTest {
     @BeforeEach
     void setUp() {
         serviceRepository = new InMemoryServiceRepository();
-        serviceApplicationService = new ServiceApplicationService(serviceRepository);
+        serviceApplicationService = new ServiceApplicationService(serviceRepository, TestTenants.pilot());
         ServiceController serviceController = new ServiceController(serviceApplicationService);
         mockMvc = MockMvcBuilders.standaloneSetup(serviceController).build();
     }
