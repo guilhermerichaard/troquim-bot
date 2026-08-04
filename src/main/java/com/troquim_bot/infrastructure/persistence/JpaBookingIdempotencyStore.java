@@ -59,6 +59,16 @@ import java.util.UUID;
  * A chave já embute o fingerprint, então um acerto com fingerprint diferente significa
  * colisão de SHA-256 ou corrupção. Falha alto — devolver o agendamento de outro comando
  * seria pior do que um erro.
+ *
+ * <h2>Compatibilidade de {@code outcome_status}</h2>
+ * A coluna guarda uma representação PERSISTIDA, historicamente igual a
+ * {@code BookingResult.Status.name()} — não ao enum atual da Application
+ * ({@link BookingIdempotencyOutcome}). Recibos gravados antes da introdução deste enum
+ * (Etapa 5D-B) têm {@code INDISPONIVEL} e {@code INVALIDO}, nunca
+ * {@code HORARIO_INDISPONIVEL} nem {@code PEDIDO_INVALIDO}. {@link #paraValorPersistido} e
+ * {@link #lerValorPersistido} isolam essa tradução aqui — a representação em banco é uma
+ * preocupação de Infrastructure, o Domain e a Application só conhecem
+ * {@link BookingIdempotencyOutcome}.
  */
 @Component
 public class JpaBookingIdempotencyStore implements BookingIdempotencyStore {
@@ -171,7 +181,7 @@ public class JpaBookingIdempotencyStore implements BookingIdempotencyStore {
                          WHERE command_key = :chave
                         """)
                 .setParameter("appointmentId", appointmentId == null ? null : appointmentId.getValue())
-                .setParameter("status", status.name())
+                .setParameter("status", paraValorPersistido(status))
                 .setParameter("servico", servico)
                 .setParameter("data", dataIso)
                 .setParameter("horario", horario)
@@ -204,7 +214,49 @@ public class JpaBookingIdempotencyStore implements BookingIdempotencyStore {
                 appointmentId == null ? Optional.empty() : Optional.of(AppointmentId.from(appointmentId)),
                 e.getOutcomeStatus() == null
                         ? BookingIdempotencyOutcome.FALHA_TECNICA
-                        : BookingIdempotencyOutcome.valueOf(e.getOutcomeStatus()),
+                        : lerValorPersistido(e.getOutcomeStatus()),
                 e.getOutcomeServico(), e.getOutcomeData(), e.getOutcomeHorario(), e.getOutcomeNome());
+    }
+
+    /**
+     * Traduz o outcome NEUTRO da Application para o valor gravado em {@code outcome_status}.
+     *
+     * Preserva os nomes HISTÓRICOS de {@code BookingResult.Status} para os outcomes que já
+     * existiam antes deste enum — {@code CONFIRMADO}, {@code INDISPONIVEL} (não
+     * {@code HORARIO_INDISPONIVEL}), {@code INVALIDO} (não {@code PEDIDO_INVALIDO}),
+     * {@code SESSAO_JA_CONFIRMADA} e {@code FALHA_TECNICA} — para que recibos antigos e
+     * novos usem a MESMA string na coluna. {@code SELECAO_INDISPONIVEL} é outcome novo
+     * (Etapa 5D-B), sem equivalente histórico, gravado com o próprio nome do enum.
+     */
+    private static String paraValorPersistido(BookingIdempotencyOutcome outcome) {
+        return switch (outcome) {
+            case CONFIRMADO -> "CONFIRMADO";
+            case HORARIO_INDISPONIVEL -> "INDISPONIVEL";
+            case PEDIDO_INVALIDO -> "INVALIDO";
+            case SESSAO_JA_CONFIRMADA -> "SESSAO_JA_CONFIRMADA";
+            case SELECAO_INDISPONIVEL -> "SELECAO_INDISPONIVEL";
+            case FALHA_TECNICA -> "FALHA_TECNICA";
+        };
+    }
+
+    /**
+     * Traduz o valor persistido de volta para o outcome NEUTRO da Application.
+     *
+     * Aceita tanto os nomes HISTÓRICOS ({@code INDISPONIVEL}, {@code INVALIDO}) quanto os
+     * nomes atuais do enum ({@code HORARIO_INDISPONIVEL}, {@code PEDIDO_INVALIDO}) como
+     * defesa adicional — nunca delega a um {@code valueOf} direto sobre
+     * {@link BookingIdempotencyOutcome}, que quebraria para os valores históricos.
+     */
+    private static BookingIdempotencyOutcome lerValorPersistido(String valor) {
+        return switch (valor) {
+            case "CONFIRMADO" -> BookingIdempotencyOutcome.CONFIRMADO;
+            case "INDISPONIVEL", "HORARIO_INDISPONIVEL" -> BookingIdempotencyOutcome.HORARIO_INDISPONIVEL;
+            case "INVALIDO", "PEDIDO_INVALIDO" -> BookingIdempotencyOutcome.PEDIDO_INVALIDO;
+            case "SESSAO_JA_CONFIRMADA" -> BookingIdempotencyOutcome.SESSAO_JA_CONFIRMADA;
+            case "SELECAO_INDISPONIVEL" -> BookingIdempotencyOutcome.SELECAO_INDISPONIVEL;
+            case "FALHA_TECNICA" -> BookingIdempotencyOutcome.FALHA_TECNICA;
+            default -> throw new IllegalStateException(
+                    "outcome_status persistido desconhecido em booking_idempotency: '" + valor + "'");
+        };
     }
 }
