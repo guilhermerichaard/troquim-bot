@@ -7,6 +7,7 @@ import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.availability.IntervaloDeHorario;
 import com.troquim_bot.availability.RelogioDoNegocio;
+import com.troquim_bot.business.BusinessCalendar;
 import com.troquim_bot.business.BusinessHours;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
@@ -15,7 +16,7 @@ import com.troquim_bot.professional.Professional;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
 import com.troquim_bot.repository.InMemoryAvailabilityRepository;
-import com.troquim_bot.repository.InMemoryBusinessHoursRepository;
+import com.troquim_bot.repository.InMemoryBusinessCalendarRepository;
 import com.troquim_bot.repository.InMemoryProfessionalRepository;
 import com.troquim_bot.repository.InMemoryServiceRepository;
 import com.troquim_bot.service.Service;
@@ -64,7 +65,7 @@ class ConsultarDisponibilidadeTest {
 
     private InMemoryServiceRepository servicos;
     private InMemoryProfessionalRepository profissionais;
-    private InMemoryBusinessHoursRepository expedientes;
+    private InMemoryBusinessCalendarRepository expedientes;
     private InMemoryAvailabilityRepository disponibilidades;
     private InMemoryAppointmentRepository appointments;
 
@@ -125,14 +126,14 @@ class ConsultarDisponibilidadeTest {
     void montarSalao() {
         servicos = new InMemoryServiceRepository();
         profissionais = new InMemoryProfessionalRepository();
-        expedientes = new InMemoryBusinessHoursRepository();
+        expedientes = new InMemoryBusinessCalendarRepository();
         disponibilidades = new InMemoryAvailabilityRepository();
         appointments = new InMemoryAppointmentRepository();
 
         servicoDe1h = servico(SALAO, "Cabelo", 60);
         malu = profissional(SALAO, "Malu", Set.of(servicoDe1h.getId()));
 
-        expedientes.salvar(SALAO, expedientePadrao());
+        expedientes.salvar(new BusinessCalendar(SALAO, expedientePadrao()));
         disponibilizarSemanaInteira(SALAO, malu, expedientePadrao());
 
         consultar = comRelogioEm(MADRUGADA_DA_QUARTA);
@@ -152,7 +153,7 @@ class ConsultarDisponibilidadeTest {
             Professional rui = profissional(OUTRO_SALAO, "Rui", Set.of(servicoB.getId()));
             BusinessHours soATarde = BusinessHours.deSemana(
                     Map.of(DiaSemana.QUARTA, List.of(periodo(14, 0, 17, 0))));
-            expedientes.salvar(OUTRO_SALAO, soATarde);
+            expedientes.salvar(new BusinessCalendar(OUTRO_SALAO, soATarde));
             disponibilizarSemanaInteira(OUTRO_SALAO, rui, soATarde);
 
             var doSalao = consultar.doDia(SALAO, servicoDe1h.getId(), malu.getId(), QUARTA);
@@ -174,7 +175,7 @@ class ConsultarDisponibilidadeTest {
                     Set.of(servicoB.getId()), Set.of(), "+5511911111111"));
             BusinessHours outroExpediente = BusinessHours.deSemana(
                     Map.of(DiaSemana.QUARTA, List.of(periodo(15, 0, 16, 0))));
-            expedientes.salvar(OUTRO_SALAO, outroExpediente);
+            expedientes.salvar(new BusinessCalendar(OUTRO_SALAO, outroExpediente));
             disponibilidades.salvar(new Availability(AvailabilityId.generate(), OUTRO_SALAO,
                     compartilhado, DiaSemana.QUARTA, periodo(15, 0, 16, 0)));
 
@@ -190,7 +191,7 @@ class ConsultarDisponibilidadeTest {
             // O salão B tem catálogo e expediente, mas NENHUMA disponibilidade cadastrada.
             Service servicoB = servico(OUTRO_SALAO, "Barba", 60);
             Professional rui = profissional(OUTRO_SALAO, "Rui", Set.of(servicoB.getId()));
-            expedientes.salvar(OUTRO_SALAO, expedientePadrao());
+            expedientes.salvar(new BusinessCalendar(OUTRO_SALAO, expedientePadrao()));
 
             var doOutro = consultar.doDia(OUTRO_SALAO, servicoB.getId(), rui.getId(), QUARTA);
 

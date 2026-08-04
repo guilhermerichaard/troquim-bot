@@ -5,13 +5,16 @@ import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.availability.AvailabilityStatus;
 import com.troquim_bot.availability.IntervaloDeHorario;
+import com.troquim_bot.business.Business;
+import com.troquim_bot.business.BusinessCalendar;
 import com.troquim_bot.business.BusinessHours;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.Professional;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AvailabilityRepository;
-import com.troquim_bot.repository.BusinessHoursRepository;
+import com.troquim_bot.repository.BusinessCalendarRepository;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.repository.ProfessionalRepository;
 import com.troquim_bot.support.TestTenants;
 
@@ -135,15 +138,17 @@ class ExpedientePostgresPersistenceTest {
 
         // ---- Contexto A: grava ----
         try (ConfigurableApplicationContext ctxA = startContext()) {
-            BusinessHoursRepository expedientes = ctxA.getBean(BusinessHoursRepository.class);
+            BusinessCalendarRepository expedientes = ctxA.getBean(BusinessCalendarRepository.class);
             AvailabilityRepository disponibilidades = ctxA.getBean(AvailabilityRepository.class);
             ProfessionalRepository profissionais = ctxA.getBean(ProfessionalRepository.class);
+            BusinessRepository negocios = ctxA.getBean(BusinessRepository.class);
 
             // Os adapters de produção precisam ser os JPA, não os duplos em memória.
-            assertThat(expedientes).isInstanceOf(JpaBusinessHoursRepository.class);
+            assertThat(expedientes).isInstanceOf(JpaBusinessCalendarRepository.class);
             assertThat(disponibilidades).isInstanceOf(JpaAvailabilityRepository.class);
 
-            expedientes.salvar(negocio, expedienteComAlmoco());
+            negocios.save(new Business(negocio, "Negócio Teste", null, null));
+            expedientes.salvar(new BusinessCalendar(negocio, expedienteComAlmoco()));
 
             Professional profissional = profissionais.salvar(new Professional(
                     ProfessionalId.generate(), negocio, "Profissional Teste",
@@ -162,10 +167,10 @@ class ExpedientePostgresPersistenceTest {
 
         // ---- Contexto B: lê do zero, sem nada em memória ----
         try (ConfigurableApplicationContext ctxB = startContext()) {
-            BusinessHoursRepository expedientes = ctxB.getBean(BusinessHoursRepository.class);
+            BusinessCalendarRepository expedientes = ctxB.getBean(BusinessCalendarRepository.class);
             AvailabilityRepository disponibilidades = ctxB.getBean(AvailabilityRepository.class);
 
-            BusinessHours recarregado = expedientes.buscar(negocio);
+            BusinessHours recarregado = expedientes.buscar(negocio).getExpediente();
 
             assertThat(expedientes.configurado(negocio)).isTrue();
             assertThat(recarregado.naoTemExpediente()).isFalse();
@@ -205,13 +210,15 @@ class ExpedientePostgresPersistenceTest {
         BusinessId negocio = BusinessId.from(UUID.randomUUID());
 
         try (ConfigurableApplicationContext ctx = startContext()) {
-            BusinessHoursRepository expedientes = ctx.getBean(BusinessHoursRepository.class);
+            BusinessCalendarRepository expedientes = ctx.getBean(BusinessCalendarRepository.class);
+            BusinessRepository negocios = ctx.getBean(BusinessRepository.class);
+            negocios.save(new Business(negocio, "Negócio Teste", null, null));
 
-            expedientes.salvar(negocio, expedienteComAlmoco());
-            expedientes.salvar(negocio, BusinessHours.deSemana(
-                    Map.of(DiaSemana.TERCA, List.of(periodo(10, 0, 19, 0)))));
+            expedientes.salvar(new BusinessCalendar(negocio, expedienteComAlmoco()));
+            expedientes.salvar(new BusinessCalendar(negocio, BusinessHours.deSemana(
+                    Map.of(DiaSemana.TERCA, List.of(periodo(10, 0, 19, 0))))));
 
-            BusinessHours atual = expedientes.buscar(negocio);
+            BusinessHours atual = expedientes.buscar(negocio).getExpediente();
             assertThat(atual.getDiasFuncionamento()).containsExactly(DiaSemana.TERCA);
             assertThat(atual.fechadoEm(DiaSemana.SEGUNDA)).isTrue();
         }
@@ -221,11 +228,11 @@ class ExpedientePostgresPersistenceTest {
     @DisplayName("negócio sem expediente devolve o estado NÃO CONFIGURADO, nunca null")
     void semExpedienteDevolveNaoConfigurado() {
         try (ConfigurableApplicationContext ctx = startContext()) {
-            BusinessHoursRepository expedientes = ctx.getBean(BusinessHoursRepository.class);
+            BusinessCalendarRepository expedientes = ctx.getBean(BusinessCalendarRepository.class);
             BusinessId virgem = BusinessId.from(UUID.randomUUID());
 
             assertThat(expedientes.configurado(virgem)).isFalse();
-            assertThat(expedientes.buscar(virgem).naoTemExpediente()).isTrue();
+            assertThat(expedientes.buscar(virgem).getExpediente().naoTemExpediente()).isTrue();
         }
     }
 
@@ -235,6 +242,11 @@ class ExpedientePostgresPersistenceTest {
         try (ConfigurableApplicationContext ctx = startContext()) {
             ProfessionalRepository profissionais = ctx.getBean(ProfessionalRepository.class);
             AvailabilityRepository disponibilidades = ctx.getBean(AvailabilityRepository.class);
+            BusinessRepository negocios = ctx.getBean(BusinessRepository.class);
+            // NEGOCIO_B precisa existir como Business para que a FK violada pelo insert
+            // cruzado seja a composta (business_id, professional_id) -> professionals, e não
+            // a de business_id -> businesses — é essa a invariante que este teste prova.
+            negocios.save(new Business(NEGOCIO_B, "Negócio B de Teste", null, null));
 
             Professional doA = profissionais.salvar(new Professional(ProfessionalId.generate(),
                     NEGOCIO_A, "Profissional do A", Set.of(), Set.of(), "+5511999990001"));
@@ -270,6 +282,7 @@ class ExpedientePostgresPersistenceTest {
     void bancoRecusaPeriodoInvertido() throws SQLException {
         try (ConfigurableApplicationContext ctx = startContext()) {
             BusinessId negocio = BusinessId.from(UUID.randomUUID());
+            ctx.getBean(BusinessRepository.class).save(new Business(negocio, "Negócio Teste", null, null));
             DataSource dataSource = ctx.getBean(DataSource.class);
 
             try (Connection conexao = dataSource.getConnection();
@@ -295,21 +308,24 @@ class ExpedientePostgresPersistenceTest {
         BusinessId b = BusinessId.from(UUID.randomUUID());
 
         try (ConfigurableApplicationContext ctx = startContext()) {
-            BusinessHoursRepository expedientes = ctx.getBean(BusinessHoursRepository.class);
+            BusinessCalendarRepository expedientes = ctx.getBean(BusinessCalendarRepository.class);
+            BusinessRepository negocios = ctx.getBean(BusinessRepository.class);
+            negocios.save(new Business(a, "Negócio A de Teste", null, null));
+            negocios.save(new Business(b, "Negócio B de Teste", null, null));
 
-            expedientes.salvar(a, expedienteComAlmoco());
-            expedientes.salvar(b, BusinessHours.deSemana(
-                    Map.of(DiaSemana.SEGUNDA, List.of(periodo(14, 0, 20, 0)))));
+            expedientes.salvar(new BusinessCalendar(a, expedienteComAlmoco()));
+            expedientes.salvar(new BusinessCalendar(b, BusinessHours.deSemana(
+                    Map.of(DiaSemana.SEGUNDA, List.of(periodo(14, 0, 20, 0))))));
 
             List<IntervaloDeHorario> segundaDeA = new ArrayList<>(
-                    expedientes.buscar(a).periodosDe(DiaSemana.SEGUNDA));
+                    expedientes.buscar(a).getExpediente().periodosDe(DiaSemana.SEGUNDA));
             List<IntervaloDeHorario> segundaDeB = new ArrayList<>(
-                    expedientes.buscar(b).periodosDe(DiaSemana.SEGUNDA));
+                    expedientes.buscar(b).getExpediente().periodosDe(DiaSemana.SEGUNDA));
 
             assertThat(segundaDeA).containsExactly(periodo(9, 0, 12, 0), periodo(13, 0, 18, 0));
             assertThat(segundaDeB).containsExactly(periodo(14, 0, 20, 0));
-            assertThat(expedientes.buscar(b).fechadoEm(DiaSemana.SABADO)).isTrue();
-            assertThat(expedientes.buscar(a).fechadoEm(DiaSemana.SABADO)).isFalse();
+            assertThat(expedientes.buscar(b).getExpediente().fechadoEm(DiaSemana.SABADO)).isTrue();
+            assertThat(expedientes.buscar(a).getExpediente().fechadoEm(DiaSemana.SABADO)).isFalse();
         }
     }
 }

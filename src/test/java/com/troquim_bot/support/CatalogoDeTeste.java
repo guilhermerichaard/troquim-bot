@@ -3,9 +3,11 @@ package com.troquim_bot.support;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.catalog.ProvisionarNegocio;
 import com.troquim_bot.availability.IntervaloDeHorario;
+import com.troquim_bot.business.Business;
 import com.troquim_bot.business.BusinessHours;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
+import com.troquim_bot.repository.BusinessRepository;
 
 import java.time.LocalTime;
 import java.util.EnumMap;
@@ -63,8 +65,17 @@ public final class CatalogoDeTeste {
     /**
      * Provisiona dois serviços ativos, uma profissional habilitada para ambos, o expediente
      * do negócio e a disponibilidade semanal dela. Tudo pelo caso de uso real, idempotente.
+     *
+     * Garante primeiro que o {@link Business} do tenant existe: ProvisionarNegocio recusa
+     * provisionar um negócio inexistente, e o fixture de teste não pode depender de seed
+     * externo (a semente de Flyway do piloto não roda contra o H2 do profile de teste,
+     * que usa {@code ddl-auto=create-drop}).
      */
-    public static void provisionar(ProvisionarNegocio provisionarNegocio, BusinessId tenant) {
+    public static void provisionar(ProvisionarNegocio provisionarNegocio,
+                                   BusinessRepository businessRepository, BusinessId tenant) {
+        if (!businessRepository.exists(tenant)) {
+            businessRepository.save(new Business(tenant, "Negócio de Teste", null, null));
+        }
         provisionarNegocio.provisionar(tenant,
                 List.of(new ProvisionarNegocio.ServicoDesejado(UNHAS, DURACAO_MINUTOS),
                         new ProvisionarNegocio.ServicoDesejado(CABELO, DURACAO_MINUTOS)),

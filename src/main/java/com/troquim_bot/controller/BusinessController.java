@@ -29,19 +29,15 @@ public class BusinessController {
 
     /**
      * GET /business
-     * Retorna o Business atual.
-     * Se não existir, cria um Business padrão do MVP.
+     * Retorna o Business atual. NÃO cria um automaticamente: cadastro é responsabilidade
+     * explícita de CadastrarNegocio, nunca implícita de um GET.
      */
     @GetMapping
     public ResponseEntity<BusinessResponse> getBusiness() {
-        Business business = businessApplicationService.buscarBusinessAtual()
-            .orElseGet(() -> businessApplicationService.criarBusinessPadrao(
-                "Meu Salão",
-                null,
-                null
-            ));
-
-        return ResponseEntity.ok(BusinessResponse.from(business));
+        return businessApplicationService.buscarBusinessAtual()
+            .map(BusinessResponse::from)
+            .map(ResponseEntity::ok)
+            .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     /**

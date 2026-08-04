@@ -6,10 +6,10 @@ import com.troquim_bot.business.BusinessId;
 import java.util.List;
 
 /**
- * Repository abstraction para persistência de Business.
- * 
- * Esta é uma interface pura sem dependência de frameworks.
- * A implementação concreta será definida na camada de infraestrutura.
+ * Repository abstraction para persistência de Business — a raiz de identidade do tenant.
+ *
+ * Interface pura, sem dependência de frameworks. A implementação concreta é definida na
+ * camada de infraestrutura.
  */
 public interface BusinessRepository {
 
@@ -20,7 +20,7 @@ public interface BusinessRepository {
 
     /**
      * Busca um Business por ID.
-     * 
+     *
      * @return Business se encontrado, null caso contrário
      */
     Business findById(BusinessId id);
@@ -31,12 +31,8 @@ public interface BusinessRepository {
     boolean exists(BusinessId id);
 
     /**
-     * Busca todos os Businesses.
+     * Busca todos os Businesses. Usado apenas pela área administrativa legada de
+     * single-salão; nenhum caso de uso tenant-scoped deve depender disto.
      */
     List<Business> findAll();
-
-    /**
-     * Remove um Business por ID.
-     */
-    void delete(BusinessId id);
 }

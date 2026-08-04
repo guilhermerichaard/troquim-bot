@@ -1,17 +1,19 @@
 package com.troquim_bot.business;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
- * Aggregate Root que representa um negócio cliente do Troquim.
- * 
+ * Aggregate Root que representa a IDENTIDADE de um negócio cliente do Troquim.
+ *
  * Responsabilidades:
- * - Gerenciar configurações do negócio (nome, contato, horários)
+ * - Guardar nome, contato e status do negócio
  * - Controlar o ciclo de vida do negócio (TRIAL, ATIVO, INATIVO, SUSPENSO, DELETADO)
- * - Proteger invariants de negócio
- * - Ser a raiz de referência para todos os Aggregates relacionados
+ * - Ser a raiz de referência para todos os Aggregates tenant-scoped
+ *
+ * NÃO é autoridade sobre calendário: expediente vive em {@link BusinessCalendar}, um
+ * agregado próprio. Um Business que também carregasse BusinessHours criaria DUAS fontes de
+ * verdade assim que ambos fossem persistidos — a mesma semana lida de dois lugares que podem
+ * divergir. Por isso Business não sabe nada de horário de funcionamento.
  */
 public class Business {
 
@@ -19,34 +21,29 @@ public class Business {
     private String nome;
     private String telefone;
     private String endereco;
-    private BusinessHours horarioFuncionamento;
     private BusinessStatus status;
     private final LocalDateTime criadoEm;
     private LocalDateTime atualizadoEm;
 
     /**
-     * Construtor para criação de novo Business.
-     * Inicia com status TRIAL.
+     * Construtor para criação de novo Business. Inicia com status TRIAL.
+     *
+     * Contato é OPCIONAL: durante onboarding o dono pode não ter informado telefone nem
+     * endereço ainda. Inventar um valor para satisfazer o construtor esconderia essa
+     * ausência real atrás de um dado falso.
      */
-    public Business(BusinessId id, String nome, String telefone, String endereco, BusinessHours horarioFuncionamento) {
+    public Business(BusinessId id, String nome, String telefone, String endereco) {
         if (id == null) {
             throw new IllegalArgumentException("BusinessId é obrigatório");
         }
         if (nome == null || nome.trim().isEmpty()) {
             throw new IllegalArgumentException("Nome do negócio é obrigatório");
         }
-        if (telefone == null && endereco == null) {
-            throw new IllegalArgumentException("Deve ter pelo menos um contato (telefone ou endereço)");
-        }
-        if (horarioFuncionamento == null) {
-            throw new IllegalArgumentException("Horário de funcionamento é obrigatório");
-        }
 
         this.id = id;
         this.nome = nome.trim();
         this.telefone = telefone != null ? telefone.trim() : null;
         this.endereco = endereco != null ? endereco.trim() : null;
-        this.horarioFuncionamento = horarioFuncionamento;
         this.status = BusinessStatus.TRIAL;
         this.criadoEm = LocalDateTime.now();
         this.atualizadoEm = LocalDateTime.now();
@@ -56,9 +53,8 @@ public class Business {
      * Construtor para reconstituição de Business existente (ex: do banco de dados).
      * Usado apenas pela infraestrutura.
      */
-    public Business(BusinessId id, String nome, String telefone, String endereco, 
-                    BusinessHours horarioFuncionamento, BusinessStatus status, 
-                    LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
+    public Business(BusinessId id, String nome, String telefone, String endereco,
+                    BusinessStatus status, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         if (id == null) {
             throw new IllegalArgumentException("BusinessId é obrigatório");
         }
@@ -73,7 +69,6 @@ public class Business {
         this.nome = nome.trim();
         this.telefone = telefone != null ? telefone.trim() : null;
         this.endereco = endereco != null ? endereco.trim() : null;
-        this.horarioFuncionamento = horarioFuncionamento;
         this.status = status;
         this.criadoEm = criadoEm;
         this.atualizadoEm = atualizadoEm;
@@ -95,10 +90,6 @@ public class Business {
 
     public String getEndereco() {
         return endereco;
-    }
-
-    public BusinessHours getHorarioFuncionamento() {
-        return horarioFuncionamento;
     }
 
     public BusinessStatus getStatus() {
@@ -130,23 +121,9 @@ public class Business {
     }
 
     /**
-     * Atualiza o horário de funcionamento do negócio.
-     */
-    public void atualizarHorarioFuncionamento(BusinessHours novoHorario) {
-        if (novoHorario == null) {
-            throw new IllegalArgumentException("Horário de funcionamento não pode ser nulo");
-        }
-        this.horarioFuncionamento = novoHorario;
-        tocar();
-    }
-
-    /**
      * Atualiza informações de contato do negócio.
      */
     public void atualizarContato(String telefone, String endereco) {
-        if (telefone == null && endereco == null) {
-            throw new IllegalArgumentException("Deve ter pelo menos um contato (telefone ou endereço)");
-        }
         this.telefone = telefone != null ? telefone.trim() : null;
         this.endereco = endereco != null ? endereco.trim() : null;
         tocar();
@@ -204,37 +181,9 @@ public class Business {
         tocar();
     }
 
-    /**
-     * Verifica se o Business está em horário de funcionamento.
-     */
-    public boolean estaEmHorarioFuncionamento(java.time.DayOfWeek dia, java.time.LocalTime horario) {
-        if (horarioFuncionamento == null) {
-            return false;
-        }
-        
-        DiaSemana diaSemana = converterDiaSemana(dia);
-        if (!horarioFuncionamento.isDiaFuncionamento(diaSemana)) {
-            return false;
-        }
-        
-        return horarioFuncionamento.estaAberto(horario);
-    }
-
     // ==================== MÉTODOS PRIVADOS ====================
 
     private void tocar() {
         this.atualizadoEm = LocalDateTime.now();
-    }
-
-    private DiaSemana converterDiaSemana(java.time.DayOfWeek dia) {
-        return switch (dia) {
-            case MONDAY -> DiaSemana.SEGUNDA;
-            case TUESDAY -> DiaSemana.TERCA;
-            case WEDNESDAY -> DiaSemana.QUARTA;
-            case THURSDAY -> DiaSemana.QUINTA;
-            case FRIDAY -> DiaSemana.SEXTA;
-            case SATURDAY -> DiaSemana.SABADO;
-            case SUNDAY -> DiaSemana.DOMINGO;
-        };
     }
 }
