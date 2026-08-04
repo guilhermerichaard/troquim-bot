@@ -8,6 +8,7 @@ import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.catalog.ProvisionarNegocio;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.repository.AppointmentRepository;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.service.ServiceId;
 import com.troquim_bot.support.CatalogoDeTeste;
 import com.troquim_bot.support.TestTenants;
@@ -93,6 +94,8 @@ class WhatsAppFlowEndpointTest {
     @Autowired
     private ProvisionarNegocio provisionarNegocio;
     @Autowired
+    private BusinessRepository businessRepository;
+    @Autowired
     private ConsultarCatalogo consultarCatalogo;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -106,7 +109,7 @@ class WhatsAppFlowEndpointTest {
     @BeforeEach
     void abrirSessao() {
         appointmentRepository.findAll().forEach(a -> appointmentRepository.delete(a.getId()));
-        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+        CatalogoDeTeste.provisionar(provisionarNegocio, businessRepository, TestTenants.PILOT);
         unhas = CatalogoDeTeste.servicoId(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
         cabelo = CatalogoDeTeste.servicoId(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.CABELO);
         profissional = CatalogoDeTeste.profissionalId(

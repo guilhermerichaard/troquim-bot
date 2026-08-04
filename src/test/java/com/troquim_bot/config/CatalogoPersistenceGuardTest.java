@@ -2,17 +2,20 @@ package com.troquim_bot.config;
 
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
-import com.troquim_bot.business.BusinessHours;
+import com.troquim_bot.business.Business;
+import com.troquim_bot.business.BusinessCalendar;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.infrastructure.persistence.JpaAvailabilityRepository;
-import com.troquim_bot.infrastructure.persistence.JpaBusinessHoursRepository;
+import com.troquim_bot.infrastructure.persistence.JpaBusinessCalendarRepository;
+import com.troquim_bot.infrastructure.persistence.JpaBusinessRepository;
 import com.troquim_bot.infrastructure.persistence.JpaProfessionalRepository;
 import com.troquim_bot.infrastructure.persistence.JpaServiceRepository;
 import com.troquim_bot.professional.Professional;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AvailabilityRepository;
-import com.troquim_bot.repository.BusinessHoursRepository;
+import com.troquim_bot.repository.BusinessCalendarRepository;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.repository.ProfessionalRepository;
 import com.troquim_bot.repository.ServiceRepository;
 import com.troquim_bot.service.Service;
@@ -30,14 +33,15 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * A guarda que impede produção de subir com catálogo ou AGENDA voláteis.
+ * A guarda que impede produção de subir com catálogo, calendário, agenda ou identidade de
+ * negócio voláteis.
  *
  * O risco que ela cobre é traiçoeiro: sem ela, faltando o adapter JPA, o contexto escolhe
  * o repositório em memória e a aplicação sobe "funcionando" — com o catálogo e o expediente
  * evaporando a cada restart e nenhum erro no log. Trocar isso por falha de inicialização é
  * o ponto.
  */
-@DisplayName("Guarda de persistência do catálogo e da agenda")
+@DisplayName("Guarda de persistência do catálogo, calendário e identidade do negócio")
 class CatalogoPersistenceGuardTest {
 
     /** Duplo em memória qualquer, representando o que NÃO pode ser aceito em produção. */
@@ -62,10 +66,10 @@ class CatalogoPersistenceGuardTest {
         };
     }
 
-    private static BusinessHoursRepository repositorioVolatilDeExpediente() {
-        return new BusinessHoursRepository() {
-            @Override public void salvar(BusinessId b, BusinessHours h) { }
-            @Override public BusinessHours buscar(BusinessId b) { return BusinessHours.naoConfigurado(); }
+    private static BusinessCalendarRepository repositorioVolatilDeExpediente() {
+        return new BusinessCalendarRepository() {
+            @Override public void salvar(BusinessCalendar c) { }
+            @Override public BusinessCalendar buscar(BusinessId b) { return BusinessCalendar.naoConfigurado(b); }
             @Override public boolean configurado(BusinessId b) { return false; }
         };
     }
@@ -82,6 +86,14 @@ class CatalogoPersistenceGuardTest {
         };
     }
 
+    private static BusinessRepository repositorioVolatilDeNegocio() {
+        return new BusinessRepository() {
+            @Override public Business save(Business b) { return b; }
+            @Override public Business findById(BusinessId id) { return null; }
+            @Override public boolean exists(BusinessId id) { return false; }
+        };
+    }
+
     private static JpaServiceRepository servicoJpa() {
         return Mockito.mock(JpaServiceRepository.class);
     }
@@ -90,19 +102,23 @@ class CatalogoPersistenceGuardTest {
         return Mockito.mock(JpaProfessionalRepository.class);
     }
 
-    private static JpaBusinessHoursRepository expedienteJpa() {
-        return Mockito.mock(JpaBusinessHoursRepository.class);
+    private static JpaBusinessCalendarRepository expedienteJpa() {
+        return Mockito.mock(JpaBusinessCalendarRepository.class);
     }
 
     private static JpaAvailabilityRepository disponibilidadeJpa() {
         return Mockito.mock(JpaAvailabilityRepository.class);
     }
 
+    private static JpaBusinessRepository negocioJpa() {
+        return Mockito.mock(JpaBusinessRepository.class);
+    }
+
     @Test
     @DisplayName("recusa subir quando o catálogo não é o adapter JPA")
     void recusaRepositorioVolatilDeServico() {
         assertThatThrownBy(() -> new CatalogoPersistenceGuard(
-                repositorioVolatilDeServico(), profissionalJpa(), expedienteJpa(), disponibilidadeJpa()))
+                repositorioVolatilDeServico(), profissionalJpa(), expedienteJpa(), disponibilidadeJpa(), negocioJpa()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("ServiceRepository")
                 .hasMessageContaining("Catálogo sem persistência");
@@ -112,34 +128,43 @@ class CatalogoPersistenceGuardTest {
     @DisplayName("recusa subir quando os profissionais não são o adapter JPA")
     void recusaRepositorioVolatilDeProfissional() {
         assertThatThrownBy(() -> new CatalogoPersistenceGuard(
-                servicoJpa(), repositorioVolatilDeProfissional(), expedienteJpa(), disponibilidadeJpa()))
+                servicoJpa(), repositorioVolatilDeProfissional(), expedienteJpa(), disponibilidadeJpa(), negocioJpa()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("ProfessionalRepository");
     }
 
     @Test
-    @DisplayName("recusa subir quando o EXPEDIENTE não é o adapter JPA")
+    @DisplayName("recusa subir quando o CALENDÁRIO não é o adapter JPA")
     void recusaExpedienteVolatil() {
         assertThatThrownBy(() -> new CatalogoPersistenceGuard(
-                servicoJpa(), profissionalJpa(), repositorioVolatilDeExpediente(), disponibilidadeJpa()))
+                servicoJpa(), profissionalJpa(), repositorioVolatilDeExpediente(), disponibilidadeJpa(), negocioJpa()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BusinessHoursRepository");
+                .hasMessageContaining("BusinessCalendarRepository");
     }
 
     @Test
     @DisplayName("recusa subir quando a DISPONIBILIDADE não é o adapter JPA")
     void recusaDisponibilidadeVolatil() {
         assertThatThrownBy(() -> new CatalogoPersistenceGuard(
-                servicoJpa(), profissionalJpa(), expedienteJpa(), repositorioVolatilDeDisponibilidade()))
+                servicoJpa(), profissionalJpa(), expedienteJpa(), repositorioVolatilDeDisponibilidade(), negocioJpa()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("AvailabilityRepository");
+    }
+
+    @Test
+    @DisplayName("recusa subir quando o NEGÓCIO não é o adapter JPA")
+    void recusaNegocioVolatil() {
+        assertThatThrownBy(() -> new CatalogoPersistenceGuard(
+                servicoJpa(), profissionalJpa(), expedienteJpa(), disponibilidadeJpa(), repositorioVolatilDeNegocio()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("BusinessRepository");
     }
 
     @Test
     @DisplayName("a mensagem explica a consequência, não só o sintoma")
     void mensagemExplicaConsequencia() {
         assertThatThrownBy(() -> new CatalogoPersistenceGuard(
-                repositorioVolatilDeServico(), profissionalJpa(), expedienteJpa(), disponibilidadeJpa()))
+                repositorioVolatilDeServico(), profissionalJpa(), expedienteJpa(), disponibilidadeJpa(), negocioJpa()))
                 .hasMessageContaining("perderia serviços e habilitações a cada restart");
     }
 
@@ -147,7 +172,7 @@ class CatalogoPersistenceGuardTest {
     @DisplayName("aceita quando todos são os adapters JPA")
     void aceitaAdaptersJpa() {
         assertThatCode(() -> new CatalogoPersistenceGuard(
-                servicoJpa(), profissionalJpa(), expedienteJpa(), disponibilidadeJpa()))
+                servicoJpa(), profissionalJpa(), expedienteJpa(), disponibilidadeJpa(), negocioJpa()))
                 .doesNotThrowAnyException();
     }
 
@@ -155,7 +180,7 @@ class CatalogoPersistenceGuardTest {
     @DisplayName("repositório nulo também é recusado, com mensagem clara")
     void recusaRepositorioAusente() {
         assertThatThrownBy(() -> new CatalogoPersistenceGuard(
-                null, profissionalJpa(), expedienteJpa(), disponibilidadeJpa()))
+                null, profissionalJpa(), expedienteJpa(), disponibilidadeJpa(), negocioJpa()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("nenhum bean");
     }
@@ -164,14 +189,17 @@ class CatalogoPersistenceGuardTest {
     @DisplayName("os duplos em memória estão restritos a perfis explícitos")
     void duplosEmMemoriaTemPerfilRestrito() {
         // Impede a regressão de alguém remover o @Profile e reabrir a porta para o
-        // catálogo ou a agenda voláteis entrarem em produção pela injeção.
+        // catálogo, o calendário, a agenda ou a identidade do negócio voláteis entrarem em
+        // produção pela injeção.
         var perfilServico = com.troquim_bot.repository.InMemoryServiceRepository.class
                 .getAnnotation(org.springframework.context.annotation.Profile.class);
         var perfilProfissional = com.troquim_bot.repository.InMemoryProfessionalRepository.class
                 .getAnnotation(org.springframework.context.annotation.Profile.class);
-        var perfilExpediente = com.troquim_bot.repository.InMemoryBusinessHoursRepository.class
+        var perfilExpediente = com.troquim_bot.repository.InMemoryBusinessCalendarRepository.class
                 .getAnnotation(org.springframework.context.annotation.Profile.class);
         var perfilDisponibilidade = com.troquim_bot.repository.InMemoryAvailabilityRepository.class
+                .getAnnotation(org.springframework.context.annotation.Profile.class);
+        var perfilNegocio = com.troquim_bot.repository.InMemoryBusinessRepository.class
                 .getAnnotation(org.springframework.context.annotation.Profile.class);
 
         assertThat(perfilServico).isNotNull();
@@ -182,5 +210,7 @@ class CatalogoPersistenceGuardTest {
         assertThat(perfilExpediente.value()).containsExactlyInAnyOrder("test", "dev-inmemory");
         assertThat(perfilDisponibilidade).isNotNull();
         assertThat(perfilDisponibilidade.value()).containsExactlyInAnyOrder("test", "dev-inmemory");
+        assertThat(perfilNegocio).isNotNull();
+        assertThat(perfilNegocio.value()).containsExactlyInAnyOrder("test", "dev-inmemory");
     }
 }

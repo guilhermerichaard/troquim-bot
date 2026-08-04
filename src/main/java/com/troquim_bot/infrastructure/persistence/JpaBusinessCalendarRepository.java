@@ -1,10 +1,11 @@
 package com.troquim_bot.infrastructure.persistence;
 
 import com.troquim_bot.availability.IntervaloDeHorario;
+import com.troquim_bot.business.BusinessCalendar;
 import com.troquim_bot.business.BusinessHours;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
-import com.troquim_bot.repository.BusinessHoursRepository;
+import com.troquim_bot.repository.BusinessCalendarRepository;
 
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Repository;
@@ -17,43 +18,44 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Adapter JPA do expediente — o repositório de PRODUÇÃO.
+ * Adapter JPA do calendário do negócio — o repositório de PRODUÇÃO.
  *
- * Só converte e persiste. A regra de sobreposição entre períodos do mesmo dia é do agregado
- * {@link BusinessHours}: reconstituir aqui passa pelo construtor dele, então um dado
+ * Só converte e persiste. A regra de sobreposição entre períodos do mesmo dia é do Value
+ * Object {@link BusinessHours}: reconstituir aqui passa pelo construtor dele, então um dado
  * inconsistente que tenha entrado por fora da aplicação falha ao ser LIDO, em vez de virar
  * horário duplicado na tela da cliente.
+ *
+ * Persiste fisicamente em {@code business_hours} — mesma tabela de sempre, uma linha por
+ * período do calendário.
  */
 @Repository
 @Primary
-public class JpaBusinessHoursRepository implements BusinessHoursRepository {
+public class JpaBusinessCalendarRepository implements BusinessCalendarRepository {
 
     private final SpringDataBusinessHoursRepository springDataRepository;
 
-    public JpaBusinessHoursRepository(SpringDataBusinessHoursRepository springDataRepository) {
+    public JpaBusinessCalendarRepository(SpringDataBusinessHoursRepository springDataRepository) {
         this.springDataRepository = springDataRepository;
     }
 
     /**
-     * Substituição atômica: apaga o expediente atual e grava o novo na MESMA transação.
+     * Substituição atômica: apaga o calendário atual e grava o novo na MESMA transação.
      * Sem isso, uma falha no meio deixaria o negócio com metade da semana cadastrada — e
      * metade de um expediente é pior do que nenhum, porque parece configurado.
      */
     @Override
     @Transactional
-    public void salvar(BusinessId businessId, BusinessHours expediente) {
-        if (businessId == null) {
-            throw new IllegalArgumentException("BusinessId é obrigatório para salvar expediente");
+    public void salvar(BusinessCalendar calendario) {
+        if (calendario == null) {
+            throw new IllegalArgumentException("Calendário é obrigatório");
         }
-        if (expediente == null) {
-            throw new IllegalArgumentException("Expediente é obrigatório");
-        }
+        BusinessId businessId = calendario.getBusinessId();
 
         springDataRepository.deleteByBusinessId(businessId.getValue());
 
         LocalDateTime agora = LocalDateTime.now();
         List<BusinessHoursJpaEntity> linhas = new ArrayList<>();
-        expediente.porDiaDaSemana().forEach((dia, periodos) ->
+        calendario.getExpediente().porDiaDaSemana().forEach((dia, periodos) ->
                 periodos.forEach(periodo ->
                         linhas.add(BusinessHoursJpaEntity.de(businessId, dia, periodo, agora))));
         springDataRepository.saveAll(linhas);
@@ -61,16 +63,19 @@ public class JpaBusinessHoursRepository implements BusinessHoursRepository {
 
     @Override
     @Transactional(readOnly = true)
-    public BusinessHours buscar(BusinessId businessId) {
+    public BusinessCalendar buscar(BusinessId businessId) {
         if (businessId == null) {
-            return BusinessHours.naoConfigurado();
+            return null;
         }
         Map<DiaSemana, List<IntervaloDeHorario>> porDia = new EnumMap<>(DiaSemana.class);
         for (BusinessHoursJpaEntity linha : springDataRepository.findByBusinessId(businessId.getValue())) {
             porDia.computeIfAbsent(linha.getDiaSemana(), d -> new ArrayList<>())
                     .add(linha.paraPeriodo());
         }
-        return porDia.isEmpty() ? BusinessHours.naoConfigurado() : BusinessHours.deSemana(porDia);
+        BusinessHours expediente = porDia.isEmpty()
+                ? BusinessHours.naoConfigurado()
+                : BusinessHours.deSemana(porDia);
+        return new BusinessCalendar(businessId, expediente);
     }
 
     @Override

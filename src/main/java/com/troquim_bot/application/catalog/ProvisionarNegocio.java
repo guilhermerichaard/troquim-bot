@@ -3,13 +3,15 @@ package com.troquim_bot.application.catalog;
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.availability.IntervaloDeHorario;
+import com.troquim_bot.business.BusinessCalendar;
 import com.troquim_bot.business.BusinessHours;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.Professional;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AvailabilityRepository;
-import com.troquim_bot.repository.BusinessHoursRepository;
+import com.troquim_bot.repository.BusinessCalendarRepository;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.repository.ProfessionalRepository;
 import com.troquim_bot.repository.ServiceRepository;
 import com.troquim_bot.service.Service;
@@ -48,17 +50,20 @@ public class ProvisionarNegocio {
 
     private final ServiceRepository serviceRepository;
     private final ProfessionalRepository professionalRepository;
-    private final BusinessHoursRepository businessHoursRepository;
+    private final BusinessCalendarRepository businessCalendarRepository;
     private final AvailabilityRepository availabilityRepository;
+    private final BusinessRepository businessRepository;
 
     public ProvisionarNegocio(ServiceRepository serviceRepository,
                               ProfessionalRepository professionalRepository,
-                              BusinessHoursRepository businessHoursRepository,
-                              AvailabilityRepository availabilityRepository) {
+                              BusinessCalendarRepository businessCalendarRepository,
+                              AvailabilityRepository availabilityRepository,
+                              BusinessRepository businessRepository) {
         this.serviceRepository = serviceRepository;
         this.professionalRepository = professionalRepository;
-        this.businessHoursRepository = businessHoursRepository;
+        this.businessCalendarRepository = businessCalendarRepository;
         this.availabilityRepository = availabilityRepository;
+        this.businessRepository = businessRepository;
     }
 
     /** Serviço a provisionar. Sem preço: precificação está fora do MVP. */
@@ -114,7 +119,7 @@ public class ProvisionarNegocio {
         if (expediente == null) {
             return semExpediente;
         }
-        businessHoursRepository.salvar(businessId, expediente);
+        businessCalendarRepository.salvar(new BusinessCalendar(businessId, expediente));
         log.info("Expediente do negócio configurado com {} dia(s) de funcionamento.",
                 expediente.getDiasFuncionamento().size());
         return new Resultado(semExpediente.servicosCriados(), semExpediente.servicosJaExistentes(),
@@ -129,6 +134,11 @@ public class ProvisionarNegocio {
                                  ProfissionalDesejado profissional) {
         if (businessId == null) {
             throw new IllegalArgumentException("BusinessId é obrigatório para provisionar");
+        }
+        if (!businessRepository.exists(businessId)) {
+            throw new IllegalStateException(
+                    "Negócio " + businessId + " não está cadastrado; cadastre-o com "
+                            + "CadastrarNegocio antes de provisionar catálogo, expediente ou disponibilidade");
         }
         if (servicos == null || servicos.isEmpty()) {
             throw new IllegalArgumentException("Ao menos um serviço é obrigatório para provisionar");

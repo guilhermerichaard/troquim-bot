@@ -2,10 +2,12 @@ package com.troquim_bot.infrastructure.persistence;
 
 import com.troquim_bot.TroquimBotApplication;
 import com.troquim_bot.application.catalog.ProvisionarNegocio;
+import com.troquim_bot.business.Business;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.common.valueobject.Money;
 import com.troquim_bot.professional.Professional;
 import com.troquim_bot.professional.ProfessionalId;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.repository.ProfessionalRepository;
 import com.troquim_bot.repository.ServiceRepository;
 import com.troquim_bot.service.Service;
@@ -143,6 +145,7 @@ class CatalogoPostgresPersistenceTest {
         try (ConfigurableApplicationContext ctx = startContext()) {
             ServiceRepository servicos = ctx.getBean(ServiceRepository.class);
             ProfessionalRepository profissionais = ctx.getBean(ProfessionalRepository.class);
+            ctx.getBean(BusinessRepository.class).save(new Business(NEGOCIO_B, "Negócio B de Teste", null, null));
 
             Professional doA = new Professional(ProfessionalId.generate(), NEGOCIO_A,
                     "Profissional do A", Set.of(), Set.of(), "+5511999990001");
@@ -201,6 +204,7 @@ class CatalogoPostgresPersistenceTest {
             ProvisionarNegocio provisionar = ctx.getBean(ProvisionarNegocio.class);
             ServiceRepository repoServicos = ctx.getBean(ServiceRepository.class);
             ProfessionalRepository repoProfissionais = ctx.getBean(ProfessionalRepository.class);
+            ctx.getBean(BusinessRepository.class).save(new Business(alvo, "Negócio Alvo de Teste", null, null));
 
             ProvisionarNegocio.Resultado primeira = provisionar.provisionar(alvo, servicos, profissional);
             assertThat(primeira.servicosCriados()).hasSize(2);

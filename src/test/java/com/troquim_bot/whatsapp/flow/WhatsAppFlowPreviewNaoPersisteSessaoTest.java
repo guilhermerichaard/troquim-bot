@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.catalog.ProvisionarNegocio;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.whatsapp.flow.infrastructure.persistence.SpringDataWhatsAppFlowSessionRepository;
 import com.troquim_bot.whatsapp.flow.support.FlowTestCrypto;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,6 +70,8 @@ class WhatsAppFlowPreviewNaoPersisteSessaoTest {
     @Autowired
     private ProvisionarNegocio provisionarNegocio;
     @Autowired
+    private BusinessRepository businessRepository;
+    @Autowired
     private ConsultarCatalogo consultarCatalogo;
 
     /**
@@ -77,7 +80,7 @@ class WhatsAppFlowPreviewNaoPersisteSessaoTest {
      */
     @BeforeEach
     void provisionarCatalogo() {
-        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+        CatalogoDeTeste.provisionar(provisionarNegocio, businessRepository, TestTenants.PILOT);
     }
 
     @Test

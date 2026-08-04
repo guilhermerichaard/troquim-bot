@@ -3,9 +3,7 @@ package com.troquim_bot.owner;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.business.Business;
-import com.troquim_bot.business.BusinessHours;
 import com.troquim_bot.business.BusinessId;
-import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.common.valueobject.CustomerName;
@@ -33,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.EnumSet;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -88,8 +85,7 @@ class OwnerAppAccessTest {
     }
 
     private void salvarBusiness(BusinessId id, String nome) {
-        businessRepository.save(new Business(id, nome, "(11) 90000-0000", "SP",
-                new BusinessHours(LocalTime.of(9, 0), LocalTime.of(18, 0), EnumSet.of(DiaSemana.SEGUNDA))));
+        businessRepository.save(new Business(id, nome, "(11) 90000-0000", "SP"));
     }
 
     private void agendarPara(BusinessId tenant, String nomeCliente) {

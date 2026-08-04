@@ -14,6 +14,7 @@ import com.troquim_bot.conversation.StrictMvpMenuService;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.repository.AppointmentRepository;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.whatsapp.flow.support.FlowTestCrypto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -108,6 +109,8 @@ class ConversaAteConfirmacaoTest {
 
     @Autowired
     private ProvisionarNegocio provisionarNegocio;
+    @Autowired
+    private BusinessRepository businessRepository;
 
     @Autowired
     private ConsultarCatalogo consultarCatalogo;
@@ -125,7 +128,7 @@ class ConversaAteConfirmacaoTest {
         GatewayDeTeste.ENVIADAS.clear();
         appointmentRepository.findAll().forEach(a -> appointmentRepository.delete(a.getId()));
         conversationStateService.limparEstado(TELEFONE);
-        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+        CatalogoDeTeste.provisionar(provisionarNegocio, businessRepository, TestTenants.PILOT);
         unhas = CatalogoDeTeste.servicoId(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
         profissional = CatalogoDeTeste.profissionalId(
                 consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);

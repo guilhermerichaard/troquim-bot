@@ -4,6 +4,9 @@ import com.troquim_bot.application.booking.BookingCommandKey;
 import com.troquim_bot.application.booking.BookingIdempotencyStore;
 import com.troquim_bot.application.booking.BookingIds;
 import com.troquim_bot.application.booking.BookingResult;
+import com.troquim_bot.business.Business;
+import com.troquim_bot.business.BusinessId;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.support.TestTenants;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -71,9 +74,13 @@ class BookingIdempotencyMultiTenantPostgresTest {
     @Autowired
     private TransactionTemplate tx;
 
+    @Autowired
+    private BusinessRepository businessRepository;
+
     @Test
     @DisplayName("mesmo flow_token em dois negócios: cada um conclui o seu, sem vazamento")
     void mesmoTokenDoisNegociosNaoVaza() {
+        businessRepository.save(new Business(BusinessId.from(NEGOCIO_B), "Negócio B de Teste", null, null));
         LocalDate dia = LocalDate.now().plusDays(30);
         LocalTime hora = LocalTime.of(9, 0);
         UUID appointmentA = UUID.randomUUID();

@@ -1,6 +1,8 @@
 package com.troquim_bot.whatsapp.flow;
 
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.business.Business;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSession;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSessionStore;
@@ -58,9 +60,12 @@ class WhatsAppFlowTenantIsolationTest {
     private FlowSessionStore sessionStore;
     @Autowired
     private AppointmentApplicationService appointmentApplicationService;
+    @Autowired
+    private BusinessRepository businessRepository;
 
     /** Sessão legítima, porém aberta para um negócio que NÃO é o tenant corrente. */
     private FlowSession sessaoDeOutroNegocio() {
+        businessRepository.save(new Business(TestTenants.OUTRO, "Negócio Outro de Teste", null, null));
         return sessionStore.abrir(TELEFONE, TestTenants.OUTRO.getValue(),
                 LocalDateTime.now().plusHours(1));
     }

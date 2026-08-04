@@ -4,11 +4,14 @@ import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.catalog.ProvisionarNegocio;
 import com.troquim_bot.availability.IntervaloDeHorario;
+import com.troquim_bot.business.Business;
+import com.troquim_bot.business.BusinessCalendar;
 import com.troquim_bot.business.BusinessHours;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
-import com.troquim_bot.repository.BusinessHoursRepository;
+import com.troquim_bot.repository.BusinessCalendarRepository;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.schedule.ScheduleService;
 import com.troquim_bot.service.ServiceId;
 import com.troquim_bot.support.CatalogoDeTeste;
@@ -65,7 +68,9 @@ class FlowExpedientePersistidoTest {
     @Autowired
     private ConsultarCatalogo consultarCatalogo;
     @Autowired
-    private BusinessHoursRepository expedientes;
+    private BusinessCalendarRepository expedientes;
+    @Autowired
+    private BusinessRepository businessRepository;
     @Autowired
     private ScheduleService scheduleServiceLegado;
     @Autowired
@@ -89,7 +94,7 @@ class FlowExpedientePersistidoTest {
 
     @BeforeEach
     void provisionar() {
-        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+        CatalogoDeTeste.provisionar(provisionarNegocio, businessRepository, TestTenants.PILOT);
         var item = CatalogoDeTeste.item(consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
         unhas = item.id();
         profissional = item.profissionais().get(0).id();
@@ -109,7 +114,7 @@ class FlowExpedientePersistidoTest {
         Map<DiaSemana, List<IntervaloDeHorario>> novaSemana =
                 new EnumMap<>(CatalogoDeTeste.expedientePadrao().porDiaDaSemana());
         novaSemana.put(DiaSemana.QUARTA, List.of(periodo(16, 0, 18, 0)));
-        expedientes.salvar(TestTenants.PILOT, BusinessHours.deSemana(novaSemana));
+        expedientes.salvar(new BusinessCalendar(TestTenants.PILOT, BusinessHours.deSemana(novaSemana)));
 
         List<LocalTime> depois = disponibilidadeDoFlow.horariosLivres(
                 TestTenants.PILOT, unhas, quarta, profissional);
@@ -119,7 +124,7 @@ class FlowExpedientePersistidoTest {
         assertThat(depois).startsWith(LocalTime.of(16, 0));
 
         // Restaura para não afetar outros testes do mesmo contexto.
-        expedientes.salvar(TestTenants.PILOT, CatalogoDeTeste.expedientePadrao());
+        expedientes.salvar(new BusinessCalendar(TestTenants.PILOT, CatalogoDeTeste.expedientePadrao()));
     }
 
     @Test
@@ -151,6 +156,7 @@ class FlowExpedientePersistidoTest {
     void usaDuracaoRealDoServico() {
         // Dois serviços do MESMO negócio com durações diferentes, mesmo profissional e dia.
         BusinessId tenant = BusinessId.from(UUID.randomUUID());
+        businessRepository.save(new Business(tenant, "Negócio de Teste", null, null));
         provisionarNegocio.provisionar(tenant,
                 List.of(new ProvisionarNegocio.ServicoDesejado("Curto", 30),
                         new ProvisionarNegocio.ServicoDesejado("Longo", 180)),

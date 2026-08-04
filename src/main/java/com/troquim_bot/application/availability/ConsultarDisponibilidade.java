@@ -12,7 +12,7 @@ import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AppointmentRepository;
 import com.troquim_bot.repository.AvailabilityRepository;
-import com.troquim_bot.repository.BusinessHoursRepository;
+import com.troquim_bot.repository.BusinessCalendarRepository;
 import com.troquim_bot.service.ServiceId;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,7 +55,7 @@ import java.util.TreeSet;
 public class ConsultarDisponibilidade {
 
     private final ConsultarCatalogo consultarCatalogo;
-    private final BusinessHoursRepository businessHoursRepository;
+    private final BusinessCalendarRepository businessCalendarRepository;
     private final AvailabilityRepository availabilityRepository;
     private final AppointmentRepository appointmentRepository;
     private final RelogioDoNegocio relogio;
@@ -67,23 +67,23 @@ public class ConsultarDisponibilidade {
      */
     @Autowired
     public ConsultarDisponibilidade(ConsultarCatalogo consultarCatalogo,
-                                    BusinessHoursRepository businessHoursRepository,
+                                    BusinessCalendarRepository businessCalendarRepository,
                                     AvailabilityRepository availabilityRepository,
                                     AppointmentRepository appointmentRepository,
                                     RelogioDoNegocio relogio) {
-        this(consultarCatalogo, businessHoursRepository, availabilityRepository,
+        this(consultarCatalogo, businessCalendarRepository, availabilityRepository,
                 appointmentRepository, relogio, PoliticaDeInicioDeSlot.padrao());
     }
 
     /** Sobrecarga com política explícita — existe para testar a própria regra de passo. */
     public ConsultarDisponibilidade(ConsultarCatalogo consultarCatalogo,
-                                    BusinessHoursRepository businessHoursRepository,
+                                    BusinessCalendarRepository businessCalendarRepository,
                                     AvailabilityRepository availabilityRepository,
                                     AppointmentRepository appointmentRepository,
                                     RelogioDoNegocio relogio,
                                     PoliticaDeInicioDeSlot politica) {
         this.consultarCatalogo = consultarCatalogo;
-        this.businessHoursRepository = businessHoursRepository;
+        this.businessCalendarRepository = businessCalendarRepository;
         this.availabilityRepository = availabilityRepository;
         this.appointmentRepository = appointmentRepository;
         this.relogio = relogio;
@@ -171,7 +171,7 @@ public class ConsultarDisponibilidade {
         }
         Duration duracao = item.get().duracao();
 
-        BusinessHours expediente = businessHoursRepository.buscar(businessId);
+        BusinessHours expediente = businessCalendarRepository.buscar(businessId).getExpediente();
         if (expediente.naoTemExpediente()) {
             return AgendaDoDia.vazia(businessId, servico, profissional, data,
                     Condicao.EXPEDIENTE_NAO_CONFIGURADO);

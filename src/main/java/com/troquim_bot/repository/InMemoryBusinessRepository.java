@@ -1,20 +1,22 @@
 package com.troquim_bot.repository;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.troquim_bot.business.Business;
 import com.troquim_bot.business.BusinessId;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
  * Implementação em memória do BusinessRepository.
- * MVP assume apenas 1 salão (1 Business).
+ *
+ * LEGÍTIMO SOMENTE em {@code test} e {@code dev-inmemory}; fora deles a guarda de
+ * persistência derruba o startup em vez de deixar o Business evaporar a cada restart.
  */
 @Repository
+@Profile({"test", "dev-inmemory"})
 public class InMemoryBusinessRepository implements BusinessRepository {
 
     private final ConcurrentMap<BusinessId, Business> businesses = new ConcurrentHashMap<>();
@@ -42,17 +44,5 @@ public class InMemoryBusinessRepository implements BusinessRepository {
             return false;
         }
         return businesses.containsKey(id);
-    }
-
-    @Override
-    public List<Business> findAll() {
-        return new ArrayList<>(businesses.values());
-    }
-
-    @Override
-    public void delete(BusinessId id) {
-        if (id != null) {
-            businesses.remove(id);
-        }
     }
 }

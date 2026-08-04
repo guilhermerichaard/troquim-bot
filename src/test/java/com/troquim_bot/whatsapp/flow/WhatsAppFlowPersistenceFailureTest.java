@@ -10,6 +10,7 @@ import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AppointmentRepository;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.support.CatalogoDeTeste;
 import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSession;
@@ -139,6 +140,9 @@ class WhatsAppFlowPersistenceFailureTest {
     private ProvisionarNegocio provisionarNegocio;
 
     @Autowired
+    private BusinessRepository businessRepository;
+
+    @Autowired
     private ConsultarCatalogo consultarCatalogo;
 
     // Mapper proprio: o Spring Boot 4 nao expoe um bean do Jackson 2 usado aqui.
@@ -147,7 +151,7 @@ class WhatsAppFlowPersistenceFailureTest {
     @Test
     @DisplayName("falha de persistência não devolve SUCESSO")
     void naoConfirmaQuandoPersistenciaFalha() throws Exception {
-        CatalogoDeTeste.provisionar(provisionarNegocio, TestTenants.PILOT);
+        CatalogoDeTeste.provisionar(provisionarNegocio, businessRepository, TestTenants.PILOT);
         String unhas = CatalogoDeTeste.servicoId(
                 consultarCatalogo, TestTenants.PILOT, CatalogoDeTeste.UNHAS);
         String profissional = CatalogoDeTeste.profissionalId(

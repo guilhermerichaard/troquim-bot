@@ -1,11 +1,13 @@
 package com.troquim_bot.config;
 
 import com.troquim_bot.infrastructure.persistence.JpaAvailabilityRepository;
-import com.troquim_bot.infrastructure.persistence.JpaBusinessHoursRepository;
+import com.troquim_bot.infrastructure.persistence.JpaBusinessCalendarRepository;
+import com.troquim_bot.infrastructure.persistence.JpaBusinessRepository;
 import com.troquim_bot.infrastructure.persistence.JpaProfessionalRepository;
 import com.troquim_bot.infrastructure.persistence.JpaServiceRepository;
 import com.troquim_bot.repository.AvailabilityRepository;
-import com.troquim_bot.repository.BusinessHoursRepository;
+import com.troquim_bot.repository.BusinessCalendarRepository;
+import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.repository.ProfessionalRepository;
 import com.troquim_bot.repository.ServiceRepository;
 
@@ -13,7 +15,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
 /**
- * Impede que a aplicação suba, fora de perfis de teste/dev, usando catálogo volátil.
+ * Impede que a aplicação suba, fora de perfis de teste/dev, usando catálogo, calendário ou
+ * identidade de negócio voláteis.
  *
  * POR QUE ISTO EXISTE: depender apenas de {@code @Primary} no adapter JPA é frágil — basta
  * o bean JPA não ser criado (entidade fora do scan, datasource ausente, engano de perfil)
@@ -32,16 +35,20 @@ public class CatalogoPersistenceGuard {
 
     public CatalogoPersistenceGuard(ServiceRepository serviceRepository,
                                     ProfessionalRepository professionalRepository,
-                                    BusinessHoursRepository businessHoursRepository,
-                                    AvailabilityRepository availabilityRepository) {
+                                    BusinessCalendarRepository businessCalendarRepository,
+                                    AvailabilityRepository availabilityRepository,
+                                    BusinessRepository businessRepository) {
         exigirAdapterJpa("ServiceRepository", serviceRepository, JpaServiceRepository.class);
         exigirAdapterJpa("ProfessionalRepository", professionalRepository, JpaProfessionalRepository.class);
-        // Expediente e disponibilidade correm o MESMO risco do catálogo: em memória, a
+        // Calendário e disponibilidade correm o MESMO risco do catálogo: em memória, a
         // agenda parece funcionar e some no restart seguinte, sem um único erro no log.
-        exigirAdapterJpa("BusinessHoursRepository", businessHoursRepository,
-                JpaBusinessHoursRepository.class);
+        exigirAdapterJpa("BusinessCalendarRepository", businessCalendarRepository,
+                JpaBusinessCalendarRepository.class);
         exigirAdapterJpa("AvailabilityRepository", availabilityRepository,
                 JpaAvailabilityRepository.class);
+        // A raiz de identidade do tenant não pode evaporar a cada restart: sem ela, todo o
+        // resto (catálogo, calendário, agendamentos) fica orfão de um negócio que "some".
+        exigirAdapterJpa("BusinessRepository", businessRepository, JpaBusinessRepository.class);
     }
 
     private static void exigirAdapterJpa(String porta, Object implementacao, Class<?> esperada) {
