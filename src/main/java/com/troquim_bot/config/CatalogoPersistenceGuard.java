@@ -2,11 +2,13 @@ package com.troquim_bot.config;
 
 import com.troquim_bot.infrastructure.persistence.JpaAvailabilityRepository;
 import com.troquim_bot.infrastructure.persistence.JpaBusinessCalendarRepository;
+import com.troquim_bot.infrastructure.persistence.JpaBusinessPublicProfileRepository;
 import com.troquim_bot.infrastructure.persistence.JpaBusinessRepository;
 import com.troquim_bot.infrastructure.persistence.JpaProfessionalRepository;
 import com.troquim_bot.infrastructure.persistence.JpaServiceRepository;
 import com.troquim_bot.repository.AvailabilityRepository;
 import com.troquim_bot.repository.BusinessCalendarRepository;
+import com.troquim_bot.repository.BusinessPublicProfileRepository;
 import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.repository.ProfessionalRepository;
 import com.troquim_bot.repository.ServiceRepository;
@@ -37,7 +39,8 @@ public class CatalogoPersistenceGuard {
                                     ProfessionalRepository professionalRepository,
                                     BusinessCalendarRepository businessCalendarRepository,
                                     AvailabilityRepository availabilityRepository,
-                                    BusinessRepository businessRepository) {
+                                    BusinessRepository businessRepository,
+                                    BusinessPublicProfileRepository businessPublicProfileRepository) {
         exigirAdapterJpa("ServiceRepository", serviceRepository, JpaServiceRepository.class);
         exigirAdapterJpa("ProfessionalRepository", professionalRepository, JpaProfessionalRepository.class);
         // Calendário e disponibilidade correm o MESMO risco do catálogo: em memória, a
@@ -49,6 +52,10 @@ public class CatalogoPersistenceGuard {
         // A raiz de identidade do tenant não pode evaporar a cada restart: sem ela, todo o
         // resto (catálogo, calendário, agendamentos) fica orfão de um negócio que "some".
         exigirAdapterJpa("BusinessRepository", businessRepository, JpaBusinessRepository.class);
+        // O mesmo vale para o perfil público: um slug "publicado" que evapora no restart
+        // devolveria 404 para quem já divulgou o link.
+        exigirAdapterJpa("BusinessPublicProfileRepository", businessPublicProfileRepository,
+                JpaBusinessPublicProfileRepository.class);
     }
 
     private static void exigirAdapterJpa(String porta, Object implementacao, Class<?> esperada) {
