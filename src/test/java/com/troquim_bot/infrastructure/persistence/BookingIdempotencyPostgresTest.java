@@ -6,7 +6,21 @@ import com.troquim_bot.application.booking.BookingIdempotencyStore;
 import com.troquim_bot.application.booking.BookingIds;
 import com.troquim_bot.application.booking.BookingPersistenceException;
 import com.troquim_bot.application.booking.BookingResult;
+import com.troquim_bot.availability.Availability;
+import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.availability.IntervaloDeHorario;
+import com.troquim_bot.business.BusinessCalendar;
+import com.troquim_bot.business.BusinessHours;
+import com.troquim_bot.business.DiaSemana;
+import com.troquim_bot.professional.Professional;
+import com.troquim_bot.repository.AvailabilityRepository;
+import com.troquim_bot.repository.BusinessCalendarRepository;
+import com.troquim_bot.repository.ProfessionalRepository;
+import com.troquim_bot.repository.ServiceRepository;
+import com.troquim_bot.service.Service;
+import com.troquim_bot.service.ServiceDuration;
 import com.troquim_bot.support.TestTenants;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +36,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -30,6 +47,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -81,6 +99,48 @@ class BookingIdempotencyPostgresTest {
 
     @Autowired
     private TransactionTemplate transactionTemplate;
+
+    @Autowired
+    private ServiceRepository servicos;
+    @Autowired
+    private ProfessionalRepository profissionais;
+    @Autowired
+    private BusinessCalendarRepository calendarios;
+    @Autowired
+    private AvailabilityRepository disponibilidades;
+
+    private static final AtomicBoolean CATALOGO_PROVISIONADO = new AtomicBoolean(false);
+
+    /**
+     * Catálogo, calendário e disponibilidade REAIS para o par sintético
+     * (BookingIds.serviceId("unha"), PROFISSIONAL_PADRAO): o caminho tipado agora revalida
+     * o slot via ConsultarDisponibilidade dentro da seção crítica, então este teste precisa
+     * que o par exista de fato — janela larga em todos os dias da semana para cobrir
+     * qualquer horário usado pelos testes (8h–19h) sem depender de qual dia é "diaExclusivo".
+     * Roda uma única vez por container (idempotência da própria escrita não é o ponto aqui).
+     */
+    @BeforeEach
+    void provisionarCatalogoSintetico() {
+        if (!CATALOGO_PROVISIONADO.compareAndSet(false, true)) {
+            return;
+        }
+        var servicoId = BookingIds.serviceId("unha");
+        servicos.salvar(Service.novoSemPreco(servicoId, TestTenants.PILOT, "Unha", null,
+                ServiceDuration.ofMinutes(60)));
+        profissionais.salvar(new Professional(BookingIds.PROFISSIONAL_PADRAO, TestTenants.PILOT,
+                "Profissional Padrão", Set.of(servicoId), Set.of(), "+5511900000000"));
+
+        IntervaloDeHorario janelaAmpla = IntervaloDeHorario.de(LocalTime.of(7, 0), LocalTime.of(21, 0));
+        Map<DiaSemana, List<IntervaloDeHorario>> semanaAberta = new EnumMap<>(DiaSemana.class);
+        for (DiaSemana dia : DiaSemana.values()) {
+            semanaAberta.put(dia, List.of(janelaAmpla));
+        }
+        calendarios.salvar(new BusinessCalendar(TestTenants.PILOT, BusinessHours.deSemana(semanaAberta)));
+        for (DiaSemana dia : DiaSemana.values()) {
+            disponibilidades.salvar(new Availability(AvailabilityId.generate(), TestTenants.PILOT,
+                    BookingIds.PROFISSIONAL_PADRAO, dia, janelaAmpla));
+        }
+    }
 
     // ==================== sequencial ====================
 

@@ -183,7 +183,7 @@ class ConversationServiceCancelamentoTest {
                                 new ReservationApplicationService(new InMemoryReservationRepository()),
                                 new AppointmentApplicationService(),
                                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),
-                new InMemoryBookingIdempotencyStore()),
+                new InMemoryBookingIdempotencyStore(), new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(), com.troquim_bot.support.TestBookingSupport.consultarDisponibilidadeInerte()),
                         OptionalBeans.ausente(),
                         "NORMAL"
                 )

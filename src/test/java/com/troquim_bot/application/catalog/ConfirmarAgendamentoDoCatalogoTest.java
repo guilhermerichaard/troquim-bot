@@ -1,16 +1,24 @@
 package com.troquim_bot.application.catalog;
 
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.availability.ConsultarDisponibilidade;
 import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.application.booking.BookingCommandKey;
 import com.troquim_bot.application.booking.BookingIds;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.appointment.Appointment;
+import com.troquim_bot.availability.IntervaloDeHorario;
+import com.troquim_bot.availability.RelogioDoNegocio;
+import com.troquim_bot.business.BusinessCalendar;
+import com.troquim_bot.business.BusinessHours;
 import com.troquim_bot.business.BusinessId;
+import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.professional.Professional;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
+import com.troquim_bot.repository.InMemoryAvailabilityRepository;
+import com.troquim_bot.repository.InMemoryBusinessCalendarRepository;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
 import com.troquim_bot.repository.InMemoryProfessionalRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
@@ -27,7 +35,9 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -67,12 +77,32 @@ class ConfirmarAgendamentoDoCatalogoTest {
 
         InMemoryReservationRepository reservas = new InMemoryReservationRepository();
         appointmentApplicationService = new AppointmentApplicationService(appointments, reservas);
+
+        // Calendário e disponibilidade REAIS: o caminho tipado agora revalida o slot via
+        // ConsultarDisponibilidade dentro da seção crítica, então "Aceito" só confirma se
+        // expediente e disponibilidade cobrirem o horário do pedido. Janela larga em TODOS
+        // os dias da semana para não depender de em qual dia o teste roda.
+        InMemoryBusinessCalendarRepository calendarios = new InMemoryBusinessCalendarRepository();
+        InMemoryAvailabilityRepository disponibilidades = new InMemoryAvailabilityRepository();
+        IntervaloDeHorario janelaAmpla = IntervaloDeHorario.de(LocalTime.of(7, 0), LocalTime.of(21, 0));
+        Map<DiaSemana, List<IntervaloDeHorario>> semanaAberta = new EnumMap<>(DiaSemana.class);
+        for (DiaSemana dia : DiaSemana.values()) {
+            semanaAberta.put(dia, List.of(janelaAmpla));
+        }
+        calendarios.salvar(new BusinessCalendar(SALAO, BusinessHours.deSemana(semanaAberta)));
+
+        ConsultarDisponibilidade consultarDisponibilidade = new ConsultarDisponibilidade(
+                new ConsultarCatalogo(servicos, profissionais), calendarios, disponibilidades,
+                appointments, new RelogioDoNegocio());
+
         BookingApplicationService booking = new BookingApplicationService(
                 TestTenants.of(SALAO),
                 new ReservationApplicationService(reservas),
                 appointmentApplicationService,
                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.of(SALAO)),
-                new InMemoryBookingIdempotencyStore());
+                new InMemoryBookingIdempotencyStore(),
+                new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(),
+                consultarDisponibilidade);
 
         confirmar = new ConfirmarAgendamentoDoCatalogo(
                 new ConsultarCatalogo(servicos, profissionais), booking);
@@ -81,6 +111,11 @@ class ConfirmarAgendamentoDoCatalogoTest {
                 ServiceDuration.ofMinutes(60)));
         malu = profissionais.salvar(new Professional(ProfessionalId.generate(), SALAO, "Malu",
                 Set.of(unhas.getId()), Set.of(), "+5511900000000"));
+
+        for (DiaSemana dia : DiaSemana.values()) {
+            disponibilidades.salvar(new com.troquim_bot.availability.Availability(
+                    com.troquim_bot.availability.AvailabilityId.generate(), SALAO, malu.getId(), dia, janelaAmpla));
+        }
     }
 
     private ConfirmarAgendamentoDoCatalogo.Pedido pedido(BusinessId tenant, ServiceId servico,

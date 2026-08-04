@@ -2,6 +2,7 @@ package com.troquim_bot.application.booking;
 
 import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.availability.ConsultarDisponibilidade;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.availability.AvailabilityId;
@@ -58,18 +59,24 @@ public class BookingApplicationService {
     private final CustomerProfileService customerProfileService;
     private final BookingIdempotencyStore idempotencyStore;
     private final TenantProvider tenantProvider;
+    private final BookingSlotCriticalSection bookingSlotCriticalSection;
+    private final ConsultarDisponibilidade consultarDisponibilidade;
 
     @Autowired
     public BookingApplicationService(TenantProvider tenantProvider,
                                      ReservationApplicationService reservationApplicationService,
                                      AppointmentApplicationService appointmentApplicationService,
                                      CustomerProfileService customerProfileService,
-                                     BookingIdempotencyStore idempotencyStore) {
+                                     BookingIdempotencyStore idempotencyStore,
+                                     BookingSlotCriticalSection bookingSlotCriticalSection,
+                                     ConsultarDisponibilidade consultarDisponibilidade) {
         this.tenantProvider = tenantProvider;
         this.reservationApplicationService = reservationApplicationService;
         this.appointmentApplicationService = appointmentApplicationService;
         this.customerProfileService = customerProfileService;
         this.idempotencyStore = idempotencyStore;
+        this.bookingSlotCriticalSection = bookingSlotCriticalSection;
+        this.consultarDisponibilidade = consultarDisponibilidade;
     }
 
     /**
@@ -198,6 +205,12 @@ public class BookingApplicationService {
         if (data == null || inicio == null || profissional == null) {
             return BookingResult.invalido("Data ou horario ausente.");
         }
+        if (duracao == null || duracao.isZero() || duracao.isNegative()) {
+            // Sem fallback: o caminho tipado recebe a duracao REAL do catalogo. Duracao
+            // ausente e' erro de programacao de quem chama, nao um caso a acomodar.
+            throw new IllegalArgumentException(
+                    "Duracao e obrigatoria e deve ser maior que zero: o caminho tipado nao usa fallback");
+        }
         if (data.isBefore(LocalDate.now())) {
             return BookingResult.invalido("Essa data ja passou.");
         }
@@ -226,35 +239,30 @@ public class BookingApplicationService {
             return BookingResult.falhaTecnica();
         }
 
-        LocalTime fim = inicio.plus(duracao == null ? DURACAO_PADRAO : duracao);
-
-        Customer customer = customerProfileService.resolverOuConstruir(telefone, nomeCliente);
-        // O ServiceId chega pronto e segue intacto ate' o appointment. Nenhuma derivacao.
-        AvailabilityId availabilityId = AvailabilityId.from(uuidDeterministico(
-                "availability:" + profissional + ":" + data + ":" + inicio));
-        LocalDateTime expiraEm = LocalDateTime.of(data, inicio);
-
-        // INVARIANTE DE DOMINIO (nao e' idempotencia): um profissional nao pode ter dois
-        // agendamentos sobrepostos. Continua valendo para comandos DIFERENTES que disputem
-        // o mesmo slot; o retry do MESMO comando ja foi resolvido pela chave acima.
         BusinessId tenant = BusinessId.from(chave.businessId());
-        for (Appointment existente : appointmentApplicationService.listarAtivos(tenant)) {
-            if (profissional.equals(existente.getProfessionalId())
-                    && data.equals(existente.getDate())
-                    && inicio.isBefore(existente.getEndTime())
-                    && existente.getStartTime().isBefore(fim)) {
-                BookingResult conflito = BookingResult.indisponivel("Esse horario ja esta ocupado.");
-                // Desfecho negativo tambem e' gravado: repetir o mesmo comando deve dar a
-                // mesma resposta, sem varrer a agenda de novo.
-                idempotencyStore.concluir(chave, null, conflito.status(),
-                        rotuloServico, data.toString(), inicio.toString(), nomeCliente);
-                return conflito;
-            }
-        }
+        LocalTime fim = inicio.plus(duracao);
 
-        return reservarEAgendar(tenant, customer, profissional, servico, availabilityId,
-                data, inicio, fim, expiraEm, rotuloServico, data.toString(), inicio.toString(),
-                nomeCliente, chave);
+        // SECAO CRITICA: serializa comandos DIFERENTES disputando o MESMO slot
+        // (negocio + profissional + dia). Toda a revalidacao de disponibilidade e a
+        // orquestracao de escrita rodam dentro dela, na MESMA transacao (MANDATORY).
+        return bookingSlotCriticalSection.executar(tenant, profissional, data, () -> {
+            // Revalida a disponibilidade REAL com o lock ja em maos: ConsultarDisponibilidade
+            // e' a UNICA autoridade do slot. Um horario visto livre antes do lock pode ter
+            // deixado de estar — e' esta checagem, nao a leitura anterior, que decide.
+            if (!consultarDisponibilidade.estaLivre(tenant, servico, profissional, data, inicio)) {
+                return concluirConflito(chave, rotuloServico, data.toString(), inicio.toString(), nomeCliente);
+            }
+
+            Customer customer = customerProfileService.resolverOuConstruir(tenant, telefone, nomeCliente);
+            // O ServiceId chega pronto e segue intacto ate' o appointment. Nenhuma derivacao.
+            AvailabilityId availabilityId = AvailabilityId.from(uuidDeterministico(
+                    "availability:" + profissional + ":" + data + ":" + inicio));
+            LocalDateTime expiraEm = LocalDateTime.of(data, inicio);
+
+            return reservarEAgendar(tenant, customer, profissional, servico, availabilityId,
+                    data, inicio, fim, expiraEm, rotuloServico, data.toString(), inicio.toString(),
+                    nomeCliente, chave);
+        });
     }
 
     /**

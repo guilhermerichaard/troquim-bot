@@ -60,7 +60,7 @@ class CustomerIdentityConsolidationTest {
                 new ReservationApplicationService(reservationRepository),
                 new AppointmentApplicationService(appointmentRepository, reservationRepository),
                 profiles,
-                new InMemoryBookingIdempotencyStore());
+                new InMemoryBookingIdempotencyStore(), new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(), com.troquim_bot.support.TestBookingSupport.consultarDisponibilidadeInerte());
     }
 
     private void novoContexto() {
@@ -107,7 +107,7 @@ class CustomerIdentityConsolidationTest {
         ReservationApplicationService reservationApp = new ReservationApplicationService(reservationRepository);
         AppointmentApplicationService appointmentApp = new AppointmentApplicationService(appointmentRepository, reservationRepository);
         BookingApplicationService booking = new BookingApplicationService(TestTenants.pilot(), reservationApp, appointmentApp, profiles,
-                new InMemoryBookingIdempotencyStore());
+                new InMemoryBookingIdempotencyStore(), new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(), com.troquim_bot.support.TestBookingSupport.consultarDisponibilidadeInerte());
 
         BookingResult resultado = booking.confirmar("5511900000001", "Maria Silva", "cabelo", DIA, "13h");
         assertTrue(resultado.isConfirmado(), "O agendamento deveria ser confirmado");

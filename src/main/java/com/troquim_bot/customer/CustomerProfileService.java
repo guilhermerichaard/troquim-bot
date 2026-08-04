@@ -13,12 +13,18 @@ import java.util.Optional;
 /**
  * Serviço de perfil do cliente.
  *
- * Customer é a única fonte da verdade do cliente. Este é o write-path usado pelo
- * fluxo de conversa/booking. A identidade do Customer é surrogate; o
- * resolve-or-create é por (BusinessId, phone E.164), NUNCA por id derivado do
- * telefone. As assinaturas públicas (baseadas em {@code numero}) são preservadas
- * para não alterar a camada de Conversation — o tenant é resolvido internamente
- * pelo {@link TenantProvider} centralizado.
+ * Customer é a única fonte da verdade do cliente. A identidade do Customer é surrogate; o
+ * resolve-or-create é por (BusinessId, phone E.164), NUNCA por id derivado do telefone.
+ *
+ * DUAS FAMÍLIAS DE ASSINATURA:
+ * <ul>
+ *   <li>EXPLÍCITAS ({@code BusinessId} como primeiro parâmetro) — o caminho tipado de
+ *       booking as usa. Nunca consultam {@link TenantProvider}: todo método interno de
+ *       resolução recebe o tenant por argumento;</li>
+ *   <li>LEGADAS (baseadas só em {@code numero}) — preservadas para a camada de Conversation.
+ *       Resolvem o {@link TenantProvider} NA BORDA (uma vez, no início do método) e delegam
+ *       à versão explícita — nenhuma lógica de criação, nome ou telefone é duplicada.</li>
+ * </ul>
  */
 @Service
 public class CustomerProfileService {
@@ -32,17 +38,19 @@ public class CustomerProfileService {
     }
 
     public Optional<CustomerProfile> localizarPorTelefone(String numero) {
-        return resolver(numero)
+        return resolver(tenantProvider.currentBusinessId(), numero)
                 .map(c -> CustomerProfile.fromCustomer(c, numero));
     }
 
     public CustomerProfile buscarOuCriar(String numero) {
-        Customer customer = resolver(numero).orElseGet(() -> criarCliente(numero));
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        Customer customer = resolver(businessId, numero).orElseGet(() -> criarCliente(businessId, numero));
         return CustomerProfile.fromCustomer(customer, numero);
     }
 
     public CustomerProfile iniciarAtendimento(String numero) {
-        Customer customer = resolver(numero).orElseGet(() -> criarCliente(numero));
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        Customer customer = resolver(businessId, numero).orElseGet(() -> criarCliente(businessId, numero));
         customer.registrarAtendimento();
         customerRepository.save(customer);
         return CustomerProfile.fromCustomer(customer, numero);
@@ -53,11 +61,11 @@ public class CustomerProfileService {
             return buscarOuCriar(numero);
         }
 
+        BusinessId businessId = tenantProvider.currentBusinessId();
         CustomerName customerName = criarCustomerName(nome.trim());
-        Customer customer = resolver(numero).orElse(null);
+        Customer customer = resolver(businessId, numero).orElse(null);
         if (customer == null) {
-            customer = new Customer(CustomerId.generate(), tenantProvider.currentBusinessId(),
-                    customerName, new PhoneNumber(numero), null);
+            customer = new Customer(CustomerId.generate(), businessId, customerName, new PhoneNumber(numero), null);
         } else {
             customer.atualizarNome(customerName);
         }
@@ -85,8 +93,11 @@ public class CustomerProfileService {
     // Reservation e Conversation recebem SEMPRE este id — nunca CustomerId.fromPhone.
 
     /**
-     * Resolve o Customer do tenant corrente pela chave lógica (BusinessId, phone E.164),
-     * ou CONSTRÓI um novo (ainda não persistido) com o nome informado. Não persiste.
+     * Resolve o Customer do {@code businessId} EXPLÍCITO pela chave lógica (BusinessId, phone
+     * E.164), ou CONSTRÓI um novo (ainda não persistido) com o nome informado. Não persiste.
+     *
+     * Caminho usado pelo booking tipado: nunca consulta {@link TenantProvider} — o tenant vem
+     * sempre do {@code BusinessId} da {@code BookingCommandKey}, nunca de contexto implícito.
      *
      * O {@code CustomerId} do resultado é o id oficial surrogate — já persistido se o
      * cliente existir, ou o que será persistido por {@link #persistir(Customer)} caso o
@@ -94,8 +105,11 @@ public class CustomerProfileService {
      * identidade oficial antes da checagem de conflito sem deixar Customer órfão quando o
      * horário está ocupado.
      */
-    public Customer resolverOuConstruir(String numero, String nome) {
-        Customer existente = resolver(numero).orElse(null);
+    public Customer resolverOuConstruir(BusinessId businessId, String numero, String nome) {
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório para resolver o cliente");
+        }
+        Customer existente = resolver(businessId, numero).orElse(null);
         if (existente != null) {
             if (temValor(nome)) {
                 existente.atualizarNome(criarCustomerName(nome.trim()));
@@ -105,8 +119,12 @@ public class CustomerProfileService {
         CustomerName name = temValor(nome)
                 ? criarCustomerName(nome.trim())
                 : nomeGenerico(numero);
-        return new Customer(CustomerId.generate(), tenantProvider.currentBusinessId(),
-                name, new PhoneNumber(numero), null);
+        return new Customer(CustomerId.generate(), businessId, name, new PhoneNumber(numero), null);
+    }
+
+    /** LEGADO — resolve no {@link TenantProvider} corrente e delega. Uso: Conversation. */
+    public Customer resolverOuConstruir(String numero, String nome) {
+        return resolverOuConstruir(tenantProvider.currentBusinessId(), numero, nome);
     }
 
     /**
@@ -118,21 +136,34 @@ public class CustomerProfileService {
     }
 
     /**
-     * Resolve-or-create do Customer do tenant corrente e devolve o {@code CustomerId}
-     * oficial surrogate (persistindo o cliente se ainda não existir). É idempotente:
-     * mesmo (BusinessId, phone) → mesmo id.
+     * Resolve-or-create do Customer do {@code businessId} EXPLÍCITO e devolve o
+     * {@code CustomerId} oficial surrogate (persistindo o cliente se ainda não existir). É
+     * idempotente: mesmo (BusinessId, phone) → mesmo id. Nunca consulta {@link TenantProvider}.
      */
+    public CustomerId resolverIdOficial(BusinessId businessId, String numero) {
+        return persistir(resolverOuConstruir(businessId, numero, null)).getId();
+    }
+
+    /** LEGADO — resolve no {@link TenantProvider} corrente e delega. Uso: Conversation. */
     public CustomerId resolverIdOficial(String numero) {
-        return persistir(resolverOuConstruir(numero, null)).getId();
+        return resolverIdOficial(tenantProvider.currentBusinessId(), numero);
     }
 
     /**
-     * Localiza o {@code CustomerId} oficial de um telefone SEM criar Customer. Usado nos
-     * caminhos de leitura/consulta/cancelamento da Conversation: se o cliente não existe,
-     * também não há agendamentos a listar. A Conversation nunca cria nem deriva id.
+     * Localiza o {@code CustomerId} oficial de um telefone no {@code businessId} EXPLÍCITO,
+     * SEM criar Customer. Nunca consulta {@link TenantProvider}.
+     */
+    public Optional<CustomerId> localizarIdOficial(BusinessId businessId, String numero) {
+        return resolver(businessId, numero).map(Customer::getId);
+    }
+
+    /**
+     * LEGADO — resolve no {@link TenantProvider} corrente e delega. Usado nos caminhos de
+     * leitura/consulta/cancelamento da Conversation: se o cliente não existe, também não há
+     * agendamentos a listar. A Conversation nunca cria nem deriva id.
      */
     public Optional<CustomerId> localizarIdOficial(String numero) {
-        return resolver(numero).map(Customer::getId);
+        return localizarIdOficial(tenantProvider.currentBusinessId(), numero);
     }
 
     public Optional<String> nomePreferido(CustomerProfile profile) {
@@ -161,24 +192,21 @@ public class CustomerProfileService {
     }
 
     public CustomerProfile atualizarUltimoAtendimento(String numero) {
-        Customer customer = resolver(numero).orElseGet(() -> criarCliente(numero));
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        Customer customer = resolver(businessId, numero).orElseGet(() -> criarCliente(businessId, numero));
         customer.atualizarUltimoAtendimento();
         customerRepository.save(customer);
         return CustomerProfile.fromCustomer(customer, numero);
     }
 
-    /**
-     * Resolve o Customer do tenant corrente pelo telefone (chave lógica).
-     */
-    private Optional<Customer> resolver(String numero) {
-        BusinessId businessId = tenantProvider.currentBusinessId();
+    /** Resolve o Customer do {@code businessId} informado pelo telefone (chave lógica). */
+    private Optional<Customer> resolver(BusinessId businessId, String numero) {
         return customerRepository.findByBusinessAndPhone(businessId, new PhoneNumber(numero));
     }
 
-    private Customer criarCliente(String numero) {
+    private Customer criarCliente(BusinessId businessId, String numero) {
         PhoneNumber phone = new PhoneNumber(numero);
-        Customer customer = new Customer(CustomerId.generate(), tenantProvider.currentBusinessId(),
-                nomeGenerico(numero), phone, null);
+        Customer customer = new Customer(CustomerId.generate(), businessId, nomeGenerico(numero), phone, null);
         return customerRepository.save(customer);
     }
 
