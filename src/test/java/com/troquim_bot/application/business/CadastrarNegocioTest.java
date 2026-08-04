@@ -72,7 +72,7 @@ class CadastrarNegocioTest {
         Business segunda = cadastrarNegocio.cadastrar(id, "Salão da Ana", "+5511999990000", "Rua A, 100");
 
         assertThat(segunda.getId()).isEqualTo(primeira.getId());
-        assertThat(businessRepository.findAll()).hasSize(1);
+        assertThat(businessRepository.findById(id).getNome()).isEqualTo("Salão da Ana");
     }
 
     @Test
@@ -98,6 +98,8 @@ class CadastrarNegocioTest {
         cadastrarNegocio.cadastrar(a, "Salão Popular", null, null);
         cadastrarNegocio.cadastrar(b, "Salão Popular", null, null);
 
-        assertThat(businessRepository.findAll()).hasSize(2);
+        assertThat(businessRepository.exists(a)).isTrue();
+        assertThat(businessRepository.exists(b)).isTrue();
+        assertThat(businessRepository.findById(a).getId()).isNotEqualTo(businessRepository.findById(b).getId());
     }
 }

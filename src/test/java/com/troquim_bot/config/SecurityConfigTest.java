@@ -80,6 +80,13 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("A rota administrativa /business/{id} tambem exige ADMIN")
+    void businessComIdExigeAdmin() throws Exception {
+        mockMvc.perform(get("/business/11111111-1111-1111-1111-111111111111"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("Esquema invalido, token vazio e token incorreto retornam 401")
     void credenciaisInvalidasRetornam401() throws Exception {
         mockMvc.perform(get("/appointments")

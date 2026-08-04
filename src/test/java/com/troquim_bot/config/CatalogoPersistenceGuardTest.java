@@ -91,7 +91,6 @@ class CatalogoPersistenceGuardTest {
             @Override public Business save(Business b) { return b; }
             @Override public Business findById(BusinessId id) { return null; }
             @Override public boolean exists(BusinessId id) { return false; }
-            @Override public List<Business> findAll() { return List.of(); }
         };
     }
 

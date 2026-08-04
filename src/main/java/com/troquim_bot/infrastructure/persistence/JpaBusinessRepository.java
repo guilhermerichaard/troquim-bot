@@ -8,8 +8,6 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 /**
  * Adapter JPA de Business — o repositório de PRODUÇÃO.
  *
@@ -52,13 +50,5 @@ public class JpaBusinessRepository implements BusinessRepository {
     @Transactional(readOnly = true)
     public boolean exists(BusinessId id) {
         return id != null && springDataRepository.existsById(id.getValue());
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<Business> findAll() {
-        return springDataRepository.findAll().stream()
-                .map(BusinessJpaEntity::paraDominio)
-                .toList();
     }
 }

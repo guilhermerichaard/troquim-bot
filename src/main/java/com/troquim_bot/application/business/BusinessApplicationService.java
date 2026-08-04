@@ -12,6 +12,10 @@ import java.util.Optional;
  * Application Service para gerenciar dados administrativos do Business (nome, contato,
  * status). Cadastro em si é responsabilidade de {@link CadastrarNegocio} — este serviço só
  * lê e atualiza um negócio que já existe.
+ *
+ * TODA operação exige o {@link BusinessId} explicitamente. Não há resolução implícita de
+ * "o negócio atual": quem chama precisa provar de qual tenant está falando, e é isso que
+ * impede a administração de um negócio vazar para outro.
  */
 @Service
 public class BusinessApplicationService {
@@ -23,19 +27,7 @@ public class BusinessApplicationService {
     }
 
     /**
-     * Busca o Business atual (admin legado de single-salão).
-     *
-     * @return Optional com o Business se existir
-     */
-    public Optional<Business> buscarBusinessAtual() {
-        return businessRepository.findAll().stream().findFirst();
-    }
-
-    /**
      * Busca o Business por ID.
-     *
-     * @param id ID do Business
-     * @return Optional com o Business se encontrado
      */
     public Optional<Business> buscarPorId(BusinessId id) {
         if (id == null) {
@@ -47,8 +39,8 @@ public class BusinessApplicationService {
     /**
      * Atualiza o nome do Business.
      */
-    public Business atualizarNome(String novoNome) {
-        Business business = getBusinessOrThrow();
+    public Business atualizarNome(BusinessId id, String novoNome) {
+        Business business = getBusinessOrThrow(id);
         business.atualizarNome(novoNome);
         return businessRepository.save(business);
     }
@@ -56,8 +48,8 @@ public class BusinessApplicationService {
     /**
      * Atualiza o telefone do Business.
      */
-    public Business atualizarTelefone(String novoTelefone) {
-        Business business = getBusinessOrThrow();
+    public Business atualizarTelefone(BusinessId id, String novoTelefone) {
+        Business business = getBusinessOrThrow(id);
         business.atualizarContato(novoTelefone, business.getEndereco());
         return businessRepository.save(business);
     }
@@ -65,8 +57,8 @@ public class BusinessApplicationService {
     /**
      * Atualiza o endereço do Business.
      */
-    public Business atualizarEndereco(String novoEndereco) {
-        Business business = getBusinessOrThrow();
+    public Business atualizarEndereco(BusinessId id, String novoEndereco) {
+        Business business = getBusinessOrThrow(id);
         business.atualizarContato(business.getTelefone(), novoEndereco);
         return businessRepository.save(business);
     }
@@ -74,8 +66,8 @@ public class BusinessApplicationService {
     /**
      * Ativa o Business (transição para ATIVO).
      */
-    public Business ativarBusiness() {
-        Business business = getBusinessOrThrow();
+    public Business ativarBusiness(BusinessId id) {
+        Business business = getBusinessOrThrow(id);
         business.ativar();
         return businessRepository.save(business);
     }
@@ -83,32 +75,32 @@ public class BusinessApplicationService {
     /**
      * Desativa o Business (transição para INATIVO).
      */
-    public Business desativarBusiness() {
-        Business business = getBusinessOrThrow();
+    public Business desativarBusiness(BusinessId id) {
+        Business business = getBusinessOrThrow(id);
         business.desativar();
         return businessRepository.save(business);
     }
 
     /**
-     * Verifica se existe um Business configurado.
+     * Verifica se existe um Business com o ID informado.
      */
-    public boolean existeBusiness() {
-        return businessRepository.findAll().stream().findFirst().isPresent();
+    public boolean existeBusiness(BusinessId id) {
+        return id != null && businessRepository.exists(id);
     }
 
     /**
-     * Verifica se o Business está ativo.
+     * Verifica se o Business com o ID informado está ativo.
      */
-    public boolean isBusinessAtivo() {
-        return buscarBusinessAtual()
+    public boolean isBusinessAtivo(BusinessId id) {
+        return buscarPorId(id)
             .map(Business::isAtivo)
             .orElse(false);
     }
 
     // ==================== MÉTODOS PRIVADOS ====================
 
-    private Business getBusinessOrThrow() {
-        return buscarBusinessAtual()
-            .orElseThrow(() -> new IllegalStateException("Nenhum Business configurado"));
+    private Business getBusinessOrThrow(BusinessId id) {
+        return buscarPorId(id)
+            .orElseThrow(() -> new IllegalStateException("Business não encontrado: " + id));
     }
 }

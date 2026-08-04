@@ -6,8 +6,6 @@ import org.springframework.stereotype.Repository;
 import com.troquim_bot.business.Business;
 import com.troquim_bot.business.BusinessId;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -46,10 +44,5 @@ public class InMemoryBusinessRepository implements BusinessRepository {
             return false;
         }
         return businesses.containsKey(id);
-    }
-
-    @Override
-    public List<Business> findAll() {
-        return new ArrayList<>(businesses.values());
     }
 }
