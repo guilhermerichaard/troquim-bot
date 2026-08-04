@@ -1,5 +1,6 @@
 package com.troquim_bot.application.booking;
 
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.service.ServiceId;
 
@@ -97,6 +98,60 @@ public record BookingCommandKey(UUID businessId, String base, String valor, Stri
         String fingerprint = sha256(canonico);
         String baseLimitada = base.length() > BASE_MAX ? sha256(base).substring(0, BASE_MAX) : base;
         return new BookingCommandKey(businessId, baseLimitada, baseLimitada + ":" + fingerprint, fingerprint);
+    }
+
+    /**
+     * Monta a chave a partir de uma CHAVE EXTERNA OPACA (ex.: o cabeçalho
+     * {@code Idempotency-Key} de um canal HTTP), em vez de uma base interna do servidor.
+     *
+     * Diferença deliberada em relação a {@link #de}: lá, {@code valor} é
+     * {@code <base>:<fingerprint>} — payloads diferentes na MESMA base produzem comandos
+     * DIFERENTES (a base identifica a sessão inteira, que pode tentar mais de uma escolha).
+     * Aqui, {@code valor} é derivado SOMENTE de ({@code businessId}, {@code idempotencyKeyExterna})
+     * — a chave externa identifica o PRÓPRIO comando, então dois payloads sob a mesma chave
+     * caem na MESMA linha e precisam ser detectados como reuso (fingerprint divergente), não
+     * tratados como um comando novo.
+     *
+     * O fingerprint continua representando o payload canônico (telefone, serviço,
+     * profissional, data, horário), no mesmo formato de {@link #de}, reaproveitando o mesmo
+     * helper de hash — só o cálculo de {@code valor} muda.
+     *
+     * @param businessId              tenant, resolvido pelo servidor a partir do slug público
+     * @param idempotencyKeyExterna   valor OPACO do cabeçalho Idempotency-Key, já validado
+     *                                (charset/tamanho) por quem chama; nunca deriva de payload
+     * @param telefone                identidade do cliente, já normalizada pelo servidor
+     */
+    public static BookingCommandKey deChaveExclusiva(BusinessId businessId, String idempotencyKeyExterna,
+                                                      String telefone, ServiceId serviceId,
+                                                      ProfessionalId professionalId,
+                                                      LocalDate data, LocalTime horario) {
+        if (businessId == null) {
+            throw new IllegalArgumentException("businessId é obrigatório");
+        }
+        if (idempotencyKeyExterna == null || idempotencyKeyExterna.isBlank()) {
+            throw new IllegalArgumentException("Idempotency-Key é obrigatória");
+        }
+        if (idempotencyKeyExterna.length() > BASE_MAX) {
+            throw new IllegalArgumentException("Idempotency-Key excede " + BASE_MAX + " caracteres");
+        }
+
+        // Ordem fixa, mesmo estilo de de(): representa só o PAYLOAD, nunca a chave externa.
+        String canonico = String.join(SEPARADOR_CAMPO,
+                "v1-exclusiva",
+                texto(businessId.getValue()),
+                BookingIds.normalizar(telefone),
+                texto(serviceId == null ? null : serviceId.getValue()),
+                texto(professionalId == null ? null : professionalId.getValue()),
+                texto(data),
+                horario == null ? "" : horario.toString());
+        String fingerprint = sha256(canonico);
+
+        // valor DEPENDE SÓ de (businessId, chave externa) — nunca do fingerprint. É isso
+        // que faz um segundo payload sob a mesma chave cair na MESMA linha, em vez de virar
+        // um comando novo e silenciosamente diferente.
+        String valor = sha256("v1-exclusiva|valor|" + texto(businessId.getValue()) + "|" + idempotencyKeyExterna);
+
+        return new BookingCommandKey(businessId.getValue(), idempotencyKeyExterna, valor, fingerprint);
     }
 
     private static String texto(Object valor) {

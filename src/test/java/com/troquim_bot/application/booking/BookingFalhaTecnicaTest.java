@@ -262,7 +262,10 @@ class BookingFalhaTecnicaTest {
         BookingCommandKey forjada = new BookingCommandKey(
                 original.businessId(), original.base(), original.valor(), "0".repeat(64));
 
-        assertThrows(IllegalStateException.class, () -> c.booking.confirmarEm(
+        // Tipada desde a introdução de BookingCommandKeyReutilizadaException: o mesmo
+        // detector serve de() (aqui, só ocorreria por colisão de SHA-256) e
+        // deChaveExclusiva() (onde é o caso ESPERADO de reuso de Idempotency-Key).
+        assertThrows(BookingCommandKeyReutilizadaException.class, () -> c.booking.confirmarEm(
                 TELEFONE, "Ana Souza", "unha", PROFISSIONAL, dia, LocalTime.of(10, 0),
                 Duration.ofHours(1), forjada));
     }

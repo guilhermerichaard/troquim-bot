@@ -77,7 +77,7 @@ public interface BookingIdempotencyStore {
 
     /** Grava o desfecho do comando reivindicado, na mesma transação do agendamento. */
     void concluir(BookingCommandKey chave, AppointmentId appointmentId,
-                  BookingResult.Status status, String servico, String dataIso,
+                  BookingIdempotencyOutcome status, String servico, String dataIso,
                   String horario, String nome);
 
     /** Consulta direta, sem reivindicar. Usada por testes e diagnóstico. */

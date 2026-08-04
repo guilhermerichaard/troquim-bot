@@ -1,9 +1,10 @@
 package com.troquim_bot.support;
 
 import com.troquim_bot.application.booking.BookingCommandKey;
+import com.troquim_bot.application.booking.BookingCommandKeyReutilizadaException;
+import com.troquim_bot.application.booking.BookingIdempotencyOutcome;
 import com.troquim_bot.application.booking.BookingIdempotencyRecord;
 import com.troquim_bot.application.booking.BookingIdempotencyStore;
-import com.troquim_bot.application.booking.BookingResult;
 import com.troquim_bot.appointment.AppointmentId;
 
 import java.util.Map;
@@ -37,19 +38,29 @@ public final class InMemoryBookingIdempotencyStore implements BookingIdempotency
         BookingIdempotencyRecord concluido = registros.get(chave.valor());
         if (concluido != null) {
             if (!chave.fingerprint().equals(concluido.fingerprint())) {
-                throw new IllegalStateException("Fingerprint divergente para a mesma command key");
+                throw new BookingCommandKeyReutilizadaException(
+                        "Chave de comando reutilizada com payload diferente do fingerprint gravado");
             }
             return Claim.jaConcluida(concluido);
         }
-        // putIfAbsent: só o primeiro a chegar reivindica.
-        return reivindicadas.putIfAbsent(chave.valor(), chave.fingerprint()) == null
-                ? Claim.nova()
-                : Claim.emAndamento();
+        // putIfAbsent: só o primeiro a chegar reivindica. Se já houver uma reivindicação
+        // (concluída ou não) sob a MESMA chave com fingerprint diferente, é reuso — mesmo
+        // em voo, sem esperar a conclusão (o Postgres real detecta isso via bloqueio de
+        // índice único + leitura do fingerprint já gravado no INSERT).
+        String fingerprintExistente = reivindicadas.putIfAbsent(chave.valor(), chave.fingerprint());
+        if (fingerprintExistente == null) {
+            return Claim.nova();
+        }
+        if (!fingerprintExistente.equals(chave.fingerprint())) {
+            throw new BookingCommandKeyReutilizadaException(
+                    "Chave de comando reutilizada com payload diferente do fingerprint gravado");
+        }
+        return Claim.emAndamento();
     }
 
     @Override
     public void concluir(BookingCommandKey chave, AppointmentId appointmentId,
-                         BookingResult.Status status, String servico, String dataIso,
+                         BookingIdempotencyOutcome status, String servico, String dataIso,
                          String horario, String nome) {
         if (!reivindicadas.containsKey(chave.valor())) {
             throw new IllegalStateException("Comando de booking não reivindicado: conclusão recusada");
@@ -57,7 +68,7 @@ public final class InMemoryBookingIdempotencyStore implements BookingIdempotency
         registros.put(chave.valor(), new BookingIdempotencyRecord(
                 chave.valor(), chave.fingerprint(), Optional.ofNullable(appointmentId),
                 status, servico, dataIso, horario, nome));
-        if (status == BookingResult.Status.CONFIRMADO) {
+        if (status == BookingIdempotencyOutcome.CONFIRMADO) {
             confirmadaTenantBase.put(tenantBase(chave), chave.valor());
         }
     }
