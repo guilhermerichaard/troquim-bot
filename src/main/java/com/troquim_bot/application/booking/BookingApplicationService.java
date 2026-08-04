@@ -309,7 +309,7 @@ public class BookingApplicationService {
         // Recibo do comando, na MESMA transacao. Commit: agendamento e recibo aparecem
         // juntos. Rollback: somem juntos, e o retry reivindica do zero.
         if (chave != null) {
-            idempotencyStore.concluir(chave, appointment.getId(), BookingResult.Status.CONFIRMADO,
+            idempotencyStore.concluir(chave, appointment.getId(), BookingIdempotencyOutcome.CONFIRMADO,
                     servico, rotuloDia, rotuloHorario, nomeCliente);
         }
 
@@ -322,7 +322,8 @@ public class BookingApplicationService {
                                            String nomeCliente) {
         BookingResult conflito = BookingResult.indisponivel("Esse horario ja esta ocupado.");
         if (chave != null) {
-            idempotencyStore.concluir(chave, null, conflito.status(),
+            // Conversão explícita: este ponto SÓ produz conflito de agenda (indisponível).
+            idempotencyStore.concluir(chave, null, BookingIdempotencyOutcome.HORARIO_INDISPONIVEL,
                     servico, rotuloDia, rotuloHorario, nomeCliente);
         }
         return conflito;

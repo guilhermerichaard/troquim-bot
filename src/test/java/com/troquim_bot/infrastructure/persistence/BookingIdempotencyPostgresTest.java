@@ -2,6 +2,7 @@ package com.troquim_bot.infrastructure.persistence;
 
 import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.application.booking.BookingCommandKey;
+import com.troquim_bot.application.booking.BookingIdempotencyOutcome;
 import com.troquim_bot.application.booking.BookingIdempotencyStore;
 import com.troquim_bot.application.booking.BookingIds;
 import com.troquim_bot.application.booking.BookingPersistenceException;
@@ -274,7 +275,7 @@ class BookingIdempotencyPostgresTest {
 
         // Só após um comando BEM-SUCEDIDO existe recibo, e ele aponta para o appointment.
         var registro = idempotencyStore.buscar(chave.valor()).orElseThrow();
-        assertEquals(BookingResult.Status.CONFIRMADO, registro.status());
+        assertEquals(BookingIdempotencyOutcome.CONFIRMADO, registro.status());
         assertTrue(registro.appointmentId().isPresent());
         assertFalse(registro.fingerprint().isBlank());
     }

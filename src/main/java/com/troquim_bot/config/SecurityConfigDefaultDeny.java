@@ -62,10 +62,18 @@ public class SecurityConfigDefaultDeny {
                 auth.requestMatchers(HttpMethod.GET, "/actuator/health")
                     .permitAll();
                 // Vitrine pública SOMENTE LEITURA (Etapa 5C): resolve o negócio pelo slug.
-                // Método GET explícito — POST/PUT/PATCH/DELETE na mesma rota continuam
-                // caindo no denyAll() final. Rota exata (não abre /api/v1/public/** por
-                // completo, para não liberar sem revisão uma rota pública futura).
-                auth.requestMatchers(HttpMethod.GET, "/api/v1/public/businesses/**")
+                // Método GET explícito, ROTAS EXATAS (nunca "**") — um "**" aqui liberaria
+                // também GET .../appointments, que cairia direto no 405 do MVC em vez do
+                // denyAll() do Security. POST/PUT/PATCH/DELETE nestas mesmas rotas continuam
+                // caindo no denyAll() final.
+                auth.requestMatchers(HttpMethod.GET,
+                        "/api/v1/public/businesses/*", "/api/v1/public/businesses/*/availability")
+                    .permitAll();
+                // Agendamento público (Etapa 5D): único POST público, rota EXATA (o
+                // segmento de slug usa "*", nunca "**") — não abre POST /api/v1/public/**
+                // por completo. Idempotência é obrigatória via cabeçalho Idempotency-Key,
+                // aplicada dentro do Controller/Application, não no Security.
+                auth.requestMatchers(HttpMethod.POST, "/api/v1/public/businesses/*/appointments")
                     .permitAll();
                 if (devProfile) {
                     auth.requestMatchers("/dev/**").permitAll();

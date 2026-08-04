@@ -1,6 +1,7 @@
 package com.troquim_bot.infrastructure.persistence;
 
 import com.troquim_bot.application.booking.BookingCommandKey;
+import com.troquim_bot.application.booking.BookingIdempotencyOutcome;
 import com.troquim_bot.application.booking.BookingIdempotencyStore;
 import com.troquim_bot.application.booking.BookingIds;
 import com.troquim_bot.application.booking.BookingResult;
@@ -99,7 +100,7 @@ class BookingIdempotencyMultiTenantPostgresTest {
         // Negócio A reivindica e conclui.
         BookingIdempotencyStore.Claim claimA = tx.execute(s -> {
             BookingIdempotencyStore.Claim c = store.reivindicar(chaveA);
-            store.concluir(chaveA, appointmentIdDe(appointmentA), BookingResult.Status.CONFIRMADO,
+            store.concluir(chaveA, appointmentIdDe(appointmentA), BookingIdempotencyOutcome.CONFIRMADO,
                     "unha", dia.toString(), hora.toString(), "Ana A");
             return c;
         });
@@ -115,7 +116,7 @@ class BookingIdempotencyMultiTenantPostgresTest {
         // E B CONCLUI o seu — o índice parcial (business_id, command_base) permite as duas
         // linhas CONFIRMADO com a mesma base, por serem de tenants diferentes.
         tx.executeWithoutResult(s -> store.concluir(chaveB, appointmentIdDe(appointmentB),
-                BookingResult.Status.CONFIRMADO, "unha", dia.toString(), hora.toString(), "Bia B"));
+                BookingIdempotencyOutcome.CONFIRMADO, "unha", dia.toString(), hora.toString(), "Bia B"));
 
         // Cada recibo aponta para o SEU appointment — nunca o do outro negócio.
         assertEquals(appointmentA, store.buscar(chaveA.valor()).orElseThrow()
@@ -136,7 +137,7 @@ class BookingIdempotencyMultiTenantPostgresTest {
         tx.executeWithoutResult(s -> {
             store.reivindicar(primeiro);
             store.concluir(primeiro, appointmentIdDe(UUID.randomUUID()),
-                    BookingResult.Status.CONFIRMADO, "unha", dia.toString(), "09:00", "Ana");
+                    BookingIdempotencyOutcome.CONFIRMADO, "unha", dia.toString(), "09:00", "Ana");
         });
 
         // MESMO tenant, MESMA base, comando diferente após confirmar → base já confirmada.
