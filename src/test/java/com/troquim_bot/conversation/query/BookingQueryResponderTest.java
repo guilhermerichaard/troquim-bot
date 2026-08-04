@@ -1,5 +1,7 @@
 package com.troquim_bot.conversation.query;
 
+import com.troquim_bot.support.AvailabilityDeTeste;
+
 import com.troquim_bot.ai.intent.IntentType;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
@@ -79,10 +81,7 @@ class BookingQueryResponderTest {
                         new InMemoryAppointmentRepository(),
                         new InMemoryReservationRepository()
                 ),
-                new AvailabilityApplicationService(TestTenants.pilot(),
-                        new InMemoryAvailabilityRepository(),
-                        scheduleService
-                ),
+                AvailabilityDeTeste.legado(scheduleService),
                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot())
         );
     }

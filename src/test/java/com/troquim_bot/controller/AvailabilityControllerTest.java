@@ -38,8 +38,8 @@ class AvailabilityControllerTest {
     @BeforeEach
     void setUp() {
         availabilityRepository = new InMemoryAvailabilityRepository();
-        availabilityApplicationService = new AvailabilityApplicationService(TestTenants.pilot(), availabilityRepository);
-        AvailabilityController availabilityController = new AvailabilityController(availabilityApplicationService);
+        availabilityApplicationService = new AvailabilityApplicationService(availabilityRepository, null, new com.troquim_bot.schedule.ScheduleService());
+        AvailabilityController availabilityController = new AvailabilityController(availabilityApplicationService, TestTenants.pilot());
         mockMvc = MockMvcBuilders.standaloneSetup(availabilityController).build();
     }
 
@@ -48,8 +48,8 @@ class AvailabilityControllerTest {
     @Test
     void deveRetornar200QuandoListarTodos() throws Exception {
         // Cria algumas disponibilidades
-        availabilityApplicationService.criarDisponibilidade(profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        availabilityApplicationService.criarDisponibilidade(profId1, DiaSemana.TERCA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        availabilityApplicationService.criarDisponibilidade(TestTenants.PILOT, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        availabilityApplicationService.criarDisponibilidade(TestTenants.PILOT, profId1, DiaSemana.TERCA, LocalTime.of(8, 0), LocalTime.of(12, 0));
 
         // Testa GET /availability
         mockMvc.perform(get("/availability"))
@@ -74,8 +74,7 @@ class AvailabilityControllerTest {
     @Test
     void deveRetornar200QuandoBuscarPorIdExistente() throws Exception {
         // Cria uma disponibilidade
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability availability = availabilityApplicationService.criarDisponibilidade(TestTenants.PILOT, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
         String availabilityId = availability.getId().getValue().toString();
 
         // Testa GET /availability/{id}
@@ -158,8 +157,7 @@ class AvailabilityControllerTest {
     @Test
     void deveRetornar400QuandoHorarioSobreposto() throws Exception {
         // Cria primeira disponibilidade
-        availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        availabilityApplicationService.criarDisponibilidade(TestTenants.PILOT, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
 
         // Tenta criar horário sobreposto
         String requestBody = "{\"professionalId\":\"" + profId1.getValue().toString() +
@@ -176,8 +174,7 @@ class AvailabilityControllerTest {
     @Test
     void deveAtualizarHorarioCompleto() throws Exception {
         // Cria uma disponibilidade
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability availability = availabilityApplicationService.criarDisponibilidade(TestTenants.PILOT, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
         String availabilityId = availability.getId().getValue().toString();
 
         // Atualiza todos os campos
@@ -195,8 +192,7 @@ class AvailabilityControllerTest {
     @Test
     void deveAtualizarApenasDayOfWeek() throws Exception {
         // Cria uma disponibilidade
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability availability = availabilityApplicationService.criarDisponibilidade(TestTenants.PILOT, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
         String availabilityId = availability.getId().getValue().toString();
 
         // Atualiza apenas o dia da semana
@@ -227,19 +223,18 @@ class AvailabilityControllerTest {
     @Test
     void deveInativarDisponibilidadeERetornar204() throws Exception {
         // Cria uma disponibilidade
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability availability = availabilityApplicationService.criarDisponibilidade(TestTenants.PILOT, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
         String availabilityId = availability.getId().getValue().toString();
 
         // Verifica que está ativo
-        assertTrue(availabilityApplicationService.buscarPorId(availability.getId()).orElseThrow().isAtivo());
+        assertTrue(availabilityApplicationService.buscarPorId(TestTenants.PILOT, availability.getId()).orElseThrow().isAtivo());
 
         // Testa DELETE /availability/{id}
         mockMvc.perform(delete("/availability/" + availabilityId))
             .andExpect(status().isNoContent());
 
         // Verifica que foi inativado (soft delete)
-        Availability availabilityInativado = availabilityApplicationService.buscarPorId(availability.getId()).orElseThrow();
+        Availability availabilityInativado = availabilityApplicationService.buscarPorId(TestTenants.PILOT, availability.getId()).orElseThrow();
         assertFalse(availabilityInativado.isAtivo());
         assertEquals(AvailabilityStatus.INATIVO, availabilityInativado.getStatus());
     }

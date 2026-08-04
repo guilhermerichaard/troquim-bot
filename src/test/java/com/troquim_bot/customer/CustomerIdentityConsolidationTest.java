@@ -1,5 +1,7 @@
 package com.troquim_bot.customer;
 
+import com.troquim_bot.support.AvailabilityDeTeste;
+
 import com.troquim_bot.support.TestDias;
 import com.troquim_bot.ai.intent.IntentType;
 import com.troquim_bot.appointment.Appointment;
@@ -130,7 +132,7 @@ class CustomerIdentityConsolidationTest {
         CustomerProfileService profiles = profiles();
         AppointmentApplicationService appointmentApp = new AppointmentApplicationService(appointmentRepository, reservationRepository);
         BookingQueryResponder responder = new BookingQueryResponder(
-                appointmentApp, new AvailabilityApplicationService(TestTenants.pilot()), profiles);
+                appointmentApp, AvailabilityDeTeste.legado(), profiles);
 
         String numero = "5511900000001";
         LocalDate data = LocalDate.now().plusDays(1);

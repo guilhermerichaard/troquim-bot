@@ -1,7 +1,11 @@
 package com.troquim_bot.config;
 
+import com.troquim_bot.infrastructure.persistence.JpaAvailabilityRepository;
+import com.troquim_bot.infrastructure.persistence.JpaBusinessHoursRepository;
 import com.troquim_bot.infrastructure.persistence.JpaProfessionalRepository;
 import com.troquim_bot.infrastructure.persistence.JpaServiceRepository;
+import com.troquim_bot.repository.AvailabilityRepository;
+import com.troquim_bot.repository.BusinessHoursRepository;
 import com.troquim_bot.repository.ProfessionalRepository;
 import com.troquim_bot.repository.ServiceRepository;
 
@@ -27,9 +31,17 @@ import org.springframework.context.annotation.Profile;
 public class CatalogoPersistenceGuard {
 
     public CatalogoPersistenceGuard(ServiceRepository serviceRepository,
-                                    ProfessionalRepository professionalRepository) {
+                                    ProfessionalRepository professionalRepository,
+                                    BusinessHoursRepository businessHoursRepository,
+                                    AvailabilityRepository availabilityRepository) {
         exigirAdapterJpa("ServiceRepository", serviceRepository, JpaServiceRepository.class);
         exigirAdapterJpa("ProfessionalRepository", professionalRepository, JpaProfessionalRepository.class);
+        // Expediente e disponibilidade correm o MESMO risco do catálogo: em memória, a
+        // agenda parece funcionar e some no restart seguinte, sem um único erro no log.
+        exigirAdapterJpa("BusinessHoursRepository", businessHoursRepository,
+                JpaBusinessHoursRepository.class);
+        exigirAdapterJpa("AvailabilityRepository", availabilityRepository,
+                JpaAvailabilityRepository.class);
     }
 
     private static void exigirAdapterJpa(String porta, Object implementacao, Class<?> esperada) {

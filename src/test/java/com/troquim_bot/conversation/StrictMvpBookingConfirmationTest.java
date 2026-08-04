@@ -1,5 +1,7 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.support.AvailabilityDeTeste;
+
 import com.troquim_bot.support.TestDias;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
@@ -57,7 +59,7 @@ class StrictMvpBookingConfirmationTest {
         conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
         menu = new StrictMvpMenuService(
                 conversationStateService,
-                new AvailabilityApplicationService(TestTenants.pilot()),
+                AvailabilityDeTeste.legado(),
                 booking,
                 OptionalBeans.ausente(),
                 "STRICT_MVP");

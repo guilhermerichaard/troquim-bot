@@ -94,8 +94,8 @@ public class FlowContextoResolver {
         }
 
         FlowContexto ctx = resolvido.contexto();
-        if (!disponibilidade.estaLivre(ctx.businessId(), ctx.data(), ctx.horario(),
-                ctx.profissional().professionalId())) {
+        if (!disponibilidade.estaLivre(ctx.businessId(), ctx.servico().servicoId(), ctx.data(),
+                ctx.horario(), ctx.profissional().professionalId())) {
             return FlowContextoResolvido.falhou(presenter.agenda(ctx,
                     "Esse horário acabou de ser ocupado. Escolha outro, por favor."));
         }

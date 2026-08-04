@@ -1,405 +1,224 @@
 package com.troquim_bot.application.availability;
 
-import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
-import com.troquim_bot.availability.AvailabilityStatus;
+import com.troquim_bot.availability.IntervaloDeHorario;
 import com.troquim_bot.business.BusinessId;
-import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AvailabilityRepository;
-import com.troquim_bot.repository.AppointmentRepository;
-import com.troquim_bot.repository.InMemoryAppointmentRepository;
-import com.troquim_bot.repository.InMemoryAvailabilityRepository;
 import com.troquim_bot.schedule.ScheduleService;
 import com.troquim_bot.schedule.ScheduleSlot;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.troquim_bot.service.ServiceId;
 
 import java.text.Normalizer;
 import java.time.DayOfWeek;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Application Service para gerenciar Availabilities.
- * 
- * Responsabilidades:
- * - Criar disponibilidades
- * - Listar disponibilidades
- * - Buscar disponibilidades
- * - Atualizar disponibilidades
- * - Inativar disponibilidades
- * - Prevenir horários sobrepostos
+ * Application Service de disponibilidade.
+ *
+ * DUAS RESPONSABILIDADES, DELIBERADAMENTE SEPARADAS:
+ *
+ * <ol>
+ *   <li><b>CRUD tenant-scoped</b> da disponibilidade dos profissionais — toda operação exige
+ *       {@link BusinessId} explícito. Não existe mais busca por id sem tenant, nem
+ *       {@code listarTodos()} global;</li>
+ *   <li><b>Delegação</b> da consulta de horários para {@link ConsultarDisponibilidade}, o
+ *       caso de uso canônico. Este serviço NÃO calcula mais nada.</li>
+ * </ol>
+ *
+ * O QUE SAIU DAQUI, e por quê:
+ * <ul>
+ *   <li>{@code ScheduleService} como gabarito — era uma agenda global em memória, igual para
+ *       todos os negócios. Continua injetável apenas para o caminho LEGADO da conversa
+ *       textual, marcado como tal;</li>
+ *   <li>{@code PROFISSIONAL_PADRAO} — pressupunha um profissional único por sistema;</li>
+ *   <li>{@code DURACAO_PADRAO} de uma hora — fazia serviço de 45min ocupar 60 e serviço de
+ *       1h40 caber onde não cabia. A duração agora vem do catálogo, por serviço;</li>
+ *   <li>os construtores que instanciavam {@code InMemoryAvailabilityRepository} e
+ *       {@code InMemoryAppointmentRepository} — cada um criava uma agenda paralela invisível,
+ *       e o Spring podia escolher justamente o construtor errado.</li>
+ * </ul>
  */
 @org.springframework.stereotype.Service
 public class AvailabilityApplicationService {
 
-    private static final Duration DURACAO_PADRAO = Duration.ofHours(1);
-
-    /**
-     * Profissional unico do salao-piloto. Mesma chave deterministica usada pelo caso de
-     * uso de booking, para que a consulta e a confirmacao falem do MESMO profissional.
-     * Sai daqui quando existir catalogo persistido de Professional.
-     */
-    private static final ProfessionalId PROFISSIONAL_PADRAO = ProfessionalId.from(
-            java.util.UUID.nameUUIDFromBytes(
-                    "professional:troquim-mvp-default".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-
     private final AvailabilityRepository availabilityRepository;
-    private final ScheduleService scheduleService;
-    private final AppointmentRepository appointmentRepository;
-    private final TenantProvider tenantProvider;
+    private final ConsultarDisponibilidade consultarDisponibilidade;
 
     /**
-     * Construtor para MVP com repositório em memória.
+     * Gabarito LEGADO da conversa textual. Ver {@link #consultarDisponibilidade(String)}.
+     * Nenhum caminho novo o utiliza, e ele não participa de nenhuma decisão deste serviço.
      */
-    public AvailabilityApplicationService(TenantProvider tenantProvider) {
-        this(tenantProvider, new InMemoryAvailabilityRepository(), new ScheduleService(),
-                new InMemoryAppointmentRepository());
-    }
+    private final ScheduleService scheduleServiceLegado;
 
-    /**
-     * Construtor com injeção de dependência (para testes ou futura implementação JPA).
-     */
-    public AvailabilityApplicationService(TenantProvider tenantProvider,
-                                          AvailabilityRepository availabilityRepository) {
-        this(tenantProvider, availabilityRepository, new ScheduleService(), new InMemoryAppointmentRepository());
-    }
-
-    public AvailabilityApplicationService(TenantProvider tenantProvider,
-                                          AvailabilityRepository availabilityRepository,
-                                          ScheduleService scheduleService) {
-        this(tenantProvider, availabilityRepository, scheduleService, new InMemoryAppointmentRepository());
-    }
-
-    /**
-     * Construtor completo, usado pelo Spring.
-     *
-     * A anotação {@code @Autowired} é necessária: com vários construtores e nenhum
-     * marcado, o Spring escolhia o VAZIO — e a aplicação rodava com um
-     * {@link ScheduleService} instanciado aqui dentro, diferente do bean usado pelo
-     * resto do sistema. Eram duas agendas distintas em memória.
-     */
-    @Autowired
-    public AvailabilityApplicationService(TenantProvider tenantProvider,
-                                          AvailabilityRepository availabilityRepository,
-                                          ScheduleService scheduleService,
-                                          AppointmentRepository appointmentRepository) {
-        this.tenantProvider = tenantProvider;
+    public AvailabilityApplicationService(AvailabilityRepository availabilityRepository,
+                                          ConsultarDisponibilidade consultarDisponibilidade,
+                                          ScheduleService scheduleServiceLegado) {
         this.availabilityRepository = availabilityRepository;
-        this.scheduleService = scheduleService;
-        this.appointmentRepository = appointmentRepository;
+        this.consultarDisponibilidade = consultarDisponibilidade;
+        this.scheduleServiceLegado = scheduleServiceLegado;
     }
 
+    // ==================== CRUD TENANT-SCOPED ====================
+
     /**
-     * Cria uma nova disponibilidade.
-     * 
-     * @param professionalId ID do profissional
-     * @param dayOfWeek Dia da semana
-     * @param startTime Horário de início
-     * @param endTime Horário de fim
-     * @return Availability criada com status ATIVO
-     * @throws IllegalArgumentException se houver conflito de horário
+     * Cria uma disponibilidade para um profissional do negócio.
+     *
+     * Recusa períodos sobrepostos do MESMO profissional no MESMO dia e negócio: dois
+     * períodos que se cruzam gerariam o mesmo horário duas vezes na tela.
      */
-    public Availability criarDisponibilidade(ProfessionalId professionalId, DiaSemana dayOfWeek,
-                                              LocalTime startTime, LocalTime endTime) {
+    public Availability criarDisponibilidade(BusinessId businessId, ProfessionalId professionalId,
+                                             DiaSemana dayOfWeek, LocalTime startTime, LocalTime endTime) {
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         if (professionalId == null) {
             throw new IllegalArgumentException("ProfessionalId é obrigatório");
         }
         if (dayOfWeek == null) {
             throw new IllegalArgumentException("Dia da semana é obrigatório");
         }
-        if (startTime == null) {
-            throw new IllegalArgumentException("Horário de início é obrigatório");
-        }
-        if (endTime == null) {
-            throw new IllegalArgumentException("Horário de fim é obrigatório");
-        }
-        if (!startTime.isBefore(endTime)) {
-            throw new IllegalArgumentException("Horário de início deve ser menor que horário de fim");
-        }
 
-        AvailabilityId id = AvailabilityId.generate();
+        // As invariantes de período (início < fim, sem meia-noite) são do Value Object.
+        IntervaloDeHorario periodo = IntervaloDeHorario.de(startTime, endTime);
+        Availability nova = new Availability(AvailabilityId.generate(), businessId,
+                professionalId, dayOfWeek, periodo);
 
-        Availability newAvailability = new Availability(id, professionalId, dayOfWeek, startTime, endTime);
-
-        // Verifica conflito com disponibilidades existentes do mesmo profissional
-        List<Availability> existentes = availabilityRepository.findByProfessionalIdAndDayOfWeek(professionalId, dayOfWeek);
-        for (Availability existing : existentes) {
-            if (existing.isAtivo() && newAvailability.conflitaCom(existing)) {
-                throw new IllegalArgumentException("Já existe uma disponibilidade neste horário para este profissional");
+        for (Availability existente : availabilityRepository
+                .listarAtivasPorProfissionalEDia(businessId, professionalId, dayOfWeek)) {
+            if (nova.conflitaCom(existente)) {
+                throw new IllegalArgumentException(
+                        "Já existe uma disponibilidade neste horário para este profissional");
             }
         }
 
-        return availabilityRepository.save(newAvailability);
+        return availabilityRepository.salvar(nova);
     }
 
-    /**
-     * Busca disponibilidade por ID.
-     * 
-     * @param id ID da disponibilidade
-     * @return Optional com o Availability se encontrado
-     */
-    public Optional<Availability> buscarPorId(AvailabilityId id) {
-        if (id == null) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(availabilityRepository.findById(id));
+    public Optional<Availability> buscarPorId(BusinessId businessId, AvailabilityId id) {
+        return availabilityRepository.buscarPorId(businessId, id);
     }
 
-    /**
-     * Lista todas as disponibilidades.
-     * 
-     * @return Lista de todos os availabilities
-     */
-    public List<Availability> listarTodos() {
-        return availabilityRepository.findAll();
+    /** Todas as disponibilidades do NEGÓCIO. Não existe listagem global. */
+    public List<Availability> listarPorNegocio(BusinessId businessId) {
+        return availabilityRepository.listarPorNegocio(businessId);
     }
 
-    /**
-     * Lista disponibilidades de um profissional.
-     * 
-     * @param professionalId ID do profissional
-     * @return Lista de availabilities do profissional
-     */
-    public List<Availability> listarPorProfissional(ProfessionalId professionalId) {
-        if (professionalId == null) {
-            return List.of();
-        }
-        return availabilityRepository.findByProfessionalId(professionalId);
+    public List<Availability> listarPorProfissional(BusinessId businessId, ProfessionalId professionalId) {
+        return availabilityRepository.listarPorProfissional(businessId, professionalId);
     }
 
-    /**
-     * Lista apenas disponibilidades ativas.
-     * 
-     * @return Lista de availabilities ativos
-     */
-    public List<Availability> listarAtivos() {
-        return availabilityRepository.findAll().stream()
-            .filter(Availability::isAtivo)
-            .toList();
+    public List<Availability> listarAtivos(BusinessId businessId) {
+        return listarPorNegocio(businessId).stream().filter(Availability::isAtivo).toList();
     }
 
-    /**
-     * Atualiza o dia da semana.
-     * 
-     * @param id ID da disponibilidade
-     * @param novoDayOfWeek Novo dia da semana
-     * @return Availability atualizado
-     */
-    public Availability atualizarDayOfWeek(AvailabilityId id, DiaSemana novoDayOfWeek) {
-        Availability availability = getAvailabilityOrThrow(id);
+    public Availability atualizarDayOfWeek(BusinessId businessId, AvailabilityId id, DiaSemana novoDayOfWeek) {
+        Availability availability = exigirExistente(businessId, id);
         availability.atualizarDayOfWeek(novoDayOfWeek);
-        return availabilityRepository.save(availability);
+        return availabilityRepository.salvar(availability);
     }
 
-    /**
-     * Atualiza o horário de início.
-     * 
-     * @param id ID da disponibilidade
-     * @param novoStartTime Novo horário de início
-     * @return Availability atualizado
-     */
-    public Availability atualizarStartTime(AvailabilityId id, LocalTime novoStartTime) {
-        Availability availability = getAvailabilityOrThrow(id);
+    public Availability atualizarStartTime(BusinessId businessId, AvailabilityId id, LocalTime novoStartTime) {
+        Availability availability = exigirExistente(businessId, id);
         availability.atualizarStartTime(novoStartTime);
-        return availabilityRepository.save(availability);
+        return availabilityRepository.salvar(availability);
     }
 
-    /**
-     * Atualiza o horário de fim.
-     * 
-     * @param id ID da disponibilidade
-     * @param novoEndTime Novo horário de fim
-     * @return Availability atualizado
-     */
-    public Availability atualizarEndTime(AvailabilityId id, LocalTime novoEndTime) {
-        Availability availability = getAvailabilityOrThrow(id);
+    public Availability atualizarEndTime(BusinessId businessId, AvailabilityId id, LocalTime novoEndTime) {
+        Availability availability = exigirExistente(businessId, id);
         availability.atualizarEndTime(novoEndTime);
-        return availabilityRepository.save(availability);
+        return availabilityRepository.salvar(availability);
     }
 
-    /**
-     * Atualiza dia e horários completos.
-     * 
-     * @param id ID da disponibilidade
-     * @param dayOfWeek Novo dia da semana
-     * @param startTime Novo horário de início
-     * @param endTime Novo horário de fim
-     * @return Availability atualizado
-     */
-    public Availability atualizarHorario(AvailabilityId id, DiaSemana dayOfWeek,
-                                          LocalTime startTime, LocalTime endTime) {
-        Availability availability = getAvailabilityOrThrow(id);
+    public Availability atualizarHorario(BusinessId businessId, AvailabilityId id, DiaSemana dayOfWeek,
+                                         LocalTime startTime, LocalTime endTime) {
+        Availability availability = exigirExistente(businessId, id);
         availability.atualizarHorario(dayOfWeek, startTime, endTime);
-        return availabilityRepository.save(availability);
+        return availabilityRepository.salvar(availability);
     }
 
-    /**
-     * Inativa uma disponibilidade.
-     * 
-     * @param id ID da disponibilidade
-     * @return Availability inativado
-     */
-    public Availability inativarDisponibilidade(AvailabilityId id) {
-        Availability availability = getAvailabilityOrThrow(id);
+    public Availability inativarDisponibilidade(BusinessId businessId, AvailabilityId id) {
+        Availability availability = exigirExistente(businessId, id);
         availability.inativar();
-        return availabilityRepository.save(availability);
+        return availabilityRepository.salvar(availability);
     }
 
-    /**
-     * Ativa uma disponibilidade.
-     * 
-     * @param id ID da disponibilidade
-     * @return Availability ativado
-     */
-    public Availability ativarDisponibilidade(AvailabilityId id) {
-        Availability availability = getAvailabilityOrThrow(id);
+    public Availability ativarDisponibilidade(BusinessId businessId, AvailabilityId id) {
+        Availability availability = exigirExistente(businessId, id);
         availability.ativar();
-        return availabilityRepository.save(availability);
+        return availabilityRepository.salvar(availability);
+    }
+
+    public boolean existe(BusinessId businessId, AvailabilityId id) {
+        return availabilityRepository.existe(businessId, id);
+    }
+
+    public void remover(BusinessId businessId, AvailabilityId id) {
+        availabilityRepository.remover(businessId, id);
+    }
+
+    // ==================== FONTE ÚNICA DE DISPONIBILIDADE ====================
+    //
+    // Delegação pura. O cálculo (expediente ∩ disponibilidade − appointments, com a duração
+    // real do serviço) pertence a ConsultarDisponibilidade. Estes métodos existem apenas
+    // porque Conversation e Flow já falam com este serviço.
+
+    /** Horários livres para o serviço e o profissional informados, em ordem crescente. */
+    public List<LocalTime> horariosLivres(BusinessId businessId, ServiceId servico,
+                                          ProfessionalId profissional, LocalDate data) {
+        return consultarDisponibilidade.doDia(businessId, servico, profissional, data).horarios();
+    }
+
+    /** Datas COM ao menos um horário livre na janela. */
+    public List<LocalDate> datasComVaga(BusinessId businessId, ServiceId servico,
+                                        ProfessionalId profissional, LocalDate de, LocalDate ate) {
+        return consultarDisponibilidade.naJanela(businessId, servico, profissional, de, ate).datas();
     }
 
     /**
-     * Verifica se uma disponibilidade existe.
-     * 
-     * @param id ID da disponibilidade
-     * @return true se existe
+     * Um horário específico continua livre? Consulta de APRESENTAÇÃO — não reserva nada, e o
+     * resultado envelhece. A decisão final é sempre revalidada na confirmação.
      */
-    public boolean existe(AvailabilityId id) {
-        if (id == null) {
-            return false;
-        }
-        return availabilityRepository.exists(id);
+    public boolean estaLivre(BusinessId businessId, ServiceId servico, ProfessionalId profissional,
+                             LocalDate data, LocalTime horario) {
+        return consultarDisponibilidade.estaLivre(businessId, servico, profissional, data, horario);
     }
 
+    // ==================== CAMINHO LEGADO DA CONVERSA TEXTUAL ====================
+
     /**
-     * Consulta horários disponíveis para um determinado dia.
-     * Delega para o serviço de agendamento que gerencia a agenda real.
-     * 
-     * @param dia Nome do dia (segunda, terça, etc.) ou "hoje", "amanhã"
-     * @return Lista de horários disponíveis formatados como string
+     * LEGADO — horários do menu textual antigo, por NOME de dia.
+     *
+     * Lê o gabarito global de {@link ScheduleService}: horários de hora em hora, iguais para
+     * todos os negócios, sem serviço, sem profissional e sem cruzar agendamentos. É a agenda
+     * que esta etapa substituiu — mantida SÓ para não quebrar a conversa que ainda fala por
+     * texto e não tem ServiceId para informar.
+     *
+     * NÃO HÁ FALLBACK NOS DOIS SENTIDOS: o caminho novo nunca cai aqui, e este nunca é
+     * convertido silenciosamente naquele. Some quando a conversa passar a usar o catálogo.
+     *
+     * @deprecated use {@link #horariosLivres(BusinessId, ServiceId, ProfessionalId, LocalDate)},
+     *             que respeita expediente, disponibilidade e duração reais.
      */
+    @Deprecated
     public List<String> consultarDisponibilidade(String dia) {
         LocalDate data = proximaDataPara(dia);
         if (data == null) {
             return List.of();
         }
-        // Caminho LEGADO do menu textual: sem tenant no parâmetro, resolve o corrente.
-        // O Flow e /app usam a sobrecarga com BusinessId explícito.
-        return horariosLivres(tenantProvider.currentBusinessId(), data, PROFISSIONAL_PADRAO).stream()
-                .map(LocalTime::toString)
+        return scheduleServiceLegado.listarHorariosDisponiveis(chaveDoDiaLegada(data)).stream()
+                .map(ScheduleSlot::getHorario)
                 .toList();
     }
 
-    // ==================== FONTE ÚNICA DE DISPONIBILIDADE ====================
-    //
-    // Antes existiam dois caminhos: a conversa lia o gabarito de ScheduleService cru
-    // (mostrando como livre um horário JÁ agendado) e o módulo do WhatsApp Flow tinha
-    // seu próprio cruzamento com Appointments. Agora só existe este: o gabarito é o
-    // conjunto de partida e os Appointments ativos são o filtro autoritativo.
-    // Conversation e Flow chamam exatamente estes métodos.
-
-    /**
-     * Horários livres numa data para um profissional, em ordem crescente.
-     * Vazio significa dia fechado, data no passado ou agenda cheia.
-     */
-    public List<LocalTime> horariosLivres(BusinessId businessId, LocalDate data,
-                                          ProfessionalId profissional) {
-        if (businessId == null || data == null || profissional == null
-                || data.isBefore(LocalDate.now())) {
-            return List.of();
-        }
-
-        List<ScheduleSlot> gabarito = scheduleService.listarHorariosDisponiveis(chaveDoDia(data));
-        if (gabarito.isEmpty()) {
-            return List.of();
-        }
-
-        // Escopo de tenant é OBRIGATÓRIO aqui: o professional_id do catálogo do Flow é
-        // sintético e compartilhado, então sem ele o agendamento de um negócio ocuparia
-        // o horário de outro.
-        List<Appointment> ocupados = appointmentRepository
-                .findByBusinessIdAndProfessionalIdAndDate(businessId, profissional, data).stream()
-                .filter(Appointment::isAtivo)
-                .toList();
-
-        boolean hoje = data.isEqual(LocalDate.now());
-        LocalTime agora = LocalTime.now();
-
-        List<LocalTime> livres = new ArrayList<>();
-        for (ScheduleSlot slot : gabarito) {
-            LocalTime inicio = LocalTime.parse(slot.getHorario());
-            // O gabarito não conhece a hora atual: horário que já passou hoje não é opção.
-            if (hoje && !inicio.isAfter(agora)) {
-                continue;
-            }
-            if (!conflita(inicio, ocupados)) {
-                livres.add(inicio);
-            }
-        }
-        livres.sort(LocalTime::compareTo);
-        return List.copyOf(livres);
-    }
-
-    /** Datas SEM nenhum horário livre na janela, para desabilitar no calendário. */
-    public List<LocalDate> datasSemVaga(BusinessId businessId, LocalDate de, LocalDate ate,
-                                        ProfessionalId profissional) {
-        if (businessId == null || de == null || ate == null || profissional == null) {
-            return List.of();
-        }
-        List<LocalDate> indisponiveis = new ArrayList<>();
-        for (LocalDate dia = de; !dia.isAfter(ate); dia = dia.plusDays(1)) {
-            if (horariosLivres(businessId, dia, profissional).isEmpty()) {
-                indisponiveis.add(dia);
-            }
-        }
-        return List.copyOf(indisponiveis);
-    }
-
-    /** Datas COM ao menos um horário livre na janela — para o dropdown de datas do Flow. */
-    public List<LocalDate> datasComVaga(BusinessId businessId, LocalDate de, LocalDate ate,
-                                        ProfessionalId profissional) {
-        if (businessId == null || de == null || ate == null || profissional == null) {
-            return List.of();
-        }
-        List<LocalDate> disponiveis = new ArrayList<>();
-        for (LocalDate dia = de; !dia.isAfter(ate); dia = dia.plusDays(1)) {
-            if (!horariosLivres(businessId, dia, profissional).isEmpty()) {
-                disponiveis.add(dia);
-            }
-        }
-        return List.copyOf(disponiveis);
-    }
-
-    /**
-     * Um horário específico continua livre? Consulta de APRESENTAÇÃO — não reserva nada,
-     * e o resultado envelhece. A decisão final é sempre revalidada na confirmação.
-     */
-    public boolean estaLivre(BusinessId businessId, LocalDate data, LocalTime horario,
-                             ProfessionalId profissional) {
-        return horario != null && horariosLivres(businessId, data, profissional).contains(horario);
-    }
-
-    private static boolean conflita(LocalTime inicio, List<Appointment> ocupados) {
-        LocalTime fim = inicio.plus(DURACAO_PADRAO);
-        for (Appointment ocupado : ocupados) {
-            if (inicio.isBefore(ocupado.getEndTime()) && ocupado.getStartTime().isBefore(fim)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Chave usada pelo {@link ScheduleService}: nome do dia em português COM acento.
-     */
-    private static String chaveDoDia(LocalDate data) {
+    /** Chave do gabarito legado: nome do dia em português COM acento. */
+    private static String chaveDoDiaLegada(LocalDate data) {
         return switch (data.getDayOfWeek()) {
             case MONDAY -> "segunda";
             case TUESDAY -> "terça";
@@ -439,13 +258,8 @@ public class AvailabilityApplicationService {
         return semAcentos.toLowerCase(Locale.ROOT).trim();
     }
 
-    // ==================== MÉTODOS PRIVADOS ====================
-
-    private Availability getAvailabilityOrThrow(AvailabilityId id) {
-        Availability availability = availabilityRepository.findById(id);
-        if (availability == null) {
-            throw new IllegalArgumentException("Disponibilidade não encontrada");
-        }
-        return availability;
+    private Availability exigirExistente(BusinessId businessId, AvailabilityId id) {
+        return availabilityRepository.buscarPorId(businessId, id)
+                .orElseThrow(() -> new IllegalArgumentException("Disponibilidade não encontrada"));
     }
 }

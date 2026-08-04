@@ -1,14 +1,17 @@
 package com.troquim_bot.application.availability;
 
-import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.availability.Availability;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.availability.AvailabilityStatus;
+import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.InMemoryAvailabilityRepository;
+import com.troquim_bot.schedule.ScheduleService;
+import com.troquim_bot.support.TestTenants;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalTime;
@@ -18,29 +21,47 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * CRUD tenant-scoped da disponibilidade profissional.
+ *
+ * Toda operação recebe {@link BusinessId} explícito. O cálculo de horários NÃO é testado
+ * aqui — ele mora em {@code ConsultarDisponibilidade} e tem sua própria suíte.
+ */
+@DisplayName("AvailabilityApplicationService - CRUD por negócio")
 class AvailabilityApplicationServiceTest {
 
-    private AvailabilityApplicationService availabilityApplicationService;
-    private InMemoryAvailabilityRepository availabilityRepository;
+    private static final BusinessId SALAO = TestTenants.PILOT;
+    private static final BusinessId OUTRO_SALAO = TestTenants.OUTRO;
+
+    private AvailabilityApplicationService servico;
+    private InMemoryAvailabilityRepository repositorio;
 
     private final ProfessionalId profId1 = ProfessionalId.from(UUID.randomUUID());
     private final ProfessionalId profId2 = ProfessionalId.from(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
-        availabilityRepository = new InMemoryAvailabilityRepository();
-        availabilityApplicationService = new AvailabilityApplicationService(TestTenants.pilot(), availabilityRepository);
+        repositorio = new InMemoryAvailabilityRepository();
+        // ConsultarDisponibilidade nulo de propósito: nenhum teste deste arquivo consulta
+        // horários. Se algum passar a consultar, o NPE denuncia na hora.
+        servico = new AvailabilityApplicationService(repositorio, null, new ScheduleService());
+    }
+
+    private Availability criar(BusinessId negocio, ProfessionalId profissional, DiaSemana dia,
+                               LocalTime inicio, LocalTime fim) {
+        return servico.criarDisponibilidade(negocio, profissional, dia, inicio, fim);
     }
 
     // ==================== criarDisponibilidade ====================
 
     @Test
     void deveCriarDisponibilidadeComSucesso() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability availability = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
         assertNotNull(availability);
         assertNotNull(availability.getId());
+        assertEquals(SALAO, availability.getBusinessId());
         assertEquals(profId1, availability.getProfessionalId());
         assertEquals(DiaSemana.SEGUNDA, availability.getDayOfWeek());
         assertEquals(LocalTime.of(8, 0), availability.getStartTime());
@@ -52,342 +73,328 @@ class AvailabilityApplicationServiceTest {
     }
 
     @Test
+    void deveLancarExcecaoQuandoBusinessIdNulo() {
+        IllegalArgumentException erro = assertThrows(IllegalArgumentException.class, () ->
+                criar(null, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0)));
+        assertTrue(erro.getMessage().contains("BusinessId"));
+    }
+
+    @Test
     void deveLancarExcecaoQuandoProfessionalIdNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.criarDisponibilidade(
-                null, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0)));
+                criar(SALAO, null, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0)));
     }
 
     @Test
     void deveLancarExcecaoQuandoDayOfWeekNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.criarDisponibilidade(
-                profId1, null, LocalTime.of(8, 0), LocalTime.of(12, 0)));
+                criar(SALAO, profId1, null, LocalTime.of(8, 0), LocalTime.of(12, 0)));
     }
 
     @Test
     void deveLancarExcecaoQuandoStartTimeNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.criarDisponibilidade(
-                profId1, DiaSemana.SEGUNDA, null, LocalTime.of(12, 0)));
+                criar(SALAO, profId1, DiaSemana.SEGUNDA, null, LocalTime.of(12, 0)));
     }
 
     @Test
     void deveLancarExcecaoQuandoEndTimeNulo() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.criarDisponibilidade(
-                profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), null));
+                criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), null));
     }
 
     @Test
     void deveLancarExcecaoQuandoStartTimeMaiorQueEndTime() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.criarDisponibilidade(
-                profId1, DiaSemana.SEGUNDA, LocalTime.of(12, 0), LocalTime.of(8, 0)));
+                criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(12, 0), LocalTime.of(8, 0)));
     }
 
     @Test
     void deveLancarExcecaoQuandoStartTimeIgualEndTime() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.criarDisponibilidade(
-                profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(8, 0)));
+                criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(8, 0)));
     }
 
     @Test
+    @DisplayName("períodos profissionais sobrepostos são rejeitados")
     void deveLancarExcecaoQuandoHorarioSobreposto() {
-        // Cria primeira disponibilidade
-        availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        // Tenta criar horário sobreposto (dentro do mesmo período)
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.criarDisponibilidade(
-                profId1, DiaSemana.SEGUNDA, LocalTime.of(9, 0), LocalTime.of(10, 0)));
+                criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(10, 0), LocalTime.of(14, 0)));
     }
 
     @Test
+    @DisplayName("dois períodos encostados no mesmo dia são o intervalo de almoço, e são aceitos")
     void devePermitirHorarioNaoSobreposto() {
-        // Cria primeira disponibilidade
-        availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(9, 0), LocalTime.of(12, 0));
+        Availability tarde = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(13, 0), LocalTime.of(18, 0));
 
-        // Cria horário não sobreposto (após o primeiro)
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(13, 0), LocalTime.of(18, 0));
-
-        assertNotNull(availability);
-        assertEquals(AvailabilityStatus.ATIVO, availability.getStatus());
+        assertNotNull(tarde);
+        assertEquals(2, repositorio
+                .listarAtivasPorProfissionalEDia(SALAO, profId1, DiaSemana.SEGUNDA).size());
     }
 
     @Test
     void devePermitirHorarioSobrepostoParaProfissionaisDiferentes() {
-        // Cria disponibilidade para profissional 1
-        availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        // Cria horário sobreposto para profissional 2
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId2, DiaSemana.SEGUNDA, LocalTime.of(9, 0), LocalTime.of(10, 0));
-
-        assertNotNull(availability);
+        assertNotNull(criar(SALAO, profId2, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0)));
     }
 
     @Test
     void devePermitirHorarioSobrepostoEmDiasDiferentes() {
-        // Cria disponibilidade na segunda
-        availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        // Cria horário sobreposto na terça
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.TERCA, LocalTime.of(9, 0), LocalTime.of(10, 0));
+        assertNotNull(criar(SALAO, profId1, DiaSemana.TERCA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0)));
+    }
 
-        assertNotNull(availability);
+    @Test
+    @DisplayName("o MESMO profissional em negócios diferentes não conflita consigo mesmo")
+    void mesmoProfissionalEmNegociosDiferentesNaoConflita() {
+        criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+
+        // Cenário adversário: o mesmo UUID de profissional cadastrado sob outro negócio.
+        assertNotNull(criar(OUTRO_SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0)));
     }
 
     // ==================== buscarPorId ====================
 
     @Test
     void deveBuscarDisponibilidadePorId() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        AvailabilityId id = availability.getId();
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        Optional<Availability> encontrado = availabilityApplicationService.buscarPorId(id);
+        Optional<Availability> encontrada = servico.buscarPorId(SALAO, criada.getId());
 
-        assertTrue(encontrado.isPresent());
-        assertEquals(availability.getId(), encontrado.get().getId());
+        assertTrue(encontrada.isPresent());
+        assertEquals(criada.getId(), encontrada.get().getId());
+    }
+
+    @Test
+    @DisplayName("buscar com o tenant do outro negócio devolve vazio, não o dado alheio")
+    void buscaRespeitaTenant() {
+        Availability doSalao = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
+
+        assertTrue(servico.buscarPorId(SALAO, doSalao.getId()).isPresent());
+        assertTrue(servico.buscarPorId(OUTRO_SALAO, doSalao.getId()).isEmpty());
     }
 
     @Test
     void deveRetornarVazioQuandoIdNaoExiste() {
-        Optional<Availability> encontrado = availabilityApplicationService.buscarPorId(AvailabilityId.generate());
-
-        assertFalse(encontrado.isPresent());
+        assertTrue(servico.buscarPorId(SALAO, AvailabilityId.generate()).isEmpty());
     }
 
     @Test
     void deveRetornarVazioQuandoIdNulo() {
-        Optional<Availability> encontrado = availabilityApplicationService.buscarPorId(null);
-
-        assertFalse(encontrado.isPresent());
+        assertTrue(servico.buscarPorId(SALAO, null).isEmpty());
     }
 
-    // ==================== listarTodos ====================
+    // ==================== listagens ====================
 
     @Test
-    void deveListarTodos() {
-        availabilityApplicationService.criarDisponibilidade(profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        availabilityApplicationService.criarDisponibilidade(profId1, DiaSemana.TERCA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        availabilityApplicationService.criarDisponibilidade(profId2, DiaSemana.SEGUNDA, LocalTime.of(14, 0), LocalTime.of(18, 0));
+    @DisplayName("a listagem é do NEGÓCIO: uma empresa não lê a disponibilidade da outra")
+    void listagemNaoAtravessaNegocios() {
+        criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        criar(SALAO, profId2, DiaSemana.TERCA, LocalTime.of(9, 0), LocalTime.of(13, 0));
+        criar(OUTRO_SALAO, profId1, DiaSemana.QUARTA, LocalTime.of(10, 0), LocalTime.of(14, 0));
 
-        List<Availability> availabilities = availabilityApplicationService.listarTodos();
-
-        assertEquals(3, availabilities.size());
+        assertEquals(2, servico.listarPorNegocio(SALAO).size());
+        assertEquals(1, servico.listarPorNegocio(OUTRO_SALAO).size());
     }
 
     @Test
     void deveRetornarListaVaziaQuandoNaoExistem() {
-        List<Availability> availabilities = availabilityApplicationService.listarTodos();
-
-        assertTrue(availabilities.isEmpty());
+        assertTrue(servico.listarPorNegocio(SALAO).isEmpty());
     }
-
-    // ==================== listarPorProfissional ====================
 
     @Test
     void deveListarPorProfissional() {
-        availabilityApplicationService.criarDisponibilidade(profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        availabilityApplicationService.criarDisponibilidade(profId1, DiaSemana.TERCA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        availabilityApplicationService.criarDisponibilidade(profId2, DiaSemana.SEGUNDA, LocalTime.of(14, 0), LocalTime.of(18, 0));
+        criar(SALAO, profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        criar(SALAO, profId1, DiaSemana.TERCA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        criar(SALAO, profId2, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        List<Availability> doProf1 = availabilityApplicationService.listarPorProfissional(profId1);
+        List<Availability> doProfissional = servico.listarPorProfissional(SALAO, profId1);
 
-        assertEquals(2, doProf1.size());
-        assertTrue(doProf1.stream().allMatch(a -> a.getProfessionalId().equals(profId1)));
+        assertEquals(2, doProfissional.size());
+        assertTrue(doProfissional.stream().allMatch(a -> a.getProfessionalId().equals(profId1)));
     }
 
     @Test
     void deveRetornarListaVaziaQuandoProfessionalIdNulo() {
-        List<Availability> result = availabilityApplicationService.listarPorProfissional(null);
-
-        assertTrue(result.isEmpty());
+        assertTrue(servico.listarPorProfissional(SALAO, null).isEmpty());
     }
-
-    // ==================== listarAtivos ====================
 
     @Test
     void deveListarApenasAtivos() {
-        Availability ativo1 = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        Availability ativo2 = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.TERCA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        Availability inativo = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.QUARTA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability primeira = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
+        criar(SALAO, profId2, DiaSemana.TERCA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        servico.inativarDisponibilidade(SALAO, primeira.getId());
 
-        availabilityApplicationService.inativarDisponibilidade(inativo.getId());
-
-        List<Availability> ativos = availabilityApplicationService.listarAtivos();
-
-        assertEquals(2, ativos.size());
-        assertTrue(ativos.stream().allMatch(Availability::isAtivo));
+        assertEquals(1, servico.listarAtivos(SALAO).size());
+        assertEquals(2, servico.listarPorNegocio(SALAO).size());
     }
 
-    // ==================== atualizarDayOfWeek ====================
+    // ==================== atualizações ====================
 
     @Test
     void deveAtualizarDayOfWeek() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        Availability atualizado = availabilityApplicationService.atualizarDayOfWeek(availability.getId(), DiaSemana.TERCA);
+        Availability atualizada = servico.atualizarDayOfWeek(SALAO, criada.getId(), DiaSemana.QUARTA);
 
-        assertEquals(DiaSemana.TERCA, atualizado.getDayOfWeek());
+        assertEquals(DiaSemana.QUARTA, atualizada.getDayOfWeek());
     }
 
     @Test
     void deveLancarExcecaoQuandoAtualizarDayOfWeekDeInexistente() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.atualizarDayOfWeek(AvailabilityId.generate(), DiaSemana.TERCA));
+                servico.atualizarDayOfWeek(SALAO, AvailabilityId.generate(), DiaSemana.QUARTA));
     }
 
-    // ==================== atualizarStartTime ====================
+    @Test
+    @DisplayName("atualizar com o tenant errado não altera o dado do outro negócio")
+    void atualizacaoRespeitaTenant() {
+        Availability doSalao = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                servico.atualizarDayOfWeek(OUTRO_SALAO, doSalao.getId(), DiaSemana.QUARTA));
+        assertEquals(DiaSemana.SEGUNDA,
+                servico.buscarPorId(SALAO, doSalao.getId()).orElseThrow().getDayOfWeek());
+    }
 
     @Test
     void deveAtualizarStartTime() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        Availability atualizado = availabilityApplicationService.atualizarStartTime(availability.getId(), LocalTime.of(9, 0));
+        Availability atualizada = servico.atualizarStartTime(SALAO, criada.getId(), LocalTime.of(9, 0));
 
-        assertEquals(LocalTime.of(9, 0), atualizado.getStartTime());
+        assertEquals(LocalTime.of(9, 0), atualizada.getStartTime());
     }
 
     @Test
     void deveLancarExcecaoQuandoAtualizarStartTimeMaiorQueEndTime() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.atualizarStartTime(availability.getId(), LocalTime.of(13, 0)));
+                servico.atualizarStartTime(SALAO, criada.getId(), LocalTime.of(13, 0)));
     }
-
-    // ==================== atualizarEndTime ====================
 
     @Test
     void deveAtualizarEndTime() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        Availability atualizado = availabilityApplicationService.atualizarEndTime(availability.getId(), LocalTime.of(14, 0));
+        Availability atualizada = servico.atualizarEndTime(SALAO, criada.getId(), LocalTime.of(14, 0));
 
-        assertEquals(LocalTime.of(14, 0), atualizado.getEndTime());
+        assertEquals(LocalTime.of(14, 0), atualizada.getEndTime());
     }
 
     @Test
     void deveLancarExcecaoQuandoAtualizarEndTimeMenorQueStartTime() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.atualizarEndTime(availability.getId(), LocalTime.of(7, 0)));
+                servico.atualizarEndTime(SALAO, criada.getId(), LocalTime.of(7, 0)));
     }
-
-    // ==================== atualizarHorario ====================
 
     @Test
     void deveAtualizarHorarioCompleto() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        Availability atualizado = availabilityApplicationService.atualizarHorario(
-            availability.getId(), DiaSemana.QUARTA, LocalTime.of(14, 0), LocalTime.of(18, 0));
+        Availability atualizada = servico.atualizarHorario(SALAO, criada.getId(),
+                DiaSemana.SEXTA, LocalTime.of(14, 0), LocalTime.of(18, 0));
 
-        assertEquals(DiaSemana.QUARTA, atualizado.getDayOfWeek());
-        assertEquals(LocalTime.of(14, 0), atualizado.getStartTime());
-        assertEquals(LocalTime.of(18, 0), atualizado.getEndTime());
+        assertEquals(DiaSemana.SEXTA, atualizada.getDayOfWeek());
+        assertEquals(LocalTime.of(14, 0), atualizada.getStartTime());
+        assertEquals(LocalTime.of(18, 0), atualizada.getEndTime());
     }
 
     @Test
     void deveLancarExcecaoQuandoAtualizarHorarioDeInexistente() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.atualizarHorario(
-                AvailabilityId.generate(), DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0)));
+                servico.atualizarHorario(SALAO, AvailabilityId.generate(), DiaSemana.SEXTA,
+                        LocalTime.of(14, 0), LocalTime.of(18, 0)));
     }
 
-    // ==================== inativarDisponibilidade ====================
+    // ==================== ciclo de vida ====================
 
     @Test
     void deveInativarDisponibilidade() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        Availability inativado = availabilityApplicationService.inativarDisponibilidade(availability.getId());
+        Availability inativada = servico.inativarDisponibilidade(SALAO, criada.getId());
 
-        assertEquals(AvailabilityStatus.INATIVO, inativado.getStatus());
-        assertFalse(inativado.isAtivo());
+        assertFalse(inativada.isAtivo());
+        assertEquals(AvailabilityStatus.INATIVO, inativada.getStatus());
     }
 
     @Test
     void deveLancarExcecaoQuandoInativarInexistente() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.inativarDisponibilidade(AvailabilityId.generate()));
+                servico.inativarDisponibilidade(SALAO, AvailabilityId.generate()));
     }
-
-    // ==================== ativarDisponibilidade ====================
 
     @Test
     void deveAtivarDisponibilidade() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        availabilityApplicationService.inativarDisponibilidade(availability.getId());
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
+        servico.inativarDisponibilidade(SALAO, criada.getId());
 
-        Availability ativado = availabilityApplicationService.ativarDisponibilidade(availability.getId());
+        Availability ativada = servico.ativarDisponibilidade(SALAO, criada.getId());
 
-        assertEquals(AvailabilityStatus.ATIVO, ativado.getStatus());
-        assertTrue(ativado.isAtivo());
+        assertTrue(ativada.isAtivo());
     }
 
     @Test
     void deveLancarExcecaoQuandoAtivarInexistente() {
         assertThrows(IllegalArgumentException.class, () ->
-            availabilityApplicationService.ativarDisponibilidade(AvailabilityId.generate()));
+                servico.ativarDisponibilidade(SALAO, AvailabilityId.generate()));
     }
 
     // ==================== existe ====================
 
     @Test
     void deveRetornarTrueQuandoExiste() {
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
+        Availability criada = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
 
-        assertTrue(availabilityApplicationService.existe(availability.getId()));
+        assertTrue(servico.existe(SALAO, criada.getId()));
+        assertFalse(servico.existe(OUTRO_SALAO, criada.getId()));
     }
 
     @Test
     void deveRetornarFalseQuandoNaoExiste() {
-        assertFalse(availabilityApplicationService.existe(AvailabilityId.generate()));
+        assertFalse(servico.existe(SALAO, AvailabilityId.generate()));
     }
 
     @Test
     void deveRetornarFalseQuandoIdNulo() {
-        assertFalse(availabilityApplicationService.existe(null));
+        assertFalse(servico.existe(SALAO, null));
     }
 
     // ==================== Disponibilidade inativada não conflita ====================
 
     @Test
     void disponibilidadeInativadaNaoImpedeCriacaoDeNova() {
-        // Cria e inativa uma disponibilidade
-        Availability availability = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(8, 0), LocalTime.of(12, 0));
-        availabilityApplicationService.inativarDisponibilidade(availability.getId());
+        Availability primeira = criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(8, 0), LocalTime.of(12, 0));
+        servico.inativarDisponibilidade(SALAO, primeira.getId());
 
-        // Deve ser possível criar outra no mesmo horário (a anterior está inativa)
-        Availability nova = availabilityApplicationService.criarDisponibilidade(
-            profId1, DiaSemana.SEGUNDA, LocalTime.of(9, 0), LocalTime.of(11, 0));
-
-        assertNotNull(nova);
-        assertEquals(AvailabilityStatus.ATIVO, nova.getStatus());
+        assertNotNull(criar(SALAO, profId1, DiaSemana.SEGUNDA,
+                LocalTime.of(9, 0), LocalTime.of(13, 0)));
     }
 }
