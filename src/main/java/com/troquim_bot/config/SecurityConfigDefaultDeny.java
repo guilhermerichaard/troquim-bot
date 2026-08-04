@@ -61,6 +61,12 @@ public class SecurityConfigDefaultDeny {
                     .permitAll();
                 auth.requestMatchers(HttpMethod.GET, "/actuator/health")
                     .permitAll();
+                // Vitrine pública SOMENTE LEITURA (Etapa 5C): resolve o negócio pelo slug.
+                // Método GET explícito — POST/PUT/PATCH/DELETE na mesma rota continuam
+                // caindo no denyAll() final. Rota exata (não abre /api/v1/public/** por
+                // completo, para não liberar sem revisão uma rota pública futura).
+                auth.requestMatchers(HttpMethod.GET, "/api/v1/public/businesses/**")
+                    .permitAll();
                 if (devProfile) {
                     auth.requestMatchers("/dev/**").permitAll();
                 }
