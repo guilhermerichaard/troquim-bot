@@ -55,7 +55,7 @@ class StrictMvpFalhaTecnicaMensagemTest {
                 new ReservationApplicationService(reservations),
                 new AppointmentApplicationService(appointments, reservations),
                 new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),
-                new InMemoryBookingIdempotencyStore());
+                new InMemoryBookingIdempotencyStore(), new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(), com.troquim_bot.support.TestBookingSupport.consultarDisponibilidadeInerte());
 
         conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
         menu = new StrictMvpMenuService(

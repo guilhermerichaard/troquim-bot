@@ -47,7 +47,7 @@ class BookingConsistencyRegressionTest {
         customerProfileService = new CustomerProfileService(customerRepository, TestTenants.pilot());
         bookingApplicationService = new BookingApplicationService(TestTenants.pilot(),
                 reservationApplicationService, appointmentApplicationService, customerProfileService,
-                new InMemoryBookingIdempotencyStore());
+                new InMemoryBookingIdempotencyStore(), new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(), com.troquim_bot.support.TestBookingSupport.consultarDisponibilidadeInerte());
     }
 
     // ==================== FALHA #2: Appointment sem reservation_id e Reservation ATIVO ====================

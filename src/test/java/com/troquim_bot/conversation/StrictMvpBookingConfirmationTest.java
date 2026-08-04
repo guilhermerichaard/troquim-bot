@@ -54,7 +54,7 @@ class StrictMvpBookingConfirmationTest {
 
         BookingApplicationService booking = new BookingApplicationService(TestTenants.pilot(),
                 reservationApp, appointmentApp, customerProfileService,
-                new InMemoryBookingIdempotencyStore());
+                new InMemoryBookingIdempotencyStore(), new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(), com.troquim_bot.support.TestBookingSupport.consultarDisponibilidadeInerte());
 
         conversationStateService = new ConversationStateService(new InMemoryConversationStateRepository());
         menu = new StrictMvpMenuService(

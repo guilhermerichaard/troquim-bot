@@ -1,17 +1,32 @@
 package com.troquim_bot.application.booking;
 
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.availability.ConsultarDisponibilidade;
+import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.reservation.ReservationApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
+import com.troquim_bot.availability.AvailabilityId;
+import com.troquim_bot.availability.IntervaloDeHorario;
+import com.troquim_bot.availability.RelogioDoNegocio;
+import com.troquim_bot.business.BusinessCalendar;
+import com.troquim_bot.business.BusinessHours;
+import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.customer.CustomerProfileService;
+import com.troquim_bot.professional.Professional;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.repository.AppointmentRepository;
 import com.troquim_bot.repository.InMemoryAppointmentRepository;
+import com.troquim_bot.repository.InMemoryAvailabilityRepository;
+import com.troquim_bot.repository.InMemoryBusinessCalendarRepository;
 import com.troquim_bot.repository.InMemoryCustomerRepository;
+import com.troquim_bot.repository.InMemoryProfessionalRepository;
 import com.troquim_bot.repository.InMemoryReservationRepository;
+import com.troquim_bot.repository.InMemoryServiceRepository;
 import com.troquim_bot.repository.ReservationRepository;
+import com.troquim_bot.service.Service;
+import com.troquim_bot.service.ServiceDuration;
 import com.troquim_bot.support.InMemoryBookingIdempotencyStore;
 import com.troquim_bot.support.TestTenants;
 import org.junit.jupiter.api.DisplayName;
@@ -20,7 +35,10 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -269,11 +287,44 @@ class BookingFalhaTecnicaTest {
 
         Cenario(AppointmentRepository appointments) {
             this.appointments = appointments;
+
+            // Catálogo, calendário e disponibilidade REAIS para o par sintético
+            // (BookingIds.serviceId("unha"), PROFISSIONAL_PADRAO): o caminho tipado agora
+            // revalida o slot via ConsultarDisponibilidade dentro da seção crítica, então
+            // este cenário precisa que o par exista de fato — janela larga em todos os
+            // dias da semana para não depender de em qual dia o teste roda.
+            InMemoryServiceRepository servicos = new InMemoryServiceRepository();
+            InMemoryProfessionalRepository profissionais = new InMemoryProfessionalRepository();
+            com.troquim_bot.service.ServiceId servicoId = BookingIds.serviceId("unha");
+            servicos.salvar(Service.novoSemPreco(servicoId, TestTenants.PILOT, "Unha", null,
+                    ServiceDuration.ofMinutes(60)));
+            profissionais.salvar(new Professional(PROFISSIONAL, TestTenants.PILOT, "Profissional Padrão",
+                    Set.of(servicoId), Set.of(), "+5511900000000"));
+
+            InMemoryBusinessCalendarRepository calendarios = new InMemoryBusinessCalendarRepository();
+            InMemoryAvailabilityRepository disponibilidades = new InMemoryAvailabilityRepository();
+            IntervaloDeHorario janelaAmpla = IntervaloDeHorario.de(LocalTime.of(7, 0), LocalTime.of(21, 0));
+            Map<DiaSemana, List<IntervaloDeHorario>> semanaAberta = new EnumMap<>(DiaSemana.class);
+            for (DiaSemana dia : DiaSemana.values()) {
+                semanaAberta.put(dia, List.of(janelaAmpla));
+            }
+            calendarios.salvar(new BusinessCalendar(TestTenants.PILOT, BusinessHours.deSemana(semanaAberta)));
+            for (DiaSemana dia : DiaSemana.values()) {
+                disponibilidades.salvar(new com.troquim_bot.availability.Availability(
+                        AvailabilityId.generate(), TestTenants.PILOT, PROFISSIONAL, dia, janelaAmpla));
+            }
+
+            ConsultarDisponibilidade consultarDisponibilidade = new ConsultarDisponibilidade(
+                    new ConsultarCatalogo(servicos, profissionais), calendarios, disponibilidades,
+                    appointments, new RelogioDoNegocio());
+
             this.booking = new BookingApplicationService(TestTenants.pilot(),
                     new ReservationApplicationService(reservations),
                     new AppointmentApplicationService(appointments, reservations),
                     new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),
-                    idempotency);
+                    idempotency,
+                    new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(),
+                    consultarDisponibilidade);
         }
 
         BookingCommandKey chave(String base, String telefone, LocalDate data, LocalTime hora) {
