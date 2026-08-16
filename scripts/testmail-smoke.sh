@@ -13,7 +13,7 @@ response="$(curl -fsS --get "$ENDPOINT" \
   --data-urlencode "tag=${TAG}" \
   --data-urlencode "limit=10")"
 
-python3 - "$TAG" <<'PY' <<<"$response"
+printf '%s' "$response" | python3 -c '
 import json, sys
 
 tag = sys.argv[1]
@@ -28,7 +28,6 @@ print(json.dumps({
     "message": message,
     "connected": result == "success",
 }, ensure_ascii=False))
-
 if result != "success":
     raise SystemExit(1)
-PY
+' "$TAG"
