@@ -1,8 +1,12 @@
 package com.troquim_bot.controller;
 
+import com.troquim_bot.application.business.BusinessApplicationService;
+import com.troquim_bot.application.business.ConfigurarPerfilPublico;
+import com.troquim_bot.application.business.PublicarPerfilPublico;
 import com.troquim_bot.application.catalog.ProvisionarNegocio;
 import com.troquim_bot.availability.IntervaloDeHorario;
 import com.troquim_bot.business.BusinessHours;
+import com.troquim_bot.business.BusinessPublicProfile;
 import com.troquim_bot.business.DiaSemana;
 import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.controller.dto.ProvisionBusinessRequest;
@@ -25,9 +29,9 @@ import java.util.Map;
 /**
  * Porta administrativa fina para o onboarding do tenant corrente.
  *
- * A rota não cria Service/Professional/Availability diretamente. Ela apenas converte
- * o payload HTTP e delega a operação inteira ao caso de uso idempotente
- * {@link ProvisionarNegocio}, mantendo Application/Domain como fonte única.
+ * A rota não cria agregados diretamente. Ela traduz HTTP e delega para os casos de uso
+ * existentes: BusinessApplicationService, ProvisionarNegocio, ConfigurarPerfilPublico e
+ * PublicarPerfilPublico. A decisão continua no Domain/Application.
  */
 @RestController
 @RequestMapping("/api/v1/admin/onboarding")
@@ -35,11 +39,20 @@ public class AdminOnboardingController {
 
     private final ProvisionarNegocio provisionarNegocio;
     private final TenantProvider tenantProvider;
+    private final BusinessApplicationService businessApplicationService;
+    private final ConfigurarPerfilPublico configurarPerfilPublico;
+    private final PublicarPerfilPublico publicarPerfilPublico;
 
     public AdminOnboardingController(ProvisionarNegocio provisionarNegocio,
-                                     TenantProvider tenantProvider) {
+                                     TenantProvider tenantProvider,
+                                     BusinessApplicationService businessApplicationService,
+                                     ConfigurarPerfilPublico configurarPerfilPublico,
+                                     PublicarPerfilPublico publicarPerfilPublico) {
         this.provisionarNegocio = provisionarNegocio;
         this.tenantProvider = tenantProvider;
+        this.businessApplicationService = businessApplicationService;
+        this.configurarPerfilPublico = configurarPerfilPublico;
+        this.publicarPerfilPublico = publicarPerfilPublico;
     }
 
     @PostMapping("/provision")
@@ -50,6 +63,8 @@ public class AdminOnboardingController {
 
         try {
             var businessId = tenantProvider.currentBusinessId();
+
+            atualizarNegocio(businessId, request.business());
 
             List<ProvisionarNegocio.ServicoDesejado> services =
                     request.services() == null ? List.of() : request.services().stream()
@@ -67,11 +82,48 @@ public class AdminOnboardingController {
             ProvisionarNegocio.Resultado result = provisionarNegocio.provisionar(
                     businessId, services, professional, businessHours);
 
+            BusinessPublicProfile publicProfile = configurarPerfil(
+                    businessId, request.publicProfile());
+
             return ResponseEntity.ok(
-                    ProvisionBusinessResponse.from(businessId.getValue(), result));
+                    ProvisionBusinessResponse.from(businessId.getValue(), result, publicProfile));
         } catch (IllegalArgumentException | IllegalStateException invalid) {
             return ResponseEntity.badRequest().body(Map.of("error", invalid.getMessage()));
         }
+    }
+
+    private void atualizarNegocio(com.troquim_bot.business.BusinessId businessId,
+                                  ProvisionBusinessRequest.BusinessInput input) {
+        if (input == null) {
+            return;
+        }
+        if (input.name() != null && !input.name().isBlank()) {
+            businessApplicationService.atualizarNome(businessId, input.name().trim());
+        }
+        if (input.phone() != null && !input.phone().isBlank()) {
+            businessApplicationService.atualizarTelefone(businessId, input.phone().trim());
+        }
+        if (input.address() != null && !input.address().isBlank()) {
+            businessApplicationService.atualizarEndereco(businessId, input.address().trim());
+        }
+    }
+
+    private BusinessPublicProfile configurarPerfil(
+            com.troquim_bot.business.BusinessId businessId,
+            ProvisionBusinessRequest.PublicProfileInput input) {
+        if (input == null) {
+            return null;
+        }
+
+        BusinessPublicProfile profile = configurarPerfilPublico.configurar(
+                businessId,
+                input.slug(),
+                input.publicName(),
+                input.shortDescription(),
+                input.publicPhone(),
+                input.publicAddress());
+
+        return input.publish() ? publicarPerfilPublico.publicar(businessId) : profile;
     }
 
     private static ProvisionarNegocio.ProfissionalDesejado toProfessional(
