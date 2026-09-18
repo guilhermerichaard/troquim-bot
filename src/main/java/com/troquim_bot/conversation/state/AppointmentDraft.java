@@ -1,6 +1,9 @@
 package com.troquim_bot.conversation.state;
 
+import java.util.UUID;
+
 public class AppointmentDraft {
+    private String commandBase;
     private String servico;
     private String dia;
     private String horario;
@@ -8,7 +11,19 @@ public class AppointmentDraft {
     private boolean confirmado;
 
     public AppointmentDraft() {
+        this.commandBase = UUID.randomUUID().toString();
         this.confirmado = false;
+    }
+
+    /** Identidade estável desta tentativa de agendamento, usada na idempotência. */
+    public String getCommandBase() {
+        return commandBase;
+    }
+
+    public void setCommandBase(String commandBase) {
+        if (commandBase != null && !commandBase.isBlank()) {
+            this.commandBase = commandBase;
+        }
     }
 
     public String getServico() {
