@@ -1,0 +1,37 @@
+{
+  "business": {
+    "name": "Studio Bella — Demo Troquim"
+  },
+  "services": [
+    {"name": "Manicure", "durationMinutes": 60},
+    {"name": "Design de sobrancelhas", "durationMinutes": 30},
+    {"name": "Escova", "durationMinutes": 45}
+  ],
+  "professional": {
+    "name": "Malu",
+    "phone": "+5511999990000",
+    "services": ["Manicure", "Design de sobrancelhas", "Escova"],
+    "availability": [
+      {"day":"SEGUNDA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+      {"day":"TERCA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+      {"day":"QUARTA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+      {"day":"QUINTA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+      {"day":"SEXTA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+      {"day":"SABADO","periods":[{"start":"09:00","end":"14:00"}]}
+    ]
+  },
+  "businessHours": [
+    {"day":"SEGUNDA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+    {"day":"TERCA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+    {"day":"QUARTA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+    {"day":"QUINTA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+    {"day":"SEXTA","periods":[{"start":"09:00","end":"12:00"},{"start":"13:00","end":"18:00"}]},
+    {"day":"SABADO","periods":[{"start":"09:00","end":"14:00"}]}
+  ],
+  "publicProfile": {
+    "slug": "studio-bella-demo",
+    "publicName": "Studio Bella — Demo Troquim",
+    "shortDescription": "Demonstração de agendamento automatizado pelo WhatsApp com catálogo e disponibilidade reais do Troquim.",
+    "publish": true
+  }
+}
