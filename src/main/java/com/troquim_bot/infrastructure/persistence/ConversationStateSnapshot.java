@@ -84,6 +84,7 @@ public class ConversationStateSnapshot {
      * Snapshot serializável do AppointmentDraft.
      */
     public static class DraftSnapshot {
+        private String commandBase;
         private String servico;
         private String dia;
         private String horario;
@@ -92,8 +93,9 @@ public class ConversationStateSnapshot {
 
         public DraftSnapshot() {}
 
-        public DraftSnapshot(String servico, String dia, String horario,
+        public DraftSnapshot(String commandBase, String servico, String dia, String horario,
                              String nome, boolean confirmado) {
+            this.commandBase = commandBase;
             this.servico = servico;
             this.dia = dia;
             this.horario = horario;
@@ -103,6 +105,7 @@ public class ConversationStateSnapshot {
 
         public static DraftSnapshot fromDomain(AppointmentDraft draft) {
             return new DraftSnapshot(
+                    draft.getCommandBase(),
                     draft.getServico(),
                     draft.getDia(),
                     draft.getHorario(),
@@ -113,6 +116,7 @@ public class ConversationStateSnapshot {
 
         public AppointmentDraft toDomain() {
             AppointmentDraft draft = new AppointmentDraft();
+            draft.setCommandBase(commandBase);
             draft.setServico(servico);
             draft.setDia(dia);
             draft.setHorario(horario);
@@ -122,6 +126,9 @@ public class ConversationStateSnapshot {
         }
 
         // ==================== GETTERS E SETTERS (para Jackson) ====================
+
+        public String getCommandBase() { return commandBase; }
+        public void setCommandBase(String commandBase) { this.commandBase = commandBase; }
 
         public String getServico() { return servico; }
         public void setServico(String servico) { this.servico = servico; }
