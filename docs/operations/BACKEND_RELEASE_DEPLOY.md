@@ -1,128 +1,154 @@
 # Runbook — Deploy versionado do backend (troquim-bot)
 
-Deploy **reproduzível e versionado** do backend na Droplet, **sem acoplar o Compose a um
-release específico**. A imagem é selecionada por variável de ambiente; o build acontece
-separadamente; nenhum segredo, UUID ou regra de negócio vive no Compose.
+Deploy **reproduzível, versionado e com rollback controlado** do backend em produção.
 
-## Arquitetura do release
+## Produção atual
 
-Três arquivos Compose são combinados por merge (ordem importa, o último vence):
+A produção roda em **AWS EC2, região sa-east-1 (São Paulo)**. O nome
+`docker-compose.droplet.yml` é legado histórico: o arquivo continua em uso por
+compatibilidade, mas a infraestrutura canônica já não é DigitalOcean.
 
-| Arquivo | Responsabilidade |
-| --- | --- |
-| `/opt/troquim/docker-compose.yml` | Infra da Droplet (postgres, rede `troquim-internal`, etc.). Não versionado por este repo. |
-| `/opt/troquim/src/troquim-bot/docker-compose.droplet.yml` | Serviço `troquim-bot`: datasource, profile `azure`, porta, healthcheck, `depends_on`. **Fonte única** dessas configs. |
-| `${RELEASE_DIR}/docker-compose.release.yml` | **Só** seleciona a `image` versionada e injeta as variáveis do release. Sem SHA hardcoded, sem segredo. |
+Última validação operacional registrada em **2026-09-18**:
 
-O `docker-compose.release.yml` **não conhece o SHA**: quem escolhe a imagem é
-`TROQUIM_RELEASE_IMAGE`. Assim o mesmo arquivo serve a qualquer release e fica versionado
-no Git, eliminando o arquivo manual/CRLF que hoje só existe na Droplet.
+- backend: `troquim-bot:a154e10`;
+- Flyway: `V14`;
+- PostgreSQL e Redis permanecem serviços independentes;
+- imagem anterior `troquim-bot:dca43ea` preservada para rollback;
+- health público: `https://api.troquim.app/actuator/health`.
 
-## Fluxo de deploy
+## Princípios
 
-### 1. Preparação
+- GitHub é a fonte canônica do código e dos artefatos versionados de release.
+- Cada release usa imagem imutável `troquim-bot:<short-sha>`.
+- Flyway é a única autoridade do schema em PostgreSQL.
+- `TROQUIM_FLYWAY_BASELINE_ON_MIGRATE=false` em operação normal.
+- O deploy recria **somente** `troquim-bot`; PostgreSQL e Redis não são reiniciados.
+- Backup validado do banco é obrigatório antes de migration em produção.
+- Nunca imprimir segredos no terminal ou versioná-los.
 
-```
-RELEASE_SHA=<short-sha>
-RELEASE_DIR=/opt/troquim/releases/${RELEASE_SHA}
-TROQUIM_RELEASE_IMAGE=troquim-bot:${RELEASE_SHA}
-```
+## Estrutura de release
 
-`${RELEASE_DIR}` contém o clone/checkout daquele commit (com `Dockerfile` e o
-`docker-compose.release.yml` versionado deste repo).
-
-### 2. Build (separado do Compose)
+Cada release fica em:
 
 ```
+/opt/troquim/releases/<short-sha>
+```
+
+Esse diretório contém o checkout exato daquele commit e seu
+`docker-compose.release.yml`.
+
+A imagem é construída separadamente:
+
+```bash
 docker build \
-  -t "${TROQUIM_RELEASE_IMAGE}" \
-  "${RELEASE_DIR}"
+  -t "troquim-bot:<short-sha>" \
+  "/opt/troquim/releases/<short-sha>"
 ```
 
-O build produz a imagem `troquim-bot:${RELEASE_SHA}`. **O Compose não faz build** no
-deploy — ele apenas aponta para esta imagem já construída.
+O Compose não deve fazer build durante o deploy.
 
-### 3. Arquivos do Compose
+## Compose: preservar o estado real da produção
 
-Usar **exatamente** os três arquivos:
+A produção pode ter overlays operacionais adicionais, por exemplo os arquivos de
+WhatsApp Flow. Portanto **não reconstrua manualmente a lista de `-f` a partir deste
+documento**.
+
+O estado corrente do projeto Compose é a fonte operacional. O script
+`scripts/deploy-prod-release.sh` lê dos labels do container em execução:
+
+- `com.docker.compose.project`;
+- `com.docker.compose.project.working_dir`;
+- `com.docker.compose.project.config_files`.
+
+Ele preserva a ordem e todos os overlays correntes e substitui **apenas** o
+`docker-compose.release.yml` pelo arquivo versionado do novo release.
+
+Isso evita perder configuração runtime de Flow/WhatsApp ao seguir um runbook antigo.
+
+## Preflight obrigatório para migrations
+
+Antes de aplicar migrations novas em produção:
+
+1. criar um dump `pg_dump -Fc`;
+2. validar o dump com `pg_restore -l`;
+3. restaurar o dump em um banco temporário;
+4. subir a nova imagem apontando somente para essa cópia;
+5. exigir `/actuator/health = UP`;
+6. confirmar que todas as migrations esperadas foram aplicadas com `success=true`;
+7. destruir container e banco temporários.
+
+Nenhuma migration nova deve ser testada pela primeira vez no banco de produção.
+
+## Deploy canônico
+
+O script versionado é:
 
 ```
-/opt/troquim/docker-compose.yml
-/opt/troquim/src/troquim-bot/docker-compose.droplet.yml
-${RELEASE_DIR}/docker-compose.release.yml
+scripts/deploy-prod-release.sh
 ```
 
-### 4. Validação (antes de aplicar)
+Uso:
 
-```
-export TROQUIM_RELEASE_IMAGE
-
-docker compose \
-  -f /opt/troquim/docker-compose.yml \
-  -f /opt/troquim/src/troquim-bot/docker-compose.droplet.yml \
-  -f "${RELEASE_DIR}/docker-compose.release.yml" \
-  config --quiet
+```bash
+sudo -E ./scripts/deploy-prod-release.sh \
+  <release-tag> \
+  <flyway-atual-esperado> \
+  <flyway-final-esperado>
 ```
 
-`config --quiet` valida o merge e a interpolação **sem** aplicar nada. Saída vazia +
-código 0 = OK. As demais variáveis obrigatórias (`TROQUIM_PILOT_BUSINESS_ID`,
-`TROQUIM_ADMIN_API_KEY`) vêm do `.env`/ambiente da Droplet — nunca do Git.
+Exemplo do release validado em 2026-09-18:
 
-### 5. Deploy (recria SOMENTE o backend)
-
-```
-docker compose \
-  -f /opt/troquim/docker-compose.yml \
-  -f /opt/troquim/src/troquim-bot/docker-compose.droplet.yml \
-  -f "${RELEASE_DIR}/docker-compose.release.yml" \
-  up -d --no-deps --force-recreate troquim-bot
+```bash
+sudo -E ./scripts/deploy-prod-release.sh a154e10 10 14
 ```
 
-`--no-deps --force-recreate troquim-bot` recria **apenas** o `troquim-bot`. **postgres,
-redis e landing NÃO são recriados.**
+O script:
 
-## Regras operacionais (invioláveis)
-
-- **`TROQUIM_RELEASE_IMAGE` deve ser exportada** (`export`) antes de `docker compose
-  config`/`up`. Sem ela, o `:?` falha o comando com mensagem clara (fail-fast) — nunca
-  sobe uma imagem indefinida.
-- **`TROQUIM_FLYWAY_BASELINE_ON_MIGRATE` permanece `false`** em regime permanente (default
-  do arquivo). Só é `true` na primeira adoção do Flyway em banco legado — ver
-  [FLYWAY_FIRST_PRODUCTION_MIGRATION.md](FLYWAY_FIRST_PRODUCTION_MIGRATION.md).
-- **Nunca criar `docker-compose.release.yml` manualmente na Droplet.** Use o arquivo
-  versionado do `${RELEASE_DIR}` (checkout do commit). O arquivo manual foi a causa do
-  deploy quebrado (estado não reproduzível + CRLF).
-- **Não transmitir YAML por heredoc remoto via PowerShell/SSH.** O PowerShell escapa
-  `${VAR}` como `\${VAR}` e grava CRLF, quebrando a interpolação. Faça `git checkout`/
-  `scp` do arquivo já versionado (LF garantido pelo `.gitattributes`).
-- **Não alterar tags de releases anteriores.** Cada release usa sua própria
-  `troquim-bot:<sha>`; imagens antigas ficam intactas para rollback.
-- **O deploy recria somente `troquim-bot`** (`--no-deps`). postgres/redis/landing seguem
-  no ar.
+1. valida imagem atual, health e labels do Compose;
+2. confirma a versão Flyway atual;
+3. cria e valida backup fresco;
+4. preserva os Compose overlays atualmente usados;
+5. valida `docker compose config --quiet`;
+6. recria apenas `troquim-bot` com `--no-deps --force-recreate --no-build`;
+7. espera o health do container;
+8. valida health local, Flyway e health público;
+9. mantém a imagem anterior disponível.
 
 ## Rollback
 
-Reexecute o passo 5 apontando `TROQUIM_RELEASE_IMAGE=troquim-bot:<sha-anterior>` (a
-imagem anterior não foi alterada). Nenhuma migração é revertida automaticamente pelo
-Compose — ver o runbook do Flyway para o schema.
+A imagem anterior deve permanecer local e imutável.
 
-## Validação local (valores fictícios, sem segredos reais)
+Rollback de aplicação pode reapontar o release para a imagem anterior, mas **Flyway não
+faz down migration automaticamente**. Após migrations forward, não assuma que o binário
+antigo é compatível com o schema novo.
 
-Com os arquivos compatíveis deste repositório (`docker-compose.yml` faz o papel da infra
-que define `postgres`):
+Se houver incompatibilidade de schema, use o backup pré-deploy e execute uma restauração
+controlada conforme o runbook de banco. Não restaure automaticamente em caso de simples
+falha de health: primeiro preserve logs e identifique a causa.
+
+## Segredos
+
+Segredos continuam fora do Git. O deploy deve reutilizar o ambiente operacional existente
+sem imprimir valores de:
+
+- senha PostgreSQL;
+- `TROQUIM_ADMIN_API_KEY`;
+- tokens Meta/WhatsApp;
+- `WHATSAPP_FLOW_PRIVATE_KEY`;
+- chaves de criptografia de credenciais de canal.
+
+Nunca transmitir arquivos YAML de produção por heredoc remoto a partir do PowerShell.
+Prefira checkout Git/versionado.
+
+## Critério de sucesso
+
+Um release só é considerado concluído quando, simultaneamente:
 
 ```
-TROQUIM_RELEASE_IMAGE=troquim-bot:test \
-TROQUIM_PILOT_BUSINESS_ID=11111111-1111-4111-8111-111111111111 \
-TROQUIM_ADMIN_API_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-TROQUIM_FLYWAY_BASELINE_ON_MIGRATE=false \
-docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.droplet.yml \
-  -f docker-compose.release.yml \
-  config
+container troquim-bot = healthy
+imagem em execução = release esperado
+Flyway = versão final esperada
+zero migrations com success=false
+https://api.troquim.app/actuator/health = UP
+postgres/redis = continuam healthy
 ```
-
-Confirme na saída: `image: troquim-bot:test`, `TROQUIM_FLYWAY_BASELINE_ON_MIGRATE: "false"`,
-e nenhum literal `\${VAR}`. Os valores acima são **fictícios** — nunca use segredos reais
-em validação nem os comite.
