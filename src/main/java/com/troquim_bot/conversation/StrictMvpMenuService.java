@@ -8,6 +8,7 @@ import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -41,12 +42,24 @@ public class StrictMvpMenuService {
     private final ConversationNavigationPolicy navigationPolicy;
     private final TimeInputParser timeInputParser;
     private final boolean strictMvpEnabled;
+    private final ConversationBookingGateway conversationBookingGateway;
 
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
                                 BookingApplicationService bookingApplicationService,
                                 ObjectProvider<AberturaDeAgenda> aberturaDeAgenda,
                                 @Value("${conversation.mode:STRICT_MVP}") String conversationMode) {
+        this(conversationStateService, availabilityApplicationService, bookingApplicationService,
+                aberturaDeAgenda, conversationMode, null);
+    }
+
+    @Autowired
+    public StrictMvpMenuService(ConversationStateService conversationStateService,
+                                AvailabilityApplicationService availabilityApplicationService,
+                                BookingApplicationService bookingApplicationService,
+                                ObjectProvider<AberturaDeAgenda> aberturaDeAgenda,
+                                @Value("${conversation.mode:STRICT_MVP}") String conversationMode,
+                                ConversationBookingGateway conversationBookingGateway) {
         this.conversationStateService = conversationStateService;
         this.availabilityApplicationService = availabilityApplicationService;
         this.bookingApplicationService = bookingApplicationService;
@@ -54,6 +67,7 @@ public class StrictMvpMenuService {
         this.navigationPolicy = new ConversationNavigationPolicy();
         this.timeInputParser = new TimeInputParser();
         this.strictMvpEnabled = "STRICT_MVP".equalsIgnoreCase(conversationMode);
+        this.conversationBookingGateway = conversationBookingGateway;
     }
 
     public boolean isStrictMvpEnabled() {
@@ -148,16 +162,57 @@ public class StrictMvpMenuService {
     }
 
     private String menuServicos() {
-        return "Qual servico voce gostaria de agendar?\n\n" +
-               "1) Unha\n" +
-               "2) Cabelo\n" +
-               "3) Sobrancelha\n" +
-               "4) Cilios\n" +
-               "5) Pe e mao\n\n" +
-               "Digite o numero ou o nome do servico:";
+        if (conversationBookingGateway == null) {
+            return "Qual servico voce gostaria de agendar?\n\n" +
+                   "1) Unha\n" +
+                   "2) Cabelo\n" +
+                   "3) Sobrancelha\n" +
+                   "4) Cilios\n" +
+                   "5) Pe e mao\n\n" +
+                   "Digite o numero ou o nome do servico:";
+        }
+
+        List<ConversationBookingGateway.Servico> servicos = conversationBookingGateway.listarServicos();
+        if (servicos.isEmpty()) {
+            return "Nenhum servico disponivel no momento.";
+        }
+
+        StringBuilder sb = new StringBuilder("Qual servico voce gostaria de agendar?\n\n");
+        for (int i = 0; i < servicos.size(); i++) {
+            sb.append(i + 1).append(") ").append(servicos.get(i).nome()).append("\n");
+        }
+        sb.append("\nDigite o numero ou o nome do servico:");
+        return sb.toString();
     }
 
     private String processarEscolhaServico(String numero, String texto, String mensagemOriginal) {
+        if (conversationBookingGateway != null) {
+            List<ConversationBookingGateway.Servico> servicos = conversationBookingGateway.listarServicos();
+            if (servicos.isEmpty()) {
+                return "Nenhum servico disponivel no momento.";
+            }
+
+            String servico = null;
+            if (texto.matches("^\\d+$")) {
+                try {
+                    int indice = Integer.parseInt(texto) - 1;
+                    if (indice >= 0 && indice < servicos.size()) {
+                        servico = servicos.get(indice).nome();
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            if (servico == null) {
+                servico = conversationBookingGateway.nomeCanonicoDoServico(mensagemOriginal).orElse(null);
+            }
+            if (servico == null) {
+                return "Esse servico nao esta disponivel.\n\n" + menuServicos();
+            }
+
+            conversationStateService.atualizarServico(numero, servico);
+            return menuDias();
+        }
+
         String servico = null;
         if (texto.matches("^[1-5]$")) {
             servico = switch (texto) {
@@ -242,6 +297,45 @@ public class StrictMvpMenuService {
     private String menuHorarios(String numero) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String dia = state.getDraftAtual().getDia();
+
+        if (conversationBookingGateway != null) {
+            String servico = state.getDraftAtual().getServico();
+            ConversationBookingGateway.ConsultaHorarios consulta =
+                    conversationBookingGateway.consultarHorarios(servico, dia);
+
+            if (consulta.status() == ConversationBookingGateway.Status.CATALOGO_NAO_CONFIGURADO) {
+                return "Nenhum servico disponivel no momento.";
+            }
+            if (consulta.status() == ConversationBookingGateway.Status.SERVICO_INDISPONIVEL) {
+                state.getDraftAtual().setServico(null);
+                conversationStateService.atualizarStep(state);
+                conversationStateService.persistir(state);
+                return "Esse servico nao esta disponivel.\n\n" + menuServicos();
+            }
+            if (consulta.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
+                return "Esse servico tem mais de um profissional disponivel. Abra a agenda visual para escolher o profissional.";
+            }
+            if (!consulta.ok() || consulta.horarios().isEmpty()) {
+                return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n" +
+                       "1) Segunda\n" +
+                       "2) Terca\n" +
+                       "3) Quarta\n" +
+                       "4) Quinta\n" +
+                       "5) Sexta\n" +
+                       "6) Sabado";
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("Horarios disponiveis para ").append(dia).append(":\n\n");
+            for (int i = 0; i < consulta.horarios().size(); i++) {
+                sb.append(i + 1).append(") ")
+                        .append(ConversationBookingGateway.formatarHorario(consulta.horarios().get(i)))
+                        .append("\n");
+            }
+            sb.append("\nDigite o numero ou o horario (ex: 13h):");
+            return sb.toString();
+        }
+
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
         if (horarios.isEmpty()) {
             return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n" +
@@ -264,6 +358,39 @@ public class StrictMvpMenuService {
     private String processarEscolhaHorario(String numero, String texto, String mensagemOriginal) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String dia = state.getDraftAtual().getDia();
+
+        if (conversationBookingGateway != null) {
+            String servico = state.getDraftAtual().getServico();
+            ConversationBookingGateway.ConsultaHorarios consulta =
+                    conversationBookingGateway.consultarHorarios(servico, dia);
+            if (!consulta.ok() || consulta.horarios().isEmpty()) {
+                return menuHorarios(numero);
+            }
+
+            java.time.LocalTime escolhido = null;
+            if (texto.matches("^\\d+$")) {
+                try {
+                    int indice = Integer.parseInt(texto) - 1;
+                    if (indice >= 0 && indice < consulta.horarios().size()) {
+                        escolhido = consulta.horarios().get(indice);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            if (escolhido == null) {
+                escolhido = timeInputParser.parse(mensagemOriginal).orElse(null);
+            }
+
+            if (escolhido == null || !consulta.horarios().contains(escolhido)) {
+                return "Esse horario nao esta disponivel. Escolha uma das opcoes acima.\n\n"
+                        + menuHorarios(numero);
+            }
+
+            conversationStateService.atualizarHorario(
+                    numero, ConversationBookingGateway.formatarHorario(escolhido));
+            return menuNome(numero);
+        }
+
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
         if (horarios.isEmpty()) {
             return menuDias();
@@ -337,30 +464,62 @@ public class StrictMvpMenuService {
                 return menuPrincipal();
             }
             if (draft.isConfirmado()) {
-                return "Seu agendamento ja esta registrado. Em breve o salao confirmara a disponibilidade.\n\n" +
+                return "Seu agendamento ja esta registrado.\n\n" +
                        "Deseja fazer algo mais?\n\n" +
                        "1) Agendar\n" +
                        "2) Meus agendamentos\n" +
                        "3) Cancelar";
             }
+
+            if (conversationBookingGateway != null) {
+                // Persiste a identidade da tentativa antes da escrita. Snapshots antigos que
+                // nao tinham commandBase ganham uma aqui e retries passam a reutiliza-la.
+                conversationStateService.persistir(state);
+
+                ConversationBookingGateway.Confirmacao confirmacao =
+                        conversationBookingGateway.confirmar(
+                                draft.getCommandBase(),
+                                numero,
+                                state.getNome(),
+                                draft.getServico(),
+                                draft.getDia(),
+                                draft.getHorario());
+
+                if (confirmacao.status() == ConversationBookingGateway.Status.FALHA_TECNICA) {
+                    return MENSAGEM_FALHA_TECNICA;
+                }
+                if (confirmacao.status() == ConversationBookingGateway.Status.HORARIO_INDISPONIVEL) {
+                    draft.setHorario(null);
+                    state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+                    conversationStateService.persistir(state);
+                    return "Esse horario nao esta disponivel. Escolha uma das opcoes acima.\n\n"
+                            + menuHorarios(numero);
+                }
+                if (!confirmacao.confirmada()) {
+                    return "Nao consegui confirmar essa escolha. Abra a agenda novamente e selecione uma opcao disponivel.";
+                }
+
+                draft.setConfirmado(true);
+                state.setStep(ConversationStep.FINALIZADO);
+                conversationStateService.persistir(state);
+                return "Seu agendamento foi registrado com sucesso!\n\n" +
+                       "Deseja fazer algo mais?\n\n" +
+                       "1) Agendar\n" +
+                       "2) Meus agendamentos\n" +
+                       "3) Cancelar";
+            }
+
             BookingResult resultado;
             try {
                 resultado = bookingApplicationService.confirmar(
                         numero, state.getNome(), draft.getServico(), draft.getDia(), draft.getHorario());
             } catch (RuntimeException falhaTecnica) {
-                // A confirmacao estourou e o rollback foi acionado. Ainda assim nao
-                // afirmamos ao cliente o que ficou gravado: quem falhou foi o proprio
-                // mecanismo de persistencia. O draft e' preservado para que repetir seja
-                // um retry do MESMO agendamento. A protecao contra duplicacao vem do
-                // recibo de mensagem, nao de uma varredura da agenda do cliente.
                 return MENSAGEM_FALHA_TECNICA;
             }
             if (resultado.isFalhaTecnica()) {
                 return MENSAGEM_FALHA_TECNICA;
             }
             if (!resultado.isConfirmado()) {
-                // Conflito ou dado invalido: aqui ha evidencia de agenda, entao pedir
-                // outro horario e' a orientacao correta.
                 return resultado.mensagem() + "\n\n" +
                        "Digite 2 para cancelar e escolher outro horario.";
             }
