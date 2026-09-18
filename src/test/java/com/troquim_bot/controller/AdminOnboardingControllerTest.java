@@ -6,6 +6,7 @@ import com.troquim_bot.repository.BusinessRepository;
 import com.troquim_bot.repository.ProfessionalRepository;
 import com.troquim_bot.repository.ServiceRepository;
 import com.troquim_bot.repository.AvailabilityRepository;
+import com.troquim_bot.repository.BusinessPublicProfileRepository;
 import com.troquim_bot.support.TestTenants;
 import com.troquim_bot.business.DiaSemana;
 
@@ -39,6 +40,7 @@ class AdminOnboardingControllerTest {
     @Autowired ProfessionalRepository professionalRepository;
     @Autowired AvailabilityRepository availabilityRepository;
     @Autowired BusinessCalendarRepository businessCalendarRepository;
+    @Autowired BusinessPublicProfileRepository businessPublicProfileRepository;
 
     @BeforeEach
     void garantirNegocio() {
@@ -97,11 +99,19 @@ class AdminOnboardingControllerTest {
                 .size());
 
         assertTrue(professional.isAtivo());
+
+        var profile = businessPublicProfileRepository.buscarPorBusinessId(TestTenants.PILOT)
+                .orElseThrow();
+        assertEquals("studio-bella-demo-test", profile.getSlug().getValue());
+        assertTrue(profile.publicado());
     }
 
     private static String payload() {
         return """
                 {
+                  "business": {
+                    "name":"Studio Bella Demo Test"
+                  },
                   "services": [
                     {"name":"Unhas Onboarding","durationMinutes":60},
                     {"name":"Cabelo Onboarding","durationMinutes":90}
@@ -122,7 +132,13 @@ class AdminOnboardingControllerTest {
                       {"start":"09:00","end":"12:00"},
                       {"start":"13:00","end":"18:00"}
                     ]}
-                  ]
+                  ],
+                  "publicProfile": {
+                    "slug":"studio-bella-demo-test",
+                    "publicName":"Studio Bella Demo Test",
+                    "shortDescription":"Perfil de teste do onboarding",
+                    "publish":true
+                  }
                 }
                 """;
     }
