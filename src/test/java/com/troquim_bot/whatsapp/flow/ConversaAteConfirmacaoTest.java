@@ -2,6 +2,7 @@ package com.troquim_bot.whatsapp.flow;
 
 import com.troquim_bot.support.CatalogoDeTeste;
 import com.troquim_bot.support.TestTenants;
+import com.troquim_bot.support.TestDias;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
@@ -214,6 +215,51 @@ class ConversaAteConfirmacaoTest {
 
         assertTrue(resposta.toLowerCase().contains("dia"),
                 "O caminho textual deveria seguir para a escolha do dia: " + resposta);
+    }
+
+    @Test
+    @DisplayName("21. conversa textual recusa serviço que não existe no catálogo")
+    void conversaTextualNaoInventaServicoForaDoCatalogo() {
+        ConversationState estado = conversationStateService.buscarPorNumero(TELEFONE);
+        menu.processarMenu(TELEFONE, "1", estado);
+
+        ConversationState aguardandoServico = conversationStateService.buscarPorNumero(TELEFONE);
+        String resposta = menu.processarMenu(TELEFONE, "sobrancelha", aguardandoServico);
+
+        assertTrue(resposta.toLowerCase().contains("nao esta disponivel")
+                        || resposta.toLowerCase().contains("não está disponível"),
+                "Serviço fora do catálogo não pode avançar no fluxo: " + resposta);
+        assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
+                conversationStateService.buscarPorNumero(TELEFONE).getStep());
+        assertEquals(0, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
+    }
+
+    @Test
+    @DisplayName("22. horário digitado fora das opções é rejeitado e não persiste")
+    void horarioForaDaOfertaNaoAvancaNemCriaAppointment() {
+        ConversationState estado = conversationStateService.buscarPorNumero(TELEFONE);
+        menu.processarMenu(TELEFONE, "1", estado);
+
+        String respostaServico = menu.processarMenu(
+                TELEFONE, "unha", conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(respostaServico.toLowerCase().contains("dia"), respostaServico);
+
+        String dia = TestDias.futuroComAgenda();
+        String respostaDia = menu.processarMenu(
+                TELEFONE, dia, conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(respostaDia.toLowerCase().contains("horarios"), respostaDia);
+        assertFalse(respostaDia.contains("18h"),
+                "18h é o fechamento e não deve aparecer como início de slot: " + respostaDia);
+
+        String respostaHorario = menu.processarMenu(
+                TELEFONE, "18h", conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(respostaHorario.toLowerCase().contains("nao esta disponivel")
+                        || respostaHorario.toLowerCase().contains("não está disponível"),
+                "Horário não ofertado precisa ser recusado: " + respostaHorario);
+        assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_HORARIO,
+                conversationStateService.buscarPorNumero(TELEFONE).getStep());
+        assertEquals(0, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
     }
 
     // ==================== helpers ====================
