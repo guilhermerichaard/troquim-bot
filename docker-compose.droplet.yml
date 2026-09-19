@@ -33,6 +33,12 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/troquim
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # Sentry — somente o DSN entra no app. O SENTRY_AUTH_TOKEN pertence ao
+      # runtime do Graph e nunca deve ser passado ao troquim-bot.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.0}
+      SENTRY_SEND_DEFAULT_PII: ${SENTRY_SEND_DEFAULT_PII:-false}
       # WhatsApp Cloud API (Meta) — allowlist explícita encaminhada do /opt/troquim/.env.
       # Desligada por padrão; quando enabled=false a app inicia sem credenciais e o
       # fail-fast do WhatsAppCloudConfigValidator (profile azure + enabled=true) fica inerte.
