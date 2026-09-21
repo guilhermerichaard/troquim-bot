@@ -1,11 +1,14 @@
 package com.troquim_bot.availability;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 
 /**
  * Única porta de entrada do "agora" nas regras de agenda.
@@ -16,11 +19,10 @@ import java.time.LocalTime;
  * depois do meio-dia. Com o relógio injetado, o teste ESCOLHE o instante e a regra fica
  * determinística.
  *
- * ZONA: no MVP preserva-se a zona do ambiente ({@link Clock#systemDefaultZone()}), a mesma
- * que o sistema já usava. Não se assume UTC — assumir UTC mudaria silenciosamente a fronteira
- * do dia para um salão brasileiro. Fuso por negócio está fora desta etapa, mas isolar a
- * resolução aqui é justamente o que permitirá introduzi-lo depois sem caçar {@code now()}
- * espalhado pelo código.
+ * ZONA: em runtime Spring a zona é explícita em {@code troquim.business.time-zone};
+ * o piloto usa America/Sao_Paulo. O construtor sem argumentos existe apenas para
+ * compatibilidade de objetos criados manualmente fora do container. Fuso persistido por
+ * Business continua sendo a evolução arquitetural planejada.
  */
 @Component
 public class RelogioDoNegocio {
@@ -29,6 +31,11 @@ public class RelogioDoNegocio {
 
     public RelogioDoNegocio() {
         this(Clock.systemDefaultZone());
+    }
+
+    @Autowired
+    public RelogioDoNegocio(@Value("${troquim.business.time-zone}") String zoneId) {
+        this(Clock.system(ZoneId.of(zoneId)));
     }
 
     public RelogioDoNegocio(Clock clock) {
