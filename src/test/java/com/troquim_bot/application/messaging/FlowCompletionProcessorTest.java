@@ -51,7 +51,7 @@ class FlowCompletionProcessorTest {
 
         ProcessOutcome first = processor.processOnce(event);
         assertTrue(first.processed());
-        assertTrue(first.responseText().contains("Agendamento confirmado"));
+        assertTrue(first.responseText().contains("Recebi seu agendamento"));
         assertTrue(first.responseText().contains("Manicure"));
         assertTrue(first.responseText().contains("23/09/2026"));
         assertTrue(first.responseText().contains("10h"));
