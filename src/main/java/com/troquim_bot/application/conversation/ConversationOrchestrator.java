@@ -10,10 +10,15 @@ import com.troquim_bot.application.conversation.engine.IntentDetectionStep;
 import com.troquim_bot.application.conversation.engine.LegacyConversationProcessorStep;
 import com.troquim_bot.application.conversation.engine.ResponseBuilder;
 import com.troquim_bot.application.intent.IntentEngine;
+import com.troquim_bot.application.messaging.FlowCompletionProcessor;
+import com.troquim_bot.application.messaging.InboundFlowCompletion;
+import com.troquim_bot.application.messaging.ProcessOutcome;
 import com.troquim_bot.conversation.StrictMvpMenuService;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -32,14 +37,17 @@ public class ConversationOrchestrator {
     private final WhatsAppAdapter whatsAppAdapter;
     private final StrictMvpMenuService strictMvpMenuService;
     private final ConversationStateService conversationStateService;
+    private final FlowCompletionProcessor flowCompletionProcessor;
     private final Set<String> mensagensProcessadas = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<String, ReentrantLock> locksPorNumero = new ConcurrentHashMap<>();
 
+    @Autowired
     public ConversationOrchestrator(ConversationMessageProcessor conversationMessageProcessor,
                                     WhatsAppAdapter whatsAppAdapter,
                                     IntentEngine intentEngine,
                                     StrictMvpMenuService strictMvpMenuService,
-                                    ConversationStateService conversationStateService) {
+                                    ConversationStateService conversationStateService,
+                                    ObjectProvider<FlowCompletionProcessor> flowCompletionProcessor) {
         if (conversationMessageProcessor == null) {
             throw new IllegalArgumentException("ConversationMessageProcessor e obrigatorio");
         }
@@ -66,6 +74,27 @@ public class ConversationOrchestrator {
         this.whatsAppAdapter = whatsAppAdapter;
         this.strictMvpMenuService = strictMvpMenuService;
         this.conversationStateService = conversationStateService;
+        this.flowCompletionProcessor = flowCompletionProcessor.getIfAvailable();
+    }
+
+    /** Compatibilidade para testes/unitarios sem Flow habilitado. */
+    public ConversationOrchestrator(ConversationMessageProcessor conversationMessageProcessor,
+                                    WhatsAppAdapter whatsAppAdapter,
+                                    IntentEngine intentEngine,
+                                    StrictMvpMenuService strictMvpMenuService,
+                                    ConversationStateService conversationStateService) {
+        this.conversationPipeline = new ConversationPipeline(List.of(
+            new IntentDetectionStep(intentEngine),
+            new EntityExtractionStep(new DefaultEntityExtractor()),
+            new ContextStep(),
+            new FlowDispatcherStep(),
+            new GreetingResponseStep(new ResponseBuilder()),
+            new LegacyConversationProcessorStep(conversationMessageProcessor)
+        ));
+        this.whatsAppAdapter = whatsAppAdapter;
+        this.strictMvpMenuService = strictMvpMenuService;
+        this.conversationStateService = conversationStateService;
+        this.flowCompletionProcessor = null;
     }
 
     public String processarMensagem(String numero, String mensagem) {
@@ -82,9 +111,46 @@ public class ConversationOrchestrator {
         return conversationPipeline.processar(numero, mensagem);
     }
 
+    private void processarConclusaoFlow(InboundFlowCompletion completion) {
+        if (flowCompletionProcessor == null) {
+            logger.warn("Conclusao de Flow recebida, mas capacidade de Flow nao esta disponivel.");
+            return;
+        }
+
+        String numero = completion.fromPhone();
+        ReentrantLock lock = locksPorNumero.computeIfAbsent(numero, k -> new ReentrantLock());
+        lock.lock();
+        try {
+            ProcessOutcome outcome = flowCompletionProcessor.processOnce(completion);
+            if (!outcome.processed() || outcome.responseText() == null
+                    || outcome.responseText().isBlank()) {
+                return;
+            }
+
+            whatsAppAdapter.enviarMensagem(numero, outcome.responseText());
+            flowCompletionProcessor.markSent(completion);
+            logger.info("Confirmacao pos-Flow enviada (provider={}, id={}).",
+                    completion.provider(), completion.externalMessageId());
+        } catch (RuntimeException falha) {
+            // Receipt permanece PENDING; uma reentrega pode tentar apenas o outbound.
+            logger.error("Falha ao concluir Flow (provider={}, id={}, erro={}).",
+                    completion.provider(), completion.externalMessageId(),
+                    falha.getClass().getSimpleName());
+            throw falha;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     public void receberWebhookWhatsApp(String payload) throws Exception {
         logger.info("=== Webhook WhatsApp recebido ===");
         logger.info("Timestamp: {}", LocalDateTime.now());
+
+        Optional<InboundFlowCompletion> flowCompletion = whatsAppAdapter.receberConclusaoFlow(payload);
+        if (flowCompletion.isPresent()) {
+            processarConclusaoFlow(flowCompletion.get());
+            return;
+        }
 
         Optional<WhatsAppAdapter.IncomingMessage> incomingMessage = whatsAppAdapter.receberMensagem(payload);
         if (incomingMessage.isEmpty()) {
