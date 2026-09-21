@@ -88,7 +88,7 @@ class StrictMvpBookingConfirmationTest {
 
         String confirmacao = enviar(numero, "1");
 
-        assertTrue(confirmacao.contains("registrado com sucesso"),
+        assertTrue(confirmacao.contains("confirmado com sucesso"),
                 "Esperava mensagem de sucesso, mas veio: " + confirmacao);
 
         // Reservation criada e cancelada (o Appointment protege o slot, não a Reservation)

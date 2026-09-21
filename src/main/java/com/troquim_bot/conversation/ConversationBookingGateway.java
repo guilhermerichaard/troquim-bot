@@ -1,13 +1,17 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.booking.BookingCommandKey;
 import com.troquim_bot.application.booking.BookingResult;
 import com.troquim_bot.application.catalog.ConfirmarAgendamentoDoCatalogo;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.appointment.Appointment;
+import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.RelogioDoNegocio;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.TenantProvider;
+import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.service.ServiceId;
 
@@ -49,6 +53,14 @@ public class ConversationBookingGateway {
     public record Servico(String nome) {
     }
 
+    /**
+     * Projecao de leitura para a conversa. O Appointment persistido continua sendo a
+     * autoridade; este record so carrega os campos necessarios para apresentacao.
+     */
+    public record Agendamento(String servico, LocalDate data, LocalTime horario,
+                              boolean confirmado) {
+    }
+
     public record ConsultaHorarios(Status status, String servico, String dia,
                                    List<LocalTime> horarios) {
 
@@ -81,6 +93,8 @@ public class ConversationBookingGateway {
     private final TenantProvider tenantProvider;
     private final ConsultarCatalogo consultarCatalogo;
     private final AvailabilityApplicationService availabilityApplicationService;
+    private final AppointmentApplicationService appointmentApplicationService;
+    private final CustomerProfileService customerProfileService;
     private final ConfirmarAgendamentoDoCatalogo confirmarAgendamento;
     private final RelogioDoNegocio relogio;
     private final TimeInputParser timeInputParser;
@@ -88,11 +102,15 @@ public class ConversationBookingGateway {
     public ConversationBookingGateway(TenantProvider tenantProvider,
                                       ConsultarCatalogo consultarCatalogo,
                                       AvailabilityApplicationService availabilityApplicationService,
+                                      AppointmentApplicationService appointmentApplicationService,
+                                      CustomerProfileService customerProfileService,
                                       ConfirmarAgendamentoDoCatalogo confirmarAgendamento,
                                       RelogioDoNegocio relogio) {
         this.tenantProvider = tenantProvider;
         this.consultarCatalogo = consultarCatalogo;
         this.availabilityApplicationService = availabilityApplicationService;
+        this.appointmentApplicationService = appointmentApplicationService;
+        this.customerProfileService = customerProfileService;
         this.confirmarAgendamento = confirmarAgendamento;
         this.relogio = relogio;
         this.timeInputParser = new TimeInputParser();
@@ -108,6 +126,38 @@ public class ConversationBookingGateway {
     public Optional<String> nomeCanonicoDoServico(String nomeInterpretado) {
         ServicoResolvido resolvido = resolverServico(nomeInterpretado);
         return resolvido.ok() ? Optional.of(resolvido.item().nome()) : Optional.empty();
+    }
+
+    /**
+     * Sugere um unico servico do catalogo quando a entrada parece conter um erro de
+     * digitacao. A sugestao nunca decide o booking: Conversation pede confirmacao ao
+     * cliente antes de gravar o servico no draft.
+     */
+    public Optional<String> sugerirServico(String entrada) {
+        String texto = normalizar(entrada);
+        if (texto.isBlank()) {
+            return Optional.empty();
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        List<ConsultarCatalogo.ItemDeCatalogo> itens = consultarCatalogo.consultar(businessId).itens();
+
+        record Candidato(String nome, int distancia) {}
+        List<Candidato> candidatos = itens.stream()
+                .map(item -> new Candidato(item.nome(), distanciaParaEntrada(item.nome(), texto)))
+                .filter(candidato -> candidato.distancia() <= limiteDeCorrecao(candidato.nome()))
+                .sorted(java.util.Comparator.comparingInt(Candidato::distancia)
+                        .thenComparing(Candidato::nome))
+                .toList();
+
+        if (candidatos.isEmpty()) {
+            return Optional.empty();
+        }
+        if (candidatos.size() > 1
+                && candidatos.get(0).distancia() == candidatos.get(1).distancia()) {
+            return Optional.empty();
+        }
+        return Optional.of(candidatos.get(0).nome());
     }
 
     public Status statusDoServico(String nomeInterpretado) {
@@ -221,6 +271,57 @@ public class ConversationBookingGateway {
         }
     }
 
+    /**
+     * Le os agendamentos ATIVOS reais do cliente. ConversationState/draft nunca participa
+     * desta consulta: depois do commit, a fonte da verdade e Appointment.
+     */
+    public List<Agendamento> listarAgendamentosAtivos(String telefone) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        return agendamentosAtivosDoCliente(businessId, telefone).stream()
+                .map(appointment -> paraApresentacao(businessId, appointment))
+                .toList();
+    }
+
+    /**
+     * Cancela o agendamento pelo indice da lista retornada por listarAgendamentosAtivos.
+     * A decisao de transicao PENDENTE/CONFIRMADO -> CANCELADO continua no agregado
+     * Appointment, via AppointmentApplicationService.
+     */
+    public Optional<Agendamento> cancelarAgendamentoAtivo(String telefone, int indice) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        List<Appointment> ativos = agendamentosAtivosDoCliente(businessId, telefone);
+        if (indice < 0 || indice >= ativos.size()) {
+            return Optional.empty();
+        }
+
+        Appointment alvo = ativos.get(indice);
+        Agendamento apresentacao = paraApresentacao(businessId, alvo);
+        appointmentApplicationService.cancelarAgendamento(alvo.getId());
+        return Optional.of(apresentacao);
+    }
+
+    private List<Appointment> agendamentosAtivosDoCliente(BusinessId businessId, String telefone) {
+        return customerProfileService.localizarIdOficial(businessId, telefone)
+                .map(appointmentApplicationService::listarAtivosPorCliente)
+                .orElse(List.of()).stream()
+                .filter(appointment -> appointment.pertenceAoTenant(businessId))
+                .toList();
+    }
+
+    private Agendamento paraApresentacao(BusinessId businessId, Appointment appointment) {
+        String nomeServico = consultarCatalogo.consultar(businessId).itens().stream()
+                .filter(item -> item.id().equals(appointment.getServiceId()))
+                .map(ConsultarCatalogo.ItemDeCatalogo::nome)
+                .findFirst()
+                .orElse("Servico");
+
+        return new Agendamento(
+                nomeServico,
+                appointment.getDate(),
+                appointment.getStartTime(),
+                appointment.getStatus() == AppointmentStatus.CONFIRMADO);
+    }
+
     public boolean horarioPertenceAOferta(String nomeInterpretado, String diaInformado,
                                           String horarioInformado) {
         Optional<LocalTime> horario = timeInputParser.parse(horarioInformado);
@@ -300,7 +401,57 @@ public class ConversationBookingGateway {
     private static boolean mesmoServico(String catalogo, String interpretado) {
         String a = singularSimples(normalizar(catalogo));
         String b = singularSimples(normalizar(interpretado));
-        return !a.isBlank() && a.equals(b);
+        if (a.isBlank() || b.isBlank()) {
+            return false;
+        }
+        if (a.equals(b)) {
+            return true;
+        }
+
+        // Linguagem natural simples: "quero fazer manicure" continua sendo interpretacao
+        // da conversa. A identidade aceita continua vindo do item real do catalogo.
+        return (" " + b + " ").contains(" " + a + " ");
+    }
+
+    private static int distanciaParaEntrada(String nomeCatalogo, String entradaNormalizada) {
+        String alvo = singularSimples(normalizar(nomeCatalogo));
+        int melhor = distanciaLevenshtein(alvo, singularSimples(entradaNormalizada));
+        for (String token : entradaNormalizada.split("\\s+")) {
+            melhor = Math.min(melhor, distanciaLevenshtein(alvo, singularSimples(token)));
+        }
+        return melhor;
+    }
+
+    private static int limiteDeCorrecao(String nomeCatalogo) {
+        int tamanho = singularSimples(normalizar(nomeCatalogo)).length();
+        if (tamanho <= 4) {
+            return 1;
+        }
+        return 2;
+    }
+
+    private static int distanciaLevenshtein(String a, String b) {
+        if (a.equals(b)) {
+            return 0;
+        }
+        int[] anterior = new int[b.length() + 1];
+        int[] atual = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            anterior[j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            atual[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int custo = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                atual[j] = Math.min(
+                        Math.min(atual[j - 1] + 1, anterior[j] + 1),
+                        anterior[j - 1] + custo);
+            }
+            int[] troca = anterior;
+            anterior = atual;
+            atual = troca;
+        }
+        return anterior[b.length()];
     }
 
     private static String singularSimples(String valor) {

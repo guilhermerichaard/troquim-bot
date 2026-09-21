@@ -111,7 +111,7 @@ class StrictMvpFalhaTecnicaMensagemTest {
     void sucessoSomenteAposPersistir() {
         String resposta = percorrerAteConfirmar();
 
-        assertTrue(resposta.contains("registrado com sucesso"), resposta);
+        assertTrue(resposta.contains("confirmado com sucesso"), resposta);
         assertEquals(1, appointments.findAll().size(),
                 "A mensagem de sucesso exige Appointment persistido");
     }
@@ -127,7 +127,7 @@ class StrictMvpFalhaTecnicaMensagemTest {
 
         // O cliente faz o que a mensagem diz: tenta de novo, na mesma conversa.
         String segunda = enviar(NUMERO, "1");
-        assertTrue(segunda.contains("registrado com sucesso"), segunda);
+        assertTrue(segunda.contains("confirmado com sucesso"), segunda);
 
         assertEquals(1, appointments.findAll().size(),
                 "O retry após falha técnica não pode gerar agendamento duplicado");

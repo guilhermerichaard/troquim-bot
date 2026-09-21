@@ -6,6 +6,7 @@ import com.troquim_bot.support.TestDias;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.catalog.ProvisionarNegocio;
 import com.troquim_bot.application.messaging.FlowMessage;
@@ -260,6 +261,101 @@ class ConversaAteConfirmacaoTest {
         assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_HORARIO,
                 conversationStateService.buscarPorNumero(TELEFONE).getStep());
         assertEquals(0, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
+    }
+
+    @Test
+    @DisplayName("23. conversa textual consulta e cancela o Appointment real")
+    void conversaTextualUsaAppointmentComoFonteDaVerdade() {
+        ConversationState estado = conversationStateService.buscarPorNumero(TELEFONE);
+        menu.processarMenu(TELEFONE, "1", estado);
+
+        String servico = menu.processarMenu(
+                TELEFONE, CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(servico.toLowerCase().contains("dia"), servico);
+
+        String dia = TestDias.futuroComAgenda();
+        String horarios = menu.processarMenu(
+                TELEFONE, dia, conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(horarios.toLowerCase().contains("horarios"), horarios);
+
+        menu.processarMenu(
+                TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        menu.processarMenu(
+                TELEFONE, "Gui Teste", conversationStateService.buscarPorNumero(TELEFONE));
+
+        String confirmacao = menu.processarMenu(
+                TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(confirmacao.toLowerCase().contains("confirmado com sucesso"), confirmacao);
+
+        var ativos = appointmentApplicationService.listarAtivos(TestTenants.PILOT);
+        assertEquals(1, ativos.size());
+        assertEquals(AppointmentStatus.CONFIRMADO, ativos.get(0).getStatus(),
+                "Booking confirmado pelo cliente nao pode ficar aguardando aprovacao manual");
+
+        String consulta = menu.processarMenu(
+                TELEFONE, "ver agendamento",
+                conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(consulta.contains(CatalogoDeTeste.UNHAS), consulta);
+        assertTrue(consulta.contains("CONFIRMADO"), consulta);
+        assertFalse(consulta.toLowerCase().contains("aguardando confirmacao do salao"), consulta);
+
+        // Reproduz o bug real: abre outro fluxo e pergunta pelo agendamento no meio da
+        // escolha de servico. Isso deve ser intencao global, nao um "servico invalido".
+        menu.processarMenu(
+                TELEFONE, "agendar", conversationStateService.buscarPorNumero(TELEFONE));
+        String consultaNoMeioDoFluxo = menu.processarMenu(
+                TELEFONE, "ver agendamento",
+                conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(consultaNoMeioDoFluxo.contains(CatalogoDeTeste.UNHAS), consultaNoMeioDoFluxo);
+        assertFalse(consultaNoMeioDoFluxo.toLowerCase().contains("servico nao esta disponivel"),
+                consultaNoMeioDoFluxo);
+
+        String cancelamento = menu.processarMenu(
+                TELEFONE, "cancelar",
+                conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(cancelamento.toLowerCase().contains("cancelado com sucesso"), cancelamento);
+        assertTrue(appointmentApplicationService.listarAtivos(TestTenants.PILOT).isEmpty(),
+                "Cancelar pela conversa precisa cancelar o Appointment persistido, nao so o draft");
+
+        String depois = menu.processarMenu(
+                TELEFONE, "ver agendamento",
+                conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(depois.toLowerCase().contains("nao tem agendamentos ativos"), depois);
+    }
+
+    @Test
+    @DisplayName("24. erro de digitacao sugere servico do catalogo e exige confirmacao")
+    void erroDeDigitacaoSugereServicoSemInventar() {
+        menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+
+        String sugestao = menu.processarMenu(
+                TELEFONE, "unhs", conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(sugestao.contains("Voce quis dizer " + CatalogoDeTeste.UNHAS), sugestao);
+        assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
+                conversationStateService.buscarPorNumero(TELEFONE).getStep(),
+                "Sugestao nao pode decidir pelo cliente");
+
+        String confirmado = menu.processarMenu(
+                TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(confirmado.toLowerCase().contains("dia"), confirmado);
+        assertEquals(CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE).getDraftAtual().getServico());
+    }
+
+    @Test
+    @DisplayName("25. frase natural com servico do catalogo avanca sem lista rigida")
+    void fraseNaturalComServicoDoCatalogo() {
+        menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+
+        String resposta = menu.processarMenu(
+                TELEFONE, "quero fazer unhas",
+                conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(resposta.toLowerCase().contains("dia"), resposta);
+        assertEquals(CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE).getDraftAtual().getServico());
     }
 
     // ==================== helpers ====================
