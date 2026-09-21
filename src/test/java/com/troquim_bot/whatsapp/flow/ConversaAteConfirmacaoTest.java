@@ -312,7 +312,7 @@ class ConversaAteConfirmacaoTest {
                 consultaNoMeioDoFluxo);
 
         String cancelamento = menu.processarMenu(
-                TELEFONE, "cancelar",
+                TELEFONE, "cancelar agendamento",
                 conversationStateService.buscarPorNumero(TELEFONE));
         assertTrue(cancelamento.toLowerCase().contains("cancelado com sucesso"), cancelamento);
         assertTrue(appointmentApplicationService.listarAtivos(TestTenants.PILOT).isEmpty(),
