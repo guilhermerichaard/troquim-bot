@@ -17,6 +17,9 @@ import java.util.*;
 @Service
 public class StrictMvpMenuService {
 
+    private static final int INTERACTIVE_PAGE_SIZE = 7;
+    private static final String CHOICE_BACK = "[[choice:nav_voltar|← Voltar]]";
+
     /**
      * Falha tecnica: o texto canonico de {@link BookingResult}, o MESMO que o WhatsApp
      * Flow usa — os dois canais nao podem divergir sobre o que aconteceu.
@@ -32,12 +35,12 @@ public class StrictMvpMenuService {
 
     /** Texto natural: o cliente toca no botao, sem "digite 1". */
     private static final String MENSAGEM_AGENDA_ABERTA =
-            "Te mandei a agenda aqui em cima. E so tocar em \"Abrir agenda\" e escolher.\n\n"
-                    + "Se preferir, pode continuar por aqui digitando o servico.";
+            "Te mandei a agenda aqui em cima. É só tocar em \"Abrir agenda\" e escolher.\n\n"
+                    + "Se preferir continuar pelo chat, escolha o serviço abaixo.";
 
     private static final String MENSAGEM_FALHA_CONSULTA_HORARIOS =
-            "Nao consegui consultar os horarios agora. Tente novamente em instantes "
-                    + "ou digite \"voltar\" para escolher outro dia.";
+            "Não consegui consultar os horários agora. Tente novamente em instantes "
+                    + "ou toque em Voltar para escolher outro dia.";
 
     private final ConversationStateService conversationStateService;
     private final AvailabilityApplicationService availabilityApplicationService;
@@ -47,6 +50,7 @@ public class StrictMvpMenuService {
     private final TimeInputParser timeInputParser;
     private final boolean strictMvpEnabled;
     private final ConversationBookingGateway conversationBookingGateway;
+    private final SaudacaoDoNegocio saudacaoDoNegocio;
 
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
@@ -57,13 +61,25 @@ public class StrictMvpMenuService {
                 aberturaDeAgenda, conversationMode, null);
     }
 
-    @Autowired
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
                                 BookingApplicationService bookingApplicationService,
                                 ObjectProvider<AberturaDeAgenda> aberturaDeAgenda,
                                 @Value("${conversation.mode:STRICT_MVP}") String conversationMode,
                                 ConversationBookingGateway conversationBookingGateway) {
+        this(conversationStateService, availabilityApplicationService, bookingApplicationService,
+                aberturaDeAgenda, conversationMode, conversationBookingGateway,
+                new SaudacaoDoNegocio(new com.troquim_bot.availability.RelogioDoNegocio()));
+    }
+
+    @Autowired
+    public StrictMvpMenuService(ConversationStateService conversationStateService,
+                                AvailabilityApplicationService availabilityApplicationService,
+                                BookingApplicationService bookingApplicationService,
+                                ObjectProvider<AberturaDeAgenda> aberturaDeAgenda,
+                                @Value("${conversation.mode:STRICT_MVP}") String conversationMode,
+                                ConversationBookingGateway conversationBookingGateway,
+                                SaudacaoDoNegocio saudacaoDoNegocio) {
         this.conversationStateService = conversationStateService;
         this.availabilityApplicationService = availabilityApplicationService;
         this.bookingApplicationService = bookingApplicationService;
@@ -72,6 +88,7 @@ public class StrictMvpMenuService {
         this.timeInputParser = new TimeInputParser();
         this.strictMvpEnabled = "STRICT_MVP".equalsIgnoreCase(conversationMode);
         this.conversationBookingGateway = conversationBookingGateway;
+        this.saudacaoDoNegocio = saudacaoDoNegocio;
     }
 
     public boolean isStrictMvpEnabled() {
@@ -100,6 +117,21 @@ public class StrictMvpMenuService {
 
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
+
+        Integer paginaHorarios = paginaDe(texto, "horarios_pagina_");
+        if (paginaHorarios != null && step == ConversationStep.AGUARDANDO_HORARIO) {
+            return menuHorarios(numero, paginaHorarios);
+        }
+
+        Integer paginaServicos = paginaDe(texto, "servicos_pagina_");
+        if (paginaServicos != null && step == ConversationStep.AGUARDANDO_SERVICO) {
+            return menuServicos(paginaServicos);
+        }
+
+        Integer paginaCancelamentos = paginaDe(texto, "cancelamentos_pagina_");
+        if (paginaCancelamentos != null && step == ConversationStep.AGUARDANDO_CANCELAMENTO) {
+            return menuCancelamentos(numero, paginaCancelamentos);
+        }
 
         // Intencoes globais nao podem ficar presas na etapa atual do formulario textual.
         // "ver agendamento" durante AGUARDANDO_SERVICO continua sendo consulta, nao nome
@@ -213,7 +245,8 @@ public class StrictMvpMenuService {
     }
 
     private String menuPrincipal() {
-        return "Ola! No momento eu consigo te ajudar com agendamentos. Escolha uma opcao:\n\n" +
+        return saudacaoDoNegocio.atual()
+                + "! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
                "1) Agendar\n" +
                "2) Meus agendamentos\n" +
                "3) Cancelar";
@@ -234,33 +267,33 @@ public class StrictMvpMenuService {
         // cliente que ignorar o botao continua atendido pelo texto.
         AberturaDeAgenda agenda = aberturaDeAgenda.getIfAvailable();
         if (agenda != null && agenda.disponivel() && agenda.abrirPara(numero).abriu()) {
-            return MENSAGEM_AGENDA_ABERTA;
+            return MENSAGEM_AGENDA_ABERTA + "\n\n" + menuServicos();
         }
 
         return menuServicos();
     }
 
     private String menuServicos() {
+        return menuServicos(0);
+    }
+
+    private String menuServicos(int pagina) {
+        List<String> nomes;
         if (conversationBookingGateway == null) {
-            return "Qual servico voce gostaria de agendar?\n\n" +
-                   "1) Unha\n" +
-                   "2) Cabelo\n" +
-                   "3) Sobrancelha\n" +
-                   "4) Cilios\n" +
-                   "5) Pe e mao\n\n" +
-                   "Digite o numero ou o nome do servico:";
+            nomes = List.of("Unha", "Cabelo", "Sobrancelha", "Cílios", "Pé e mão");
+        } else {
+            List<ConversationBookingGateway.Servico> servicos =
+                    conversationBookingGateway.listarServicos();
+            if (servicos.isEmpty()) {
+                return "Nenhum serviço disponível no momento.\n\n" + CHOICE_BACK;
+            }
+            nomes = servicos.stream().map(ConversationBookingGateway.Servico::nome).toList();
         }
 
-        List<ConversationBookingGateway.Servico> servicos = conversationBookingGateway.listarServicos();
-        if (servicos.isEmpty()) {
-            return "Nenhum servico disponivel no momento.";
-        }
-
-        StringBuilder sb = new StringBuilder("Qual servico voce gostaria de agendar?\n\n");
-        for (int i = 0; i < servicos.size(); i++) {
-            sb.append(i + 1).append(") ").append(servicos.get(i).nome()).append("\n");
-        }
-        sb.append("\nDigite o numero ou o nome do servico:");
+        StringBuilder sb = new StringBuilder("Qual serviço você gostaria de agendar?\n\n");
+        appendPaginatedOptions(
+                sb, nomes, pagina, "servicos_pagina_",
+                "← Serviços anteriores", "Mais serviços →");
         return sb.toString();
     }
 
@@ -318,11 +351,11 @@ public class StrictMvpMenuService {
                         atual.getDraftAtual().setEntradaServicoSugerida(mensagemOriginal);
                         conversationStateService.persistir(atual);
                     }
-                    return "Voce quis dizer " + sugestao.get() + "?\n\n"
+                    return "Você quis dizer " + sugestao.get() + "?\n\n"
                             + "1) Sim\n"
-                            + "2) Nao";
+                            + "2) Não";
                 }
-                return "Esse servico nao esta disponivel.\n\n" + menuServicos();
+                return "Esse serviço não está disponível.\n\n" + menuServicos();
             }
 
             conversationStateService.atualizarServico(numero, servico);
@@ -353,40 +386,30 @@ public class StrictMvpMenuService {
             }
         }
         if (servico == null) {
-            return "Nao entendi. Por favor, escolha um servico:\n\n" +
-                   "1) Unha\n" +
-                   "2) Cabelo\n" +
-                   "3) Sobrancelha\n" +
-                   "4) Cilios\n" +
-                   "5) Pe e mao\n\n" +
-                   "Digite o numero ou o nome:";
+            return "Não entendi. Escolha um serviço disponível:\n\n" + menuServicos();
         }
         conversationStateService.atualizarServico(numero, servico);
         return menuDias();
     }
 
     private String menuDias() {
-        return "Perfeito! Para qual dia voce gostaria?\n\n" +
-               "1) Segunda\n" +
-               "2) Terca\n" +
-               "3) Quarta\n" +
-               "4) Quinta\n" +
-               "5) Sexta\n" +
-               "6) Sabado\n\n" +
-               "Digite o numero ou o nome do dia:";
+        return "Perfeito! Para qual dia você gostaria?\n\n" + opcoesDias();
+    }
+
+    private String opcoesDias() {
+        return "1) Segunda\n"
+                + "2) Terça\n"
+                + "3) Quarta\n"
+                + "4) Quinta\n"
+                + "5) Sexta\n"
+                + "6) Sábado\n"
+                + CHOICE_BACK;
     }
 
     private String processarEscolhaDia(String numero, String texto, String mensagemOriginal) {
         String dia = resolverDia(texto);
         if (dia == null) {
-            return "Nao entendi. Por favor, escolha um dia:\n\n" +
-                   "1) Segunda\n" +
-                   "2) Terca\n" +
-                   "3) Quarta\n" +
-                   "4) Quinta\n" +
-                   "5) Sexta\n" +
-                   "6) Sabado\n\n" +
-                   "Digite o numero ou o nome:";
+            return "Não entendi. Escolha um dia disponível:\n\n" + opcoesDias();
         }
         conversationStateService.atualizarDia(numero, dia);
         return menuHorarios(numero);
@@ -430,6 +453,10 @@ public class StrictMvpMenuService {
     }
 
     private String menuHorarios(String numero) {
+        return menuHorarios(numero, 0);
+    }
+
+    private String menuHorarios(String numero, int pagina) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String dia = state.getDraftAtual().getDia();
 
@@ -439,67 +466,57 @@ public class StrictMvpMenuService {
                     conversationBookingGateway.consultarHorarios(servico, dia);
 
             if (consulta.status() == ConversationBookingGateway.Status.CATALOGO_NAO_CONFIGURADO) {
-                return "Nenhum servico disponivel no momento.";
+                return "Nenhum serviço disponível no momento.\n\n" + CHOICE_BACK;
             }
             if (consulta.status() == ConversationBookingGateway.Status.SERVICO_INDISPONIVEL) {
                 state.getDraftAtual().setServico(null);
                 conversationStateService.atualizarStep(state);
                 conversationStateService.persistir(state);
-                return "Esse servico nao esta disponivel.\n\n" + menuServicos();
+                return "Esse serviço não está disponível.\n\n" + menuServicos();
             }
             if (consulta.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
-                return "Esse servico tem mais de um profissional disponivel. Abra a agenda visual para escolher o profissional.";
+                return "Esse serviço tem mais de um profissional disponível. "
+                        + "Abra a agenda visual para escolher o profissional.\n\n"
+                        + CHOICE_BACK;
             }
             if (consulta.status() == ConversationBookingGateway.Status.FALHA_TECNICA) {
-                return MENSAGEM_FALHA_CONSULTA_HORARIOS;
+                return MENSAGEM_FALHA_CONSULTA_HORARIOS + "\n\n" + CHOICE_BACK;
             }
             if (consulta.status() == ConversationBookingGateway.Status.DIA_INVALIDO) {
                 voltarParaEscolhaDeDia(state);
-                return "Esse dia nao e valido para a agenda. Escolha outro dia:\n\n"
-                        + menuDias();
+                return "Esse dia não é válido para a agenda. Escolha outro dia:\n\n"
+                        + opcoesDias();
             }
             if (!consulta.ok()) {
-                return MENSAGEM_FALHA_CONSULTA_HORARIOS;
+                return MENSAGEM_FALHA_CONSULTA_HORARIOS + "\n\n" + CHOICE_BACK;
             }
             if (consulta.horarios().isEmpty()) {
                 voltarParaEscolhaDeDia(state);
-                return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n"
-                        + "1) Segunda\n"
-                        + "2) Terca\n"
-                        + "3) Quarta\n"
-                        + "4) Quinta\n"
-                        + "5) Sexta\n"
-                        + "6) Sabado";
+                return "Não tenho horários disponíveis para " + formatarDiaExibicao(dia)
+                        + ". Escolha outro dia:\n\n" + opcoesDias();
             }
 
-            StringBuilder sb = new StringBuilder();
-            sb.append("Horarios disponiveis para ").append(dia).append(":\n\n");
-            for (int i = 0; i < consulta.horarios().size(); i++) {
-                sb.append(i + 1).append(") ")
-                        .append(ConversationBookingGateway.formatarHorario(consulta.horarios().get(i)))
-                        .append("\n");
-            }
-            sb.append("\nDigite o numero ou o horario (ex: 13h):");
-            return sb.toString();
+            List<String> horarios = consulta.horarios().stream()
+                    .map(ConversationBookingGateway::formatarHorario)
+                    .toList();
+            return montarMenuHorarios(dia, horarios, pagina);
         }
 
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
         if (horarios.isEmpty()) {
             voltarParaEscolhaDeDia(state);
-            return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n"
-                    + "1) Segunda\n"
-                    + "2) Terca\n"
-                    + "3) Quarta\n"
-                    + "4) Quinta\n"
-                    + "5) Sexta\n"
-                    + "6) Sabado";
+            return "Não tenho horários disponíveis para " + formatarDiaExibicao(dia)
+                    + ". Escolha outro dia:\n\n" + opcoesDias();
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append("Horarios disponiveis para ").append(dia).append(":\n\n");
-        for (int i = 0; i < horarios.size(); i++) {
-            sb.append(i + 1).append(") ").append(horarios.get(i)).append("\n");
-        }
-        sb.append("\nDigite o numero ou o horario (ex: 13h):");
+        return montarMenuHorarios(dia, horarios, pagina);
+    }
+
+    private String montarMenuHorarios(String dia, List<String> horarios, int pagina) {
+        StringBuilder sb = new StringBuilder(
+                "Horários disponíveis para " + formatarDiaExibicao(dia) + ":\n\n");
+        appendPaginatedOptions(
+                sb, horarios, pagina, "horarios_pagina_",
+                "← Horários anteriores", "Mais horários →");
         return sb.toString();
     }
 
@@ -571,8 +588,8 @@ public class StrictMvpMenuService {
             }
         }
         if (horario == null) {
-            return "Nao entendi. Por favor, escolha um horario:\n\n" +
-                   "Digite o numero ou o horario (ex: 13h):";
+            return "Não entendi. Escolha um horário disponível:\n\n"
+                    + menuHorarios(numero);
         }
         conversationStateService.atualizarHorario(numero, horario);
         return menuNome(numero);
@@ -584,13 +601,13 @@ public class StrictMvpMenuService {
         if (nome != null && !nome.isBlank()) {
             return menuConfirmacao(numero);
         }
-        return "Perfeito! Qual e o seu nome?";
+        return "Perfeito! Qual é o seu nome?\n\n" + CHOICE_BACK;
     }
 
     private String processarEscolhaNome(String numero, String mensagem) {
         String nome = mensagem.trim();
         if (nome.length() < 2 || nome.length() > 60) {
-            return "Por favor, digite um nome valido:";
+            return "Por favor, informe um nome válido.\n\n" + CHOICE_BACK;
         }
         conversationStateService.atualizarNome(numero, nome);
         return menuConfirmacao(numero);
@@ -602,8 +619,7 @@ public class StrictMvpMenuService {
         return "Perfeito! Vou confirmar seu agendamento:\n\n" +
                resumo + "\n\n" +
                "1) Confirmar\n" +
-               "2) Cancelar\n\n" +
-               "Digite 1 para confirmar ou 2 para cancelar:";
+               "2) Cancelar";
     }
 
     private String processarConfirmacao(String numero, String texto) {
@@ -690,7 +706,7 @@ public class StrictMvpMenuService {
                    "2) Meus agendamentos\n" +
                    "3) Cancelar";
         }
-        return "Por favor, digite 1 para confirmar ou 2 para cancelar:";
+        return menuConfirmacao(numero);
     }
 
     private String consultarAgendamentos(String numero) {
@@ -730,27 +746,12 @@ public class StrictMvpMenuService {
             List<ConversationBookingGateway.Agendamento> ativos =
                     conversationBookingGateway.listarAgendamentosAtivos(numero);
             if (ativos.isEmpty()) {
-                return "Voce nao tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+                return "Você não tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
             }
             if (ativos.size() == 1) {
                 return cancelarAgendamento(numero, 0);
             }
-
-            StringBuilder sb = new StringBuilder(
-                    "Voce tem mais de um agendamento. Qual deseja cancelar?\n\n");
-            for (int i = 0; i < ativos.size(); i++) {
-                var a = ativos.get(i);
-                sb.append(i + 1).append(") ")
-                        .append(a.servico()).append(" em ")
-                        .append(formatarData(a.data())).append(" as ")
-                        .append(ConversationBookingGateway.formatarHorario(a.horario()))
-                        .append("\n");
-            }
-            ConversationState state = conversationStateService.buscarPorNumero(numero);
-            state.setStep(ConversationStep.AGUARDANDO_CANCELAMENTO);
-            conversationStateService.persistir(state);
-            sb.append("\nDigite apenas o numero ou, por exemplo: cancelar 1");
-            return sb.toString();
+            return menuCancelamentos(numero, 0, ativos);
         }
 
         ConversationState state = conversationStateService.buscarPorNumero(numero);
@@ -759,7 +760,43 @@ public class StrictMvpMenuService {
             conversationStateService.limparEstado(numero);
             return "Seu agendamento foi cancelado com sucesso.\n\n" + menuAcoes();
         }
-        return "Voce nao tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+        return "Você não tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+    }
+
+    private String menuCancelamentos(String numero, int pagina) {
+        if (conversationBookingGateway == null) {
+            return cancelarAgendamento(numero);
+        }
+        List<ConversationBookingGateway.Agendamento> ativos =
+                conversationBookingGateway.listarAgendamentosAtivos(numero);
+        if (ativos.isEmpty()) {
+            conversationStateService.limparEstado(numero);
+            return "Você não tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+        }
+        if (ativos.size() == 1) {
+            return cancelarAgendamento(numero, 0);
+        }
+        return menuCancelamentos(numero, pagina, ativos);
+    }
+
+    private String menuCancelamentos(String numero,
+                                     int pagina,
+                                     List<ConversationBookingGateway.Agendamento> ativos) {
+        List<String> opcoes = ativos.stream()
+                .map(a -> a.servico() + " em " + formatarData(a.data()) + " às "
+                        + ConversationBookingGateway.formatarHorario(a.horario()))
+                .toList();
+
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        state.setStep(ConversationStep.AGUARDANDO_CANCELAMENTO);
+        conversationStateService.persistir(state);
+
+        StringBuilder sb = new StringBuilder(
+                "Qual agendamento você deseja cancelar?\n\n");
+        appendPaginatedOptions(
+                sb, opcoes, pagina, "cancelamentos_pagina_",
+                "← Agendamentos anteriores", "Mais agendamentos →");
+        return sb.toString();
     }
 
     private String cancelarAgendamento(String numero, int indice) {
@@ -861,6 +898,71 @@ public class StrictMvpMenuService {
         } catch (NumberFormatException invalido) {
             return null;
         }
+    }
+
+    private Integer paginaDe(String texto, String prefixo) {
+        if (texto == null || prefixo == null || !texto.startsWith(prefixo)) {
+            return null;
+        }
+        String valor = texto.substring(prefixo.length());
+        if (!valor.matches("^\\d+$")) {
+            return null;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(valor));
+        } catch (NumberFormatException invalido) {
+            return null;
+        }
+    }
+
+    private void appendPaginatedOptions(StringBuilder sb,
+                                        List<String> opcoes,
+                                        int paginaSolicitada,
+                                        String prefixoPagina,
+                                        String tituloAnterior,
+                                        String tituloProximo) {
+        if (opcoes == null || opcoes.isEmpty()) {
+            sb.append(CHOICE_BACK);
+            return;
+        }
+
+        int totalPaginas = Math.max(1,
+                (int) Math.ceil(opcoes.size() / (double) INTERACTIVE_PAGE_SIZE));
+        int pagina = Math.max(0, Math.min(paginaSolicitada, totalPaginas - 1));
+        int inicio = pagina * INTERACTIVE_PAGE_SIZE;
+        int fim = Math.min(opcoes.size(), inicio + INTERACTIVE_PAGE_SIZE);
+
+        for (int i = inicio; i < fim; i++) {
+            sb.append(i + 1).append(") ").append(opcoes.get(i)).append("\n");
+        }
+
+        if (pagina > 0) {
+            sb.append("[[choice:")
+                    .append(prefixoPagina).append(pagina - 1)
+                    .append("|").append(tituloAnterior).append("]]\n");
+        }
+        if (pagina + 1 < totalPaginas) {
+            sb.append("[[choice:")
+                    .append(prefixoPagina).append(pagina + 1)
+                    .append("|").append(tituloProximo).append("]]\n");
+        }
+        sb.append(CHOICE_BACK);
+    }
+
+    private String formatarDiaExibicao(String dia) {
+        if (dia == null || dia.isBlank()) {
+            return "";
+        }
+        return switch (normalizar(dia)) {
+            case "segunda" -> "segunda";
+            case "terca" -> "terça";
+            case "quarta" -> "quarta";
+            case "quinta" -> "quinta";
+            case "sexta" -> "sexta";
+            case "sabado" -> "sábado";
+            case "domingo" -> "domingo";
+            default -> dia;
+        };
     }
 
     private String formatarData(java.time.LocalDate data) {

@@ -170,10 +170,24 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
                 numeroNormalizado,
                 "Troquim",
                 texto,
-                "Ver opcoes",
+                listButtonLabel(texto),
                 List.of(Map.of(
-                        "title", "Escolha uma opcao",
+                        "title", "Escolha uma opção",
                         "rows", rows)));
+    }
+
+    private String listButtonLabel(String texto) {
+        String normalized = texto == null ? "" : java.text.Normalizer
+                .normalize(texto, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(java.util.Locale.ROOT);
+        if (normalized.contains("servico")) return "Escolher serviço";
+        if (normalized.contains("dia")) return "Escolher dia";
+        if (normalized.contains("horario")) return "Escolher horário";
+        if (normalized.contains("agendamento") && normalized.contains("cancel")) {
+            return "Escolher agendamento";
+        }
+        return "Ver opções";
     }
 
     private String limitar(String valor, int max) {

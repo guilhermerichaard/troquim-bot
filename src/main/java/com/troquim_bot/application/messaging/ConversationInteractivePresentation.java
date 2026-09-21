@@ -16,6 +16,8 @@ import java.util.regex.Pattern;
 public final class ConversationInteractivePresentation {
 
     private static final Pattern NUMBERED_OPTION = Pattern.compile("^(\\d+)\\)\\s+(.+)$");
+    private static final Pattern EXPLICIT_OPTION =
+            Pattern.compile("^\\[\\[choice:([^|]+)\\|(.+)]]$");
 
     private ConversationInteractivePresentation() {
     }
@@ -35,17 +37,30 @@ public final class ConversationInteractivePresentation {
             return Optional.of(Presentation.buttons(interactiveBody(responseText, options), options));
         }
 
-        if ((responseText.contains("1) Sim") && responseText.contains("2) Nao"))
-                || (responseText.contains("1) Confirmar") && responseText.contains("2) Cancelar"))) {
+        if (responseText.contains("1) Sim")
+                && (responseText.contains("2) Nao") || responseText.contains("2) Não"))) {
             List<OutboundInteractiveOption> options = List.of(
-                    new OutboundInteractiveOption("confirmar_sim", "Confirmar"),
-                    new OutboundInteractiveOption("confirmar_nao", "Cancelar"));
+                    new OutboundInteractiveOption("confirmar_sim", "Sim"),
+                    new OutboundInteractiveOption("confirmar_nao", "Não"),
+                    new OutboundInteractiveOption("nav_voltar", "Voltar"));
             return Optional.of(Presentation.buttons(interactiveBody(responseText, options), options));
         }
 
-        List<OutboundInteractiveOption> numbered = numberedOptions(responseText);
-        if (numbered.size() >= 2 && numbered.size() <= 10) {
-            return Optional.of(Presentation.list(interactiveBody(responseText, numbered), numbered));
+        if (responseText.contains("1) Confirmar") && responseText.contains("2) Cancelar")) {
+            List<OutboundInteractiveOption> options = List.of(
+                    new OutboundInteractiveOption("confirmar_sim", "Confirmar"),
+                    new OutboundInteractiveOption("confirmar_nao", "Cancelar"),
+                    new OutboundInteractiveOption("nav_voltar", "Voltar"));
+            return Optional.of(Presentation.buttons(interactiveBody(responseText, options), options));
+        }
+
+        List<OutboundInteractiveOption> choices = selectableOptions(responseText);
+        if (choices.size() == 1 && "nav_voltar".equals(choices.get(0).id())) {
+            return Optional.of(Presentation.buttons(
+                    interactiveBody(responseText, choices), choices));
+        }
+        if (choices.size() >= 2 && choices.size() <= 10) {
+            return Optional.of(Presentation.list(interactiveBody(responseText, choices), choices));
         }
 
         return Optional.empty();
@@ -65,6 +80,7 @@ public final class ConversationInteractivePresentation {
             case "menu_cancelar" -> "3";
             case "confirmar_sim" -> "1";
             case "confirmar_nao" -> "2";
+            case "nav_voltar" -> "voltar";
             default -> interactiveId;
         };
     }
@@ -85,6 +101,9 @@ public final class ConversationInteractivePresentation {
                     continue;
                 }
             }
+            if (EXPLICIT_OPTION.matcher(trimmed).matches()) {
+                continue;
+            }
 
             String lower = trimmed.toLowerCase(java.util.Locale.ROOT);
             if (lower.startsWith("digite o numero")
@@ -101,17 +120,28 @@ public final class ConversationInteractivePresentation {
         return cleaned.isBlank() ? responseText : cleaned;
     }
 
-    private static List<OutboundInteractiveOption> numberedOptions(String responseText) {
+    private static List<OutboundInteractiveOption> selectableOptions(String responseText) {
         ArrayList<OutboundInteractiveOption> options = new ArrayList<>();
         for (String line : responseText.split("\\R")) {
-            Matcher matcher = NUMBERED_OPTION.matcher(line.trim());
-            if (!matcher.matches()) {
+            String trimmed = line.trim();
+
+            Matcher numbered = NUMBERED_OPTION.matcher(trimmed);
+            if (numbered.matches()) {
+                String id = numbered.group(1);
+                String title = numbered.group(2).trim();
+                if (!title.isBlank()) {
+                    options.add(new OutboundInteractiveOption(id, title));
+                }
                 continue;
             }
-            String id = matcher.group(1);
-            String title = matcher.group(2).trim();
-            if (!title.isBlank()) {
-                options.add(new OutboundInteractiveOption(id, title));
+
+            Matcher explicit = EXPLICIT_OPTION.matcher(trimmed);
+            if (explicit.matches()) {
+                String id = explicit.group(1).trim();
+                String title = explicit.group(2).trim();
+                if (!id.isBlank() && !title.isBlank()) {
+                    options.add(new OutboundInteractiveOption(id, title));
+                }
             }
         }
         return List.copyOf(options);

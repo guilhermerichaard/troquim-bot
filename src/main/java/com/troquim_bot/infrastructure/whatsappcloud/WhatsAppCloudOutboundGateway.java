@@ -97,9 +97,9 @@ public class WhatsAppCloudOutboundGateway implements OutboundMessageGateway {
                 "type", "list",
                 "body", Map.of("text", text),
                 "action", Map.of(
-                        "button", "Ver opcoes",
+                        "button", listButtonLabel(text),
                         "sections", List.of(Map.of(
-                                "title", "Escolha uma opcao",
+                                "title", "Escolha uma opção",
                                 "rows", rows))));
 
         return sendPayload(basePayload(toPhone, "interactive", interactive));
@@ -141,6 +141,32 @@ public class WhatsAppCloudOutboundGateway implements OutboundMessageGateway {
                     "Falha de transporte ao chamar a Graph API: "
                             + transportError.getClass().getSimpleName(), null, transportError);
         }
+    }
+
+    private static String listButtonLabel(String text) {
+        String normalized = normalize(text);
+        if (normalized.contains("servico")) {
+            return "Escolher serviço";
+        }
+        if (normalized.contains("dia")) {
+            return "Escolher dia";
+        }
+        if (normalized.contains("horario")) {
+            return "Escolher horário";
+        }
+        if (normalized.contains("agendamento") && normalized.contains("cancel")) {
+            return "Escolher agendamento";
+        }
+        return "Ver opções";
+    }
+
+    private static String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+        return java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(java.util.Locale.ROOT);
     }
 
     private static String limit(String value, int max) {
