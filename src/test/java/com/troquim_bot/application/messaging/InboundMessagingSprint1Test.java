@@ -127,6 +127,26 @@ class InboundMessagingSprint1Test {
         assertEquals(IngestOutcome.OUTBOUND_UNAVAILABLE, outcome);
     }
 
+    @Test
+    @DisplayName("4. menu canonico usa botoes no outbound Cloud")
+    void menuCanonicoUsaBotoesNoCloud() {
+        ConversationApplicationService conv = mock(ConversationApplicationService.class);
+        when(conv.processarMensagem(anyString(), anyString())).thenReturn(
+                "Ola! Escolha uma opcao:\n\n"
+                + "1) Agendar\n"
+                + "2) Meus agendamentos\n"
+                + "3) Cancelar");
+        RecordingGateway gateway = new RecordingGateway();
+
+        IngestOutcome outcome = ingestion(new FakeStore(), conv, gateway)
+                .ingest("menu".getBytes(StandardCharsets.UTF_8), "sig");
+
+        assertEquals(IngestOutcome.ACCEPTED, outcome);
+        assertEquals(1, gateway.buttonsSent);
+        assertEquals(0, gateway.textSent,
+                "menu com 3 opcoes nao deve degradar para texto no provider Cloud");
+    }
+
     // ==================== infra do teste ====================
 
     /** Assinatura sempre válida + parser que devolve UMA mensagem com id = corpo, telefone fixo. */
@@ -185,12 +205,38 @@ class InboundMessagingSprint1Test {
     static class RecordingGateway implements OutboundMessageGateway {
         volatile boolean failNext = false;
         final List<String> sent = Collections.synchronizedList(new ArrayList<>());
+        volatile int textSent = 0;
+        volatile int buttonsSent = 0;
+        volatile int listsSent = 0;
 
         @Override
         public OutboundResult sendText(String toPhone, String text) {
             if (failNext) {
                 throw new RuntimeException("outbound indisponivel (simulado)");
             }
+            textSent++;
+            sent.add(text);
+            return new OutboundResult("wamid.out." + sent.size(), "sent");
+        }
+
+        @Override
+        public OutboundResult sendButtons(String toPhone, String text,
+                                          List<OutboundInteractiveOption> options) {
+            if (failNext) {
+                throw new RuntimeException("outbound indisponivel (simulado)");
+            }
+            buttonsSent++;
+            sent.add(text);
+            return new OutboundResult("wamid.out." + sent.size(), "sent");
+        }
+
+        @Override
+        public OutboundResult sendList(String toPhone, String text,
+                                       List<OutboundInteractiveOption> options) {
+            if (failNext) {
+                throw new RuntimeException("outbound indisponivel (simulado)");
+            }
+            listsSent++;
             sent.add(text);
             return new OutboundResult("wamid.out." + sent.size(), "sent");
         }
