@@ -35,12 +35,12 @@ public class StrictMvpMenuService {
 
     /** Texto natural: o cliente toca no botao, sem "digite 1". */
     private static final String MENSAGEM_AGENDA_ABERTA =
-            "Te mandei a agenda aqui em cima. E so tocar em \"Abrir agenda\" e escolher.\n\n"
-                    + "Se preferir, pode continuar por aqui digitando o servico.";
+            "Te mandei a agenda aqui em cima. É só tocar em \"Abrir agenda\" e escolher.\n\n"
+                    + "Se preferir continuar pelo chat, escolha o serviço abaixo.";
 
     private static final String MENSAGEM_FALHA_CONSULTA_HORARIOS =
-            "Nao consegui consultar os horarios agora. Tente novamente em instantes "
-                    + "ou digite \"voltar\" para escolher outro dia.";
+            "Não consegui consultar os horários agora. Tente novamente em instantes "
+                    + "ou toque em Voltar para escolher outro dia.";
 
     private final ConversationStateService conversationStateService;
     private final AvailabilityApplicationService availabilityApplicationService;
@@ -231,7 +231,7 @@ public class StrictMvpMenuService {
     }
 
     private String menuPrincipal() {
-        return "Ola! No momento eu consigo te ajudar com agendamentos. Escolha uma opcao:\n\n" +
+        return "Olá! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
                "1) Agendar\n" +
                "2) Meus agendamentos\n" +
                "3) Cancelar";
@@ -252,7 +252,7 @@ public class StrictMvpMenuService {
         // cliente que ignorar o botao continua atendido pelo texto.
         AberturaDeAgenda agenda = aberturaDeAgenda.getIfAvailable();
         if (agenda != null && agenda.disponivel() && agenda.abrirPara(numero).abriu()) {
-            return MENSAGEM_AGENDA_ABERTA;
+            return MENSAGEM_AGENDA_ABERTA + "\n\n" + menuServicos();
         }
 
         return menuServicos();
@@ -336,11 +336,11 @@ public class StrictMvpMenuService {
                         atual.getDraftAtual().setEntradaServicoSugerida(mensagemOriginal);
                         conversationStateService.persistir(atual);
                     }
-                    return "Voce quis dizer " + sugestao.get() + "?\n\n"
+                    return "Você quis dizer " + sugestao.get() + "?\n\n"
                             + "1) Sim\n"
-                            + "2) Nao";
+                            + "2) Não";
                 }
-                return "Esse servico nao esta disponivel.\n\n" + menuServicos();
+                return "Esse serviço não está disponível.\n\n" + menuServicos();
             }
 
             conversationStateService.atualizarServico(numero, servico);
@@ -371,13 +371,7 @@ public class StrictMvpMenuService {
             }
         }
         if (servico == null) {
-            return "Nao entendi. Por favor, escolha um servico:\n\n" +
-                   "1) Unha\n" +
-                   "2) Cabelo\n" +
-                   "3) Sobrancelha\n" +
-                   "4) Cilios\n" +
-                   "5) Pe e mao\n\n" +
-                   "Digite o numero ou o nome:";
+            return "Não entendi. Escolha um serviço disponível:\n\n" + menuServicos();
         }
         conversationStateService.atualizarServico(numero, servico);
         return menuDias();
@@ -579,8 +573,8 @@ public class StrictMvpMenuService {
             }
         }
         if (horario == null) {
-            return "Nao entendi. Por favor, escolha um horario:\n\n" +
-                   "Digite o numero ou o horario (ex: 13h):";
+            return "Não entendi. Escolha um horário disponível:\n\n"
+                    + menuHorarios(numero);
         }
         conversationStateService.atualizarHorario(numero, horario);
         return menuNome(numero);
@@ -592,13 +586,13 @@ public class StrictMvpMenuService {
         if (nome != null && !nome.isBlank()) {
             return menuConfirmacao(numero);
         }
-        return "Perfeito! Qual e o seu nome?";
+        return "Perfeito! Qual é o seu nome?\n\n" + CHOICE_BACK;
     }
 
     private String processarEscolhaNome(String numero, String mensagem) {
         String nome = mensagem.trim();
         if (nome.length() < 2 || nome.length() > 60) {
-            return "Por favor, digite um nome valido:";
+            return "Por favor, informe um nome válido.\n\n" + CHOICE_BACK;
         }
         conversationStateService.atualizarNome(numero, nome);
         return menuConfirmacao(numero);
@@ -610,8 +604,7 @@ public class StrictMvpMenuService {
         return "Perfeito! Vou confirmar seu agendamento:\n\n" +
                resumo + "\n\n" +
                "1) Confirmar\n" +
-               "2) Cancelar\n\n" +
-               "Digite 1 para confirmar ou 2 para cancelar:";
+               "2) Cancelar";
     }
 
     private String processarConfirmacao(String numero, String texto) {
@@ -698,7 +691,7 @@ public class StrictMvpMenuService {
                    "2) Meus agendamentos\n" +
                    "3) Cancelar";
         }
-        return "Por favor, digite 1 para confirmar ou 2 para cancelar:";
+        return menuConfirmacao(numero);
     }
 
     private String consultarAgendamentos(String numero) {
