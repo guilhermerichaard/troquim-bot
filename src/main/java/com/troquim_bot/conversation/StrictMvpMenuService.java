@@ -31,7 +31,9 @@ public class StrictMvpMenuService {
      * agenda estar inalterada.
      */
     private static final String MENSAGEM_FALHA_TECNICA =
-            BookingResult.MENSAGEM_FALHA_TECNICA + "\n\nDigite 1 para tentar de novo.";
+            BookingResult.MENSAGEM_FALHA_TECNICA
+                    + "\n\n[[choice:retry_confirmacao|Tentar novamente]]\n"
+                    + CHOICE_BACK;
 
     /** Texto natural: o cliente toca no botao, sem "digite 1". */
     private static final String MENSAGEM_AGENDA_ABERTA =
@@ -553,7 +555,7 @@ public class StrictMvpMenuService {
             }
 
             if (escolhido == null || !consulta.horarios().contains(escolhido)) {
-                return "Esse horario nao esta disponivel. Escolha uma das opcoes acima.\n\n"
+                return "Esse horário não está disponível. Escolha outro horário:\n\n"
                         + menuHorarios(numero);
             }
 
@@ -666,7 +668,7 @@ public class StrictMvpMenuService {
                     draft.setHorario(null);
                     state.setStep(ConversationStep.AGUARDANDO_HORARIO);
                     conversationStateService.persistir(state);
-                    return "Esse horario nao esta disponivel. Escolha uma das opcoes acima.\n\n"
+                    return "Esse horário não está disponível. Escolha outro horário:\n\n"
                             + menuHorarios(numero);
                 }
                 if (!confirmacao.confirmada()) {
@@ -694,8 +696,11 @@ public class StrictMvpMenuService {
                 return MENSAGEM_FALHA_TECNICA;
             }
             if (!resultado.isConfirmado()) {
-                return resultado.mensagem() + "\n\n" +
-                       "Digite 2 para cancelar e escolher outro horario.";
+                draft.setHorario(null);
+                state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+                conversationStateService.persistir(state);
+                return resultado.mensagem() + "\n\nEscolha outro horário:\n\n"
+                        + menuHorarios(numero);
             }
             draft.setConfirmado(true);
             state.setStep(ConversationStep.FINALIZADO);
