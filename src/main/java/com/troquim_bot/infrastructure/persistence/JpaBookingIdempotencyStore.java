@@ -6,6 +6,7 @@ import com.troquim_bot.application.booking.BookingIdempotencyOutcome;
 import com.troquim_bot.application.booking.BookingIdempotencyRecord;
 import com.troquim_bot.application.booking.BookingIdempotencyStore;
 import com.troquim_bot.appointment.AppointmentId;
+import com.troquim_bot.business.BusinessId;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Component;
@@ -204,6 +205,35 @@ public class JpaBookingIdempotencyStore implements BookingIdempotencyStore {
         }
         return Optional.ofNullable(entityManager.find(BookingIdempotencyJpaEntity.class, commandKey))
                 .map(JpaBookingIdempotencyStore::paraRegistro);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<BookingIdempotencyRecord> buscarConfirmadoPorBase(BusinessId businessId,
+                                                                      String commandBase) {
+        if (businessId == null || commandBase == null || commandBase.isBlank()) {
+            return Optional.empty();
+        }
+
+        List<?> keys = entityManager.createNativeQuery("""
+                SELECT command_key
+                  FROM booking_idempotency
+                 WHERE business_id = :business
+                   AND command_base = :base
+                   AND outcome_status = 'CONFIRMADO'
+                 LIMIT 1
+                """)
+                .setParameter("business", businessId.getValue())
+                .setParameter("base", commandBase)
+                .getResultList();
+
+        if (keys.isEmpty()) {
+            return Optional.empty();
+        }
+
+        BookingIdempotencyJpaEntity entity = entityManager.find(
+                BookingIdempotencyJpaEntity.class, String.valueOf(keys.get(0)));
+        return Optional.ofNullable(entity).map(JpaBookingIdempotencyStore::paraRegistro);
     }
 
     private static BookingIdempotencyRecord paraRegistro(BookingIdempotencyJpaEntity e) {
