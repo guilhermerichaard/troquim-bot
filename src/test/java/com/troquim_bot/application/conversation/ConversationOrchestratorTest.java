@@ -90,6 +90,36 @@ class ConversationOrchestratorTest {
     }
 
     @Test
+    void deveRenderizarMenuDinamicoCurtoComoListaClicavel() throws Exception {
+        RecordingWhatsAppAdapter whatsAppAdapter = new RecordingWhatsAppAdapter(
+            Optional.of(new WhatsAppAdapter.IncomingMessage(
+                "message-list",
+                "5511999999999",
+                "5511999999999",
+                "1"
+            ))
+        );
+        RecordingMessageProcessor messageProcessor = new RecordingMessageProcessor(
+                "Qual servico voce gostaria?\n\n"
+                + "1) Manicure\n"
+                + "2) Design de sobrancelhas\n"
+                + "3) Escova\n\n"
+                + "Digite o numero ou o nome do servico:");
+        IntentEngine intentEngine = message -> new IntentResult(IntentType.UNKNOWN);
+        ConversationOrchestrator orchestrator = new ConversationOrchestrator(
+                messageProcessor, whatsAppAdapter, intentEngine,
+                strictMvpMenuService, conversationStateService);
+
+        orchestrator.receberWebhookWhatsApp("payload-list");
+
+        assertEquals(1, whatsAppAdapter.quantidadeListasEnviadas);
+        assertEquals(0, whatsAppAdapter.quantidadeEnviada);
+        assertEquals(3, whatsAppAdapter.listaEnviada.size());
+        assertEquals("1", whatsAppAdapter.listaEnviada.get(0).id());
+        assertEquals("Manicure", whatsAppAdapter.listaEnviada.get(0).titulo());
+    }
+
+    @Test
     void deveIgnorarMensagemDuplicadaNoOrchestrator() throws Exception {
         RecordingWhatsAppAdapter whatsAppAdapter = new RecordingWhatsAppAdapter(
             Optional.of(new WhatsAppAdapter.IncomingMessage(
@@ -223,6 +253,8 @@ class ConversationOrchestratorTest {
         private int quantidadeEnviada;
         private int quantidadeOpcoesEnviadas;
         private List<WhatsAppAdapter.QuickReply> opcoesEnviadas = List.of();
+        private int quantidadeListasEnviadas;
+        private List<WhatsAppAdapter.ListItem> listaEnviada = List.of();
 
         private RecordingWhatsAppAdapter(Optional<IncomingMessage> incomingMessage) {
             this.incomingMessage = incomingMessage;
@@ -248,6 +280,15 @@ class ConversationOrchestratorTest {
             textoEnviado = texto;
             opcoesEnviadas = opcoes;
             quantidadeOpcoesEnviadas++;
+        }
+
+        @Override
+        public void enviarLista(String numero, String texto,
+                                List<WhatsAppAdapter.ListItem> itens) {
+            numeroEnviado = numero;
+            textoEnviado = texto;
+            listaEnviada = itens;
+            quantidadeListasEnviadas++;
         }
     }
 
