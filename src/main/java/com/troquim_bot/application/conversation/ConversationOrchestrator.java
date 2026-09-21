@@ -10,6 +10,7 @@ import com.troquim_bot.application.conversation.engine.IntentDetectionStep;
 import com.troquim_bot.application.conversation.engine.LegacyConversationProcessorStep;
 import com.troquim_bot.application.conversation.engine.ResponseBuilder;
 import com.troquim_bot.application.intent.IntentEngine;
+import com.troquim_bot.application.messaging.ConversationInteractivePresentation;
 import com.troquim_bot.application.messaging.FlowCompletionProcessor;
 import com.troquim_bot.application.messaging.InboundFlowCompletion;
 import com.troquim_bot.application.messaging.ProcessOutcome;
@@ -147,72 +148,19 @@ public class ConversationOrchestrator {
             return;
         }
 
-        List<WhatsAppAdapter.QuickReply> opcoes = opcoesRapidas(resposta);
-        if (!opcoes.isEmpty()) {
-            whatsAppAdapter.enviarOpcoes(numero, resposta, opcoes);
+        var presentation = ConversationInteractivePresentation.from(resposta);
+        if (presentation.isEmpty()) {
+            whatsAppAdapter.enviarMensagem(numero, resposta);
             return;
         }
 
-        List<WhatsAppAdapter.ListItem> lista = listaClicavel(resposta);
-        if (!lista.isEmpty()) {
-            whatsAppAdapter.enviarLista(numero, resposta, lista);
+        var value = presentation.get();
+        if (value.type() == ConversationInteractivePresentation.Type.BUTTONS) {
+            whatsAppAdapter.enviarOpcoes(numero, resposta, value.options());
             return;
         }
 
-        whatsAppAdapter.enviarMensagem(numero, resposta);
-    }
-
-    /**
-     * Somente apresenta como botao decisoes que a Conversation ja tornou explicitas.
-     * Nenhuma regra de negocio nasce aqui; se o provider nao suporta, o texto continua
-     * exatamente o mesmo.
-     */
-    private List<WhatsAppAdapter.ListItem> listaClicavel(String resposta) {
-        if (resposta == null || resposta.isBlank()) {
-            return List.of();
-        }
-
-        java.util.ArrayList<WhatsAppAdapter.ListItem> itens = new java.util.ArrayList<>();
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^(\\d+)\\)\\s+(.+)$");
-
-        for (String linha : resposta.split("\\R")) {
-            java.util.regex.Matcher matcher = pattern.matcher(linha.trim());
-            if (!matcher.matches()) {
-                continue;
-            }
-            String id = matcher.group(1);
-            String titulo = matcher.group(2).trim();
-            if (!titulo.isBlank()) {
-                itens.add(new WhatsAppAdapter.ListItem(id, titulo, ""));
-            }
-        }
-
-        // Listas do WhatsApp sao adequadas para escolhas curtas; listas de horarios
-        // muito grandes permanecem no texto ate introduzirmos paginacao explicita.
-        if (itens.size() < 2 || itens.size() > 10) {
-            return List.of();
-        }
-        return List.copyOf(itens);
-    }
-
-    private List<WhatsAppAdapter.QuickReply> opcoesRapidas(String resposta) {
-        if (resposta.contains("1) Agendar")
-                && resposta.contains("2) Meus agendamentos")
-                && resposta.contains("3) Cancelar")) {
-            return List.of(
-                    new WhatsAppAdapter.QuickReply("menu_agendar", "Agendar"),
-                    new WhatsAppAdapter.QuickReply("menu_meus_agendamentos", "Meus agendamentos"),
-                    new WhatsAppAdapter.QuickReply("menu_cancelar", "Cancelar"));
-        }
-
-        if ((resposta.contains("1) Sim") && resposta.contains("2) Nao"))
-                || (resposta.contains("1) Confirmar") && resposta.contains("2) Cancelar"))) {
-            return List.of(
-                    new WhatsAppAdapter.QuickReply("confirmar_sim", "Confirmar"),
-                    new WhatsAppAdapter.QuickReply("confirmar_nao", "Cancelar"));
-        }
-
-        return List.of();
+        whatsAppAdapter.enviarLista(numero, resposta, value.options());
     }
 
     public void receberWebhookWhatsApp(String payload) throws Exception {
