@@ -148,11 +148,18 @@ public class ConversationOrchestrator {
         }
 
         List<WhatsAppAdapter.QuickReply> opcoes = opcoesRapidas(resposta);
-        if (opcoes.isEmpty()) {
-            whatsAppAdapter.enviarMensagem(numero, resposta);
+        if (!opcoes.isEmpty()) {
+            whatsAppAdapter.enviarOpcoes(numero, resposta, opcoes);
             return;
         }
-        whatsAppAdapter.enviarOpcoes(numero, resposta, opcoes);
+
+        List<WhatsAppAdapter.ListItem> lista = listaClicavel(resposta);
+        if (!lista.isEmpty()) {
+            whatsAppAdapter.enviarLista(numero, resposta, lista);
+            return;
+        }
+
+        whatsAppAdapter.enviarMensagem(numero, resposta);
     }
 
     /**
@@ -160,6 +167,34 @@ public class ConversationOrchestrator {
      * Nenhuma regra de negocio nasce aqui; se o provider nao suporta, o texto continua
      * exatamente o mesmo.
      */
+    private List<WhatsAppAdapter.ListItem> listaClicavel(String resposta) {
+        if (resposta == null || resposta.isBlank()) {
+            return List.of();
+        }
+
+        java.util.ArrayList<WhatsAppAdapter.ListItem> itens = new java.util.ArrayList<>();
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^(\\d+)\\)\\s+(.+)$");
+
+        for (String linha : resposta.split("\\R")) {
+            java.util.regex.Matcher matcher = pattern.matcher(linha.trim());
+            if (!matcher.matches()) {
+                continue;
+            }
+            String id = matcher.group(1);
+            String titulo = matcher.group(2).trim();
+            if (!titulo.isBlank()) {
+                itens.add(new WhatsAppAdapter.ListItem(id, titulo, ""));
+            }
+        }
+
+        // Listas do WhatsApp sao adequadas para escolhas curtas; listas de horarios
+        // muito grandes permanecem no texto ate introduzirmos paginacao explicita.
+        if (itens.size() < 2 || itens.size() > 10) {
+            return List.of();
+        }
+        return List.copyOf(itens);
+    }
+
     private List<WhatsAppAdapter.QuickReply> opcoesRapidas(String resposta) {
         if (resposta.contains("1) Agendar")
                 && resposta.contains("2) Meus agendamentos")
