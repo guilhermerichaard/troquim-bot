@@ -30,7 +30,7 @@ public class InboundMessageIngestionService {
     private final InboundMessageParser parser;
     private final InboundReceiptProcessor receiptProcessor;
     private final OutboundMessageGateway outboundGateway;
-    private final ObjectProvider<FlowCompletionProcessor> flowCompletionProcessor;
+    private final FlowCompletionProcessor flowCompletionProcessor;
 
     // Serializa o processamento por telefone (mesma conversa) para evitar o read-modify-write
     // concorrente de ConversationState (lost update). Mesmo padrão in-memory já usado no fluxo
@@ -48,7 +48,19 @@ public class InboundMessageIngestionService {
         this.parser = parser;
         this.receiptProcessor = receiptProcessor;
         this.outboundGateway = outboundGateway;
-        this.flowCompletionProcessor = flowCompletionProcessor;
+        this.flowCompletionProcessor = flowCompletionProcessor.getIfAvailable();
+    }
+
+    /** Compatibilidade para testes/unitarios sem capacidade de Flow. */
+    public InboundMessageIngestionService(WebhookSignatureVerifier signatureVerifier,
+                                          InboundMessageParser parser,
+                                          InboundReceiptProcessor receiptProcessor,
+                                          OutboundMessageGateway outboundGateway) {
+        this.signatureVerifier = signatureVerifier;
+        this.parser = parser;
+        this.receiptProcessor = receiptProcessor;
+        this.outboundGateway = outboundGateway;
+        this.flowCompletionProcessor = null;
     }
 
     public IngestOutcome ingest(byte[] rawBody, String signatureHeader) {
@@ -83,7 +95,7 @@ public class InboundMessageIngestionService {
     }
 
     private boolean processFlowCompletion(InboundFlowCompletion completion) {
-        FlowCompletionProcessor processor = flowCompletionProcessor.getIfAvailable();
+        FlowCompletionProcessor processor = flowCompletionProcessor;
         if (processor == null) {
             // Flow desligado: reconhece o evento sem efeito. Nao e erro de transporte.
             return true;
