@@ -259,26 +259,26 @@ public class StrictMvpMenuService {
     }
 
     private String menuServicos() {
+        return menuServicos(0);
+    }
+
+    private String menuServicos(int pagina) {
+        List<String> nomes;
         if (conversationBookingGateway == null) {
-            return "Qual servico voce gostaria de agendar?\n\n" +
-                   "1) Unha\n" +
-                   "2) Cabelo\n" +
-                   "3) Sobrancelha\n" +
-                   "4) Cilios\n" +
-                   "5) Pe e mao\n\n" +
-                   "Digite o numero ou o nome do servico:";
+            nomes = List.of("Unha", "Cabelo", "Sobrancelha", "Cílios", "Pé e mão");
+        } else {
+            List<ConversationBookingGateway.Servico> servicos =
+                    conversationBookingGateway.listarServicos();
+            if (servicos.isEmpty()) {
+                return "Nenhum serviço disponível no momento.\n\n" + CHOICE_BACK;
+            }
+            nomes = servicos.stream().map(ConversationBookingGateway.Servico::nome).toList();
         }
 
-        List<ConversationBookingGateway.Servico> servicos = conversationBookingGateway.listarServicos();
-        if (servicos.isEmpty()) {
-            return "Nenhum servico disponivel no momento.";
-        }
-
-        StringBuilder sb = new StringBuilder("Qual servico voce gostaria de agendar?\n\n");
-        for (int i = 0; i < servicos.size(); i++) {
-            sb.append(i + 1).append(") ").append(servicos.get(i).nome()).append("\n");
-        }
-        sb.append("\nDigite o numero ou o nome do servico:");
+        StringBuilder sb = new StringBuilder("Qual serviço você gostaria de agendar?\n\n");
+        appendPaginatedOptions(
+                sb, nomes, pagina, "servicos_pagina_",
+                "← Serviços anteriores", "Mais serviços →");
         return sb.toString();
     }
 
@@ -384,27 +384,23 @@ public class StrictMvpMenuService {
     }
 
     private String menuDias() {
-        return "Perfeito! Para qual dia voce gostaria?\n\n" +
-               "1) Segunda\n" +
-               "2) Terca\n" +
-               "3) Quarta\n" +
-               "4) Quinta\n" +
-               "5) Sexta\n" +
-               "6) Sabado\n\n" +
-               "Digite o numero ou o nome do dia:";
+        return "Perfeito! Para qual dia você gostaria?\n\n" + opcoesDias();
+    }
+
+    private String opcoesDias() {
+        return "1) Segunda\n"
+                + "2) Terça\n"
+                + "3) Quarta\n"
+                + "4) Quinta\n"
+                + "5) Sexta\n"
+                + "6) Sábado\n"
+                + CHOICE_BACK;
     }
 
     private String processarEscolhaDia(String numero, String texto, String mensagemOriginal) {
         String dia = resolverDia(texto);
         if (dia == null) {
-            return "Nao entendi. Por favor, escolha um dia:\n\n" +
-                   "1) Segunda\n" +
-                   "2) Terca\n" +
-                   "3) Quarta\n" +
-                   "4) Quinta\n" +
-                   "5) Sexta\n" +
-                   "6) Sabado\n\n" +
-                   "Digite o numero ou o nome:";
+            return "Não entendi. Escolha um dia disponível:\n\n" + opcoesDias();
         }
         conversationStateService.atualizarDia(numero, dia);
         return menuHorarios(numero);
