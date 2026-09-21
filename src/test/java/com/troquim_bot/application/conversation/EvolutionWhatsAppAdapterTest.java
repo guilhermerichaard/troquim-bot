@@ -1,5 +1,6 @@
 package com.troquim_bot.application.conversation;
 
+import com.troquim_bot.application.messaging.OutboundInteractiveOption;
 import com.troquim_bot.evolution.EvolutionService;
 import org.junit.jupiter.api.Test;
 
