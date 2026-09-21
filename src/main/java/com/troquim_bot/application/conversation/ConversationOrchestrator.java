@@ -156,11 +156,11 @@ public class ConversationOrchestrator {
 
         var value = presentation.get();
         if (value.type() == ConversationInteractivePresentation.Type.BUTTONS) {
-            whatsAppAdapter.enviarOpcoes(numero, resposta, value.options());
+            whatsAppAdapter.enviarOpcoes(numero, value.text(), value.options());
             return;
         }
 
-        whatsAppAdapter.enviarLista(numero, resposta, value.options());
+        whatsAppAdapter.enviarLista(numero, value.text(), value.options());
     }
 
     public void receberWebhookWhatsApp(String payload) throws Exception {
