@@ -25,10 +25,10 @@ public class SaudacaoDoNegocio {
 
     public String atual() {
         LocalTime agora = relogio.agora();
-        if (agora.isBefore(LocalTime.NOON)) {
+        if (!agora.isBefore(LocalTime.of(5, 0)) && agora.isBefore(LocalTime.NOON)) {
             return "Bom dia";
         }
-        if (agora.isBefore(LocalTime.of(18, 0))) {
+        if (!agora.isBefore(LocalTime.NOON) && agora.isBefore(LocalTime.of(18, 0))) {
             return "Boa tarde";
         }
         return "Boa noite";
