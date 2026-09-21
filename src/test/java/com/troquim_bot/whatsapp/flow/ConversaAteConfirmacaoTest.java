@@ -332,7 +332,7 @@ class ConversaAteConfirmacaoTest {
         String sugestao = menu.processarMenu(
                 TELEFONE, "unhz", conversationStateService.buscarPorNumero(TELEFONE));
 
-        assertTrue(sugestao.contains("Voce quis dizer " + CatalogoDeTeste.UNHAS), sugestao);
+        assertTrue(sugestao.contains("Você quis dizer " + CatalogoDeTeste.UNHAS), sugestao);
         assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
                 conversationStateService.buscarPorNumero(TELEFONE).getStep(),
                 "Sugestao nao pode decidir pelo cliente");
@@ -380,7 +380,7 @@ class ConversaAteConfirmacaoTest {
 
         String voltou = menu.processarMenu(
                 TELEFONE, "volta", conversationStateService.buscarPorNumero(TELEFONE));
-        assertTrue(voltou.toLowerCase().contains("servico"), voltou);
+        assertTrue(voltou.toLowerCase().contains("serviço"), voltou);
         assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
                 conversationStateService.buscarPorNumero(TELEFONE).getStep());
 
@@ -405,7 +405,7 @@ class ConversaAteConfirmacaoTest {
 
         String lista = menu.processarMenu(
                 TELEFONE, "3", conversationStateService.buscarPorNumero(TELEFONE));
-        assertTrue(lista.toLowerCase().contains("qual deseja cancelar"), lista);
+        assertTrue(lista.toLowerCase().contains("qual agendamento você deseja cancelar"), lista);
         assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_CANCELAMENTO,
                 conversationStateService.buscarPorNumero(TELEFONE).getStep());
 
