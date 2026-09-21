@@ -220,19 +220,24 @@ public class StrictMvpMenuService {
                 if (texto.equals("1") || texto.equals("sim") || texto.equals("isso")
                         || texto.equals("correto") || texto.equals("confirmar")) {
                     String confirmado = draft.getServicoSugerido();
+                    String entradaOriginal = draft.getEntradaServicoSugerida();
+                    conversationBookingGateway.aprenderCorrecaoDeServico(entradaOriginal, confirmado);
                     draft.setServicoSugerido(null);
+                    draft.setEntradaServicoSugerida(null);
                     conversationStateService.atualizarServico(numero, confirmado);
                     return menuDias();
                 }
                 if (texto.equals("2") || texto.equals("nao") || texto.equals("não")
                         || texto.equals("outro")) {
                     draft.setServicoSugerido(null);
+                    draft.setEntradaServicoSugerida(null);
                     conversationStateService.persistir(state);
                     return menuServicos();
                 }
                 // O cliente escreveu outra coisa: descarta a sugestao antiga e interpreta
                 // a nova mensagem normalmente.
                 draft.setServicoSugerido(null);
+                draft.setEntradaServicoSugerida(null);
                 conversationStateService.persistir(state);
             }
 
@@ -260,6 +265,7 @@ public class StrictMvpMenuService {
                     ConversationState atual = conversationStateService.buscarPorNumero(numero);
                     if (atual.getDraftAtual() != null) {
                         atual.getDraftAtual().setServicoSugerido(sugestao.get());
+                        atual.getDraftAtual().setEntradaServicoSugerida(mensagemOriginal);
                         conversationStateService.persistir(atual);
                     }
                     return "Voce quis dizer " + sugestao.get() + "?\n\n"
