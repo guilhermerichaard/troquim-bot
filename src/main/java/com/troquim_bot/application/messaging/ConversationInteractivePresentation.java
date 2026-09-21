@@ -47,6 +47,10 @@ public final class ConversationInteractivePresentation {
         }
 
         List<OutboundInteractiveOption> choices = selectableOptions(responseText);
+        if (choices.size() == 1 && "nav_voltar".equals(choices.get(0).id())) {
+            return Optional.of(Presentation.buttons(
+                    interactiveBody(responseText, choices), choices));
+        }
         if (choices.size() >= 2 && choices.size() <= 10) {
             return Optional.of(Presentation.list(interactiveBody(responseText, choices), choices));
         }
