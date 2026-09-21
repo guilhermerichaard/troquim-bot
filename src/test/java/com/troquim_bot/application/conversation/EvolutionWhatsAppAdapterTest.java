@@ -184,6 +184,52 @@ class EvolutionWhatsAppAdapterTest {
     }
 
     @Test
+    void deveDelegarListaClicavelParaSendList() {
+        RecordingEvolutionService evolutionService = new RecordingEvolutionService();
+        EvolutionWhatsAppAdapter adapter = new EvolutionWhatsAppAdapter(evolutionService);
+
+        adapter.enviarLista(
+                "5511999999999",
+                "Escolha o servico",
+                List.of(
+                        new WhatsAppAdapter.ListItem("1", "Manicure", ""),
+                        new WhatsAppAdapter.ListItem("2", "Design de sobrancelhas", "")));
+
+        assertEquals("5511999999999", evolutionService.numeroLista);
+        assertEquals("Escolha o servico", evolutionService.descricaoLista);
+        assertEquals(1, evolutionService.secoes.size());
+    }
+
+    @Test
+    void deveConverterSelecaoDeListaParaNumeroCanonico() throws Exception {
+        EvolutionWhatsAppAdapter adapter = new EvolutionWhatsAppAdapter(new RecordingEvolutionService());
+
+        Optional<WhatsAppAdapter.IncomingMessage> message = adapter.receberMensagem("""
+            {
+              "event": "messages.upsert",
+              "sender": "5511999999999",
+              "data": {
+                "key": {
+                  "id": "list-message-1",
+                  "remoteJid": "5511999999999@s.whatsapp.net",
+                  "fromMe": false
+                },
+                "message": {
+                  "listResponseMessage": {
+                    "singleSelectReply": {
+                      "selectedRowId": "2"
+                    }
+                  }
+                }
+              }
+            }
+            """);
+
+        assertTrue(message.isPresent());
+        assertEquals("2", message.get().mensagem());
+    }
+
+    @Test
     void deveDelegarEnvioParaEvolutionService() {
         RecordingEvolutionService evolutionService = new RecordingEvolutionService();
         EvolutionWhatsAppAdapter adapter = new EvolutionWhatsAppAdapter(evolutionService);
@@ -200,6 +246,9 @@ class EvolutionWhatsAppAdapterTest {
         private String numeroBotoes;
         private String descricaoBotoes;
         private List<Map<String, Object>> botoes = List.of();
+        private String numeroLista;
+        private String descricaoLista;
+        private List<Map<String, Object>> secoes = List.of();
 
         @Override
         public void enviarMensagem(String numero, String texto) {
@@ -213,6 +262,14 @@ class EvolutionWhatsAppAdapterTest {
             this.numeroBotoes = numero;
             this.descricaoBotoes = descricao;
             this.botoes = botoes;
+        }
+
+        @Override
+        public void enviarLista(String numero, String titulo, String descricao,
+                                String textoBotao, List<Map<String, Object>> secoes) {
+            this.numeroLista = numero;
+            this.descricaoLista = descricao;
+            this.secoes = secoes;
         }
     }
 }
