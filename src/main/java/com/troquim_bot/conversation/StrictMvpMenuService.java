@@ -17,6 +17,9 @@ import java.util.*;
 @Service
 public class StrictMvpMenuService {
 
+    private static final int INTERACTIVE_PAGE_SIZE = 7;
+    private static final String CHOICE_BACK = "[[choice:nav_voltar|← Voltar]]";
+
     /**
      * Falha tecnica: o texto canonico de {@link BookingResult}, o MESMO que o WhatsApp
      * Flow usa — os dois canais nao podem divergir sobre o que aconteceu.
@@ -100,6 +103,21 @@ public class StrictMvpMenuService {
 
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
+
+        Integer paginaHorarios = paginaDe(texto, "horarios_pagina_");
+        if (paginaHorarios != null && step == ConversationStep.AGUARDANDO_HORARIO) {
+            return menuHorarios(numero, paginaHorarios);
+        }
+
+        Integer paginaServicos = paginaDe(texto, "servicos_pagina_");
+        if (paginaServicos != null && step == ConversationStep.AGUARDANDO_SERVICO) {
+            return menuServicos(paginaServicos);
+        }
+
+        Integer paginaCancelamentos = paginaDe(texto, "cancelamentos_pagina_");
+        if (paginaCancelamentos != null && step == ConversationStep.AGUARDANDO_CANCELAMENTO) {
+            return menuCancelamentos(numero, paginaCancelamentos);
+        }
 
         // Intencoes globais nao podem ficar presas na etapa atual do formulario textual.
         // "ver agendamento" durante AGUARDANDO_SERVICO continua sendo consulta, nao nome
