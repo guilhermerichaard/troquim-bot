@@ -150,10 +150,10 @@ public class FlowCompletionProcessor {
             // Recibo historico pode ter representacao diferente; preserva o valor gravado.
         }
 
-        return "Agendamento confirmado! ✅\n\n"
-                + outcome.servicoNome() + "\n"
-                + data + " as " + formatarHorario(outcome.horario()) + "\n\n"
-                + "Deseja fazer algo mais?\n\n"
+        return "Recebi seu agendamento ✅\n\n"
+                + outcome.servicoNome() + " para " + data + " as "
+                + formatarHorario(outcome.horario()) + ".\n\n"
+                + "Posso te ajudar com algo mais?\n\n"
                 + "1) Agendar\n"
                 + "2) Meus agendamentos\n"
                 + "3) Cancelar";
