@@ -5,6 +5,7 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -21,6 +22,45 @@ public class EvolutionService {
     @Value("${evolution.api.api-key:}")
     private String apiKey;
   
+
+    public void enviarLista(String numero, String titulo, String descricao,
+                             String textoBotao, List<Map<String, Object>> secoes) {
+        String url = evolutionUrl + "/message/sendList/" + instanceName;
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("apikey", apiKey);
+
+        Map<String, Object> body = Map.of(
+                "number", numero,
+                "title", titulo,
+                "description", descricao == null ? "" : descricao,
+                "buttonText", textoBotao,
+                "sections", secoes
+        );
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        restTemplate.postForEntity(url, request, String.class);
+    }
+
+    public void enviarBotoes(String numero, String titulo, String descricao,
+                              List<Map<String, Object>> botoes) {
+        String url = evolutionUrl + "/message/sendButtons/" + instanceName;
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("apikey", apiKey);
+
+        Map<String, Object> body = Map.of(
+                "number", numero,
+                "title", titulo,
+                "description", descricao == null ? "" : descricao,
+                "buttons", botoes
+        );
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        restTemplate.postForEntity(url, request, String.class);
+    }
 
     public void enviarMensagem(String numero, String texto) {
         String url = evolutionUrl + "/message/sendText/" + instanceName;

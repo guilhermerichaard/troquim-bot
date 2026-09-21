@@ -3,6 +3,8 @@ package com.troquim_bot.application.conversation;
 import com.troquim_bot.evolution.EvolutionService;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -136,6 +138,98 @@ class EvolutionWhatsAppAdapterTest {
     }
 
     @Test
+    void deveConverterCliqueEmBotaoParaComandoCanonico() throws Exception {
+        EvolutionWhatsAppAdapter adapter = new EvolutionWhatsAppAdapter(new RecordingEvolutionService());
+
+        Optional<WhatsAppAdapter.IncomingMessage> message = adapter.receberMensagem("""
+            {
+              "event": "messages.upsert",
+              "sender": "5511999999999",
+              "data": {
+                "key": {
+                  "id": "button-message-1",
+                  "remoteJid": "5511999999999@s.whatsapp.net",
+                  "fromMe": false
+                },
+                "message": {
+                  "buttonsResponseMessage": {
+                    "selectedButtonId": "menu_agendar"
+                  }
+                }
+              }
+            }
+            """);
+
+        assertTrue(message.isPresent());
+        assertEquals("1", message.get().mensagem());
+    }
+
+    @Test
+    void deveDelegarQuickRepliesParaSendButtons() {
+        RecordingEvolutionService evolutionService = new RecordingEvolutionService();
+        EvolutionWhatsAppAdapter adapter = new EvolutionWhatsAppAdapter(evolutionService);
+
+        adapter.enviarOpcoes(
+                "5511999999999",
+                "Posso ajudar?",
+                List.of(
+                        new WhatsAppAdapter.QuickReply("menu_agendar", "Agendar"),
+                        new WhatsAppAdapter.QuickReply("menu_cancelar", "Cancelar")));
+
+        assertEquals("5511999999999", evolutionService.numeroBotoes);
+        assertEquals("Posso ajudar?", evolutionService.descricaoBotoes);
+        assertEquals(2, evolutionService.botoes.size());
+        assertEquals("reply", evolutionService.botoes.get(0).get("type"));
+        assertEquals("menu_agendar", evolutionService.botoes.get(0).get("id"));
+    }
+
+    @Test
+    void deveDelegarListaClicavelParaSendList() {
+        RecordingEvolutionService evolutionService = new RecordingEvolutionService();
+        EvolutionWhatsAppAdapter adapter = new EvolutionWhatsAppAdapter(evolutionService);
+
+        adapter.enviarLista(
+                "5511999999999",
+                "Escolha o servico",
+                List.of(
+                        new WhatsAppAdapter.ListItem("1", "Manicure", ""),
+                        new WhatsAppAdapter.ListItem("2", "Design de sobrancelhas", "")));
+
+        assertEquals("5511999999999", evolutionService.numeroLista);
+        assertEquals("Escolha o servico", evolutionService.descricaoLista);
+        assertEquals(1, evolutionService.secoes.size());
+    }
+
+    @Test
+    void deveConverterSelecaoDeListaParaNumeroCanonico() throws Exception {
+        EvolutionWhatsAppAdapter adapter = new EvolutionWhatsAppAdapter(new RecordingEvolutionService());
+
+        Optional<WhatsAppAdapter.IncomingMessage> message = adapter.receberMensagem("""
+            {
+              "event": "messages.upsert",
+              "sender": "5511999999999",
+              "data": {
+                "key": {
+                  "id": "list-message-1",
+                  "remoteJid": "5511999999999@s.whatsapp.net",
+                  "fromMe": false
+                },
+                "message": {
+                  "listResponseMessage": {
+                    "singleSelectReply": {
+                      "selectedRowId": "2"
+                    }
+                  }
+                }
+              }
+            }
+            """);
+
+        assertTrue(message.isPresent());
+        assertEquals("2", message.get().mensagem());
+    }
+
+    @Test
     void deveDelegarEnvioParaEvolutionService() {
         RecordingEvolutionService evolutionService = new RecordingEvolutionService();
         EvolutionWhatsAppAdapter adapter = new EvolutionWhatsAppAdapter(evolutionService);
@@ -149,11 +243,33 @@ class EvolutionWhatsAppAdapterTest {
     private static class RecordingEvolutionService extends EvolutionService {
         private String numero;
         private String texto;
+        private String numeroBotoes;
+        private String descricaoBotoes;
+        private List<Map<String, Object>> botoes = List.of();
+        private String numeroLista;
+        private String descricaoLista;
+        private List<Map<String, Object>> secoes = List.of();
 
         @Override
         public void enviarMensagem(String numero, String texto) {
             this.numero = numero;
             this.texto = texto;
+        }
+
+        @Override
+        public void enviarBotoes(String numero, String titulo, String descricao,
+                                 List<Map<String, Object>> botoes) {
+            this.numeroBotoes = numero;
+            this.descricaoBotoes = descricao;
+            this.botoes = botoes;
+        }
+
+        @Override
+        public void enviarLista(String numero, String titulo, String descricao,
+                                String textoBotao, List<Map<String, Object>> secoes) {
+            this.numeroLista = numero;
+            this.descricaoLista = descricao;
+            this.secoes = secoes;
         }
     }
 }
