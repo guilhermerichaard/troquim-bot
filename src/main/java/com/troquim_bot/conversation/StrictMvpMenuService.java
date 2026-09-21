@@ -892,6 +892,71 @@ public class StrictMvpMenuService {
         }
     }
 
+    private Integer paginaDe(String texto, String prefixo) {
+        if (texto == null || prefixo == null || !texto.startsWith(prefixo)) {
+            return null;
+        }
+        String valor = texto.substring(prefixo.length());
+        if (!valor.matches("^\\d+$")) {
+            return null;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(valor));
+        } catch (NumberFormatException invalido) {
+            return null;
+        }
+    }
+
+    private void appendPaginatedOptions(StringBuilder sb,
+                                        List<String> opcoes,
+                                        int paginaSolicitada,
+                                        String prefixoPagina,
+                                        String tituloAnterior,
+                                        String tituloProximo) {
+        if (opcoes == null || opcoes.isEmpty()) {
+            sb.append(CHOICE_BACK);
+            return;
+        }
+
+        int totalPaginas = Math.max(1,
+                (int) Math.ceil(opcoes.size() / (double) INTERACTIVE_PAGE_SIZE));
+        int pagina = Math.max(0, Math.min(paginaSolicitada, totalPaginas - 1));
+        int inicio = pagina * INTERACTIVE_PAGE_SIZE;
+        int fim = Math.min(opcoes.size(), inicio + INTERACTIVE_PAGE_SIZE);
+
+        for (int i = inicio; i < fim; i++) {
+            sb.append(i + 1).append(") ").append(opcoes.get(i)).append("\n");
+        }
+
+        if (pagina > 0) {
+            sb.append("[[choice:")
+                    .append(prefixoPagina).append(pagina - 1)
+                    .append("|").append(tituloAnterior).append("]]\n");
+        }
+        if (pagina + 1 < totalPaginas) {
+            sb.append("[[choice:")
+                    .append(prefixoPagina).append(pagina + 1)
+                    .append("|").append(tituloProximo).append("]]\n");
+        }
+        sb.append(CHOICE_BACK);
+    }
+
+    private String formatarDiaExibicao(String dia) {
+        if (dia == null || dia.isBlank()) {
+            return "";
+        }
+        return switch (normalizar(dia)) {
+            case "segunda" -> "segunda";
+            case "terca" -> "terça";
+            case "quarta" -> "quarta";
+            case "quinta" -> "quinta";
+            case "sexta" -> "sexta";
+            case "sabado" -> "sábado";
+            case "domingo" -> "domingo";
+            default -> dia;
+        };
+    }
+
     private String formatarData(java.time.LocalDate data) {
         if (data == null) {
             return "";
