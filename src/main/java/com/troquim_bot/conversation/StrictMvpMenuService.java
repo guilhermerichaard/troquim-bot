@@ -89,6 +89,9 @@ public class StrictMvpMenuService {
                 conversationStateService.persistir(resetState);
                 return menuPrincipal();
             }
+            if (action instanceof ConversationNavigationPolicy.Back) {
+                return voltarUmaEtapa(numero, state);
+            }
         }
 
         String texto = normalizar(mensagem);
@@ -145,6 +148,47 @@ public class StrictMvpMenuService {
         }
 
         return null;
+    }
+
+    private String voltarUmaEtapa(String numero, ConversationState state) {
+        if (state == null) {
+            return menuPrincipal();
+        }
+
+        var draft = state.getDraftAtual();
+        switch (state.getStep()) {
+            case AGUARDANDO_SERVICO, INICIO, FINALIZADO, AGUARDANDO_CANCELAMENTO -> {
+                conversationStateService.limparEstado(numero);
+                return menuPrincipal();
+            }
+            case AGUARDANDO_DIA -> {
+                if (draft != null) {
+                    draft.setServico(null);
+                    draft.setServicoSugerido(null);
+                    draft.setEntradaServicoSugerida(null);
+                }
+                state.setStep(ConversationStep.AGUARDANDO_SERVICO);
+                conversationStateService.persistir(state);
+                return menuServicos();
+            }
+            case AGUARDANDO_HORARIO -> {
+                if (draft != null) {
+                    draft.setDia(null);
+                }
+                state.setStep(ConversationStep.AGUARDANDO_DIA);
+                conversationStateService.persistir(state);
+                return menuDias();
+            }
+            case AGUARDANDO_NOME, AGUARDANDO_CONFIRMACAO -> {
+                if (draft != null) {
+                    draft.setHorario(null);
+                }
+                state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+                conversationStateService.persistir(state);
+                return menuHorarios(numero);
+            }
+        }
+        return menuPrincipal();
     }
 
     private String processarEscolhaMenuPrincipal(String numero, String texto) {
