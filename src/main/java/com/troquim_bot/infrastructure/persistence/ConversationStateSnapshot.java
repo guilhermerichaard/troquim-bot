@@ -87,6 +87,7 @@ public class ConversationStateSnapshot {
         private String commandBase;
         private String servico;
         private String servicoSugerido;
+        private String entradaServicoSugerida;
         private String dia;
         private String horario;
         private String nome;
@@ -95,10 +96,12 @@ public class ConversationStateSnapshot {
         public DraftSnapshot() {}
 
         public DraftSnapshot(String commandBase, String servico, String servicoSugerido,
-                             String dia, String horario, String nome, boolean confirmado) {
+                             String entradaServicoSugerida, String dia, String horario,
+                             String nome, boolean confirmado) {
             this.commandBase = commandBase;
             this.servico = servico;
             this.servicoSugerido = servicoSugerido;
+            this.entradaServicoSugerida = entradaServicoSugerida;
             this.dia = dia;
             this.horario = horario;
             this.nome = nome;
@@ -110,6 +113,7 @@ public class ConversationStateSnapshot {
                     draft.getCommandBase(),
                     draft.getServico(),
                     draft.getServicoSugerido(),
+                    draft.getEntradaServicoSugerida(),
                     draft.getDia(),
                     draft.getHorario(),
                     draft.getNome(),
@@ -122,6 +126,7 @@ public class ConversationStateSnapshot {
             draft.setCommandBase(commandBase);
             draft.setServico(servico);
             draft.setServicoSugerido(servicoSugerido);
+            draft.setEntradaServicoSugerida(entradaServicoSugerida);
             draft.setDia(dia);
             draft.setHorario(horario);
             draft.setNome(nome);
@@ -139,6 +144,9 @@ public class ConversationStateSnapshot {
 
         public String getServicoSugerido() { return servicoSugerido; }
         public void setServicoSugerido(String servicoSugerido) { this.servicoSugerido = servicoSugerido; }
+
+        public String getEntradaServicoSugerida() { return entradaServicoSugerida; }
+        public void setEntradaServicoSugerida(String entradaServicoSugerida) { this.entradaServicoSugerida = entradaServicoSugerida; }
 
         public String getDia() { return dia; }
         public void setDia(String dia) { this.dia = dia; }
