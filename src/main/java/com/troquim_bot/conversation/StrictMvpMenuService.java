@@ -444,6 +444,10 @@ public class StrictMvpMenuService {
     }
 
     private String menuHorarios(String numero) {
+        return menuHorarios(numero, 0);
+    }
+
+    private String menuHorarios(String numero, int pagina) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String dia = state.getDraftAtual().getDia();
 
@@ -453,67 +457,57 @@ public class StrictMvpMenuService {
                     conversationBookingGateway.consultarHorarios(servico, dia);
 
             if (consulta.status() == ConversationBookingGateway.Status.CATALOGO_NAO_CONFIGURADO) {
-                return "Nenhum servico disponivel no momento.";
+                return "Nenhum serviço disponível no momento.\n\n" + CHOICE_BACK;
             }
             if (consulta.status() == ConversationBookingGateway.Status.SERVICO_INDISPONIVEL) {
                 state.getDraftAtual().setServico(null);
                 conversationStateService.atualizarStep(state);
                 conversationStateService.persistir(state);
-                return "Esse servico nao esta disponivel.\n\n" + menuServicos();
+                return "Esse serviço não está disponível.\n\n" + menuServicos();
             }
             if (consulta.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
-                return "Esse servico tem mais de um profissional disponivel. Abra a agenda visual para escolher o profissional.";
+                return "Esse serviço tem mais de um profissional disponível. "
+                        + "Abra a agenda visual para escolher o profissional.\n\n"
+                        + CHOICE_BACK;
             }
             if (consulta.status() == ConversationBookingGateway.Status.FALHA_TECNICA) {
-                return MENSAGEM_FALHA_CONSULTA_HORARIOS;
+                return MENSAGEM_FALHA_CONSULTA_HORARIOS + "\n\n" + CHOICE_BACK;
             }
             if (consulta.status() == ConversationBookingGateway.Status.DIA_INVALIDO) {
                 voltarParaEscolhaDeDia(state);
-                return "Esse dia nao e valido para a agenda. Escolha outro dia:\n\n"
-                        + menuDias();
+                return "Esse dia não é válido para a agenda. Escolha outro dia:\n\n"
+                        + opcoesDias();
             }
             if (!consulta.ok()) {
-                return MENSAGEM_FALHA_CONSULTA_HORARIOS;
+                return MENSAGEM_FALHA_CONSULTA_HORARIOS + "\n\n" + CHOICE_BACK;
             }
             if (consulta.horarios().isEmpty()) {
                 voltarParaEscolhaDeDia(state);
-                return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n"
-                        + "1) Segunda\n"
-                        + "2) Terca\n"
-                        + "3) Quarta\n"
-                        + "4) Quinta\n"
-                        + "5) Sexta\n"
-                        + "6) Sabado";
+                return "Não tenho horários disponíveis para " + formatarDiaExibicao(dia)
+                        + ". Escolha outro dia:\n\n" + opcoesDias();
             }
 
-            StringBuilder sb = new StringBuilder();
-            sb.append("Horarios disponiveis para ").append(dia).append(":\n\n");
-            for (int i = 0; i < consulta.horarios().size(); i++) {
-                sb.append(i + 1).append(") ")
-                        .append(ConversationBookingGateway.formatarHorario(consulta.horarios().get(i)))
-                        .append("\n");
-            }
-            sb.append("\nDigite o numero ou o horario (ex: 13h):");
-            return sb.toString();
+            List<String> horarios = consulta.horarios().stream()
+                    .map(ConversationBookingGateway::formatarHorario)
+                    .toList();
+            return montarMenuHorarios(dia, horarios, pagina);
         }
 
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
         if (horarios.isEmpty()) {
             voltarParaEscolhaDeDia(state);
-            return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n"
-                    + "1) Segunda\n"
-                    + "2) Terca\n"
-                    + "3) Quarta\n"
-                    + "4) Quinta\n"
-                    + "5) Sexta\n"
-                    + "6) Sabado";
+            return "Não tenho horários disponíveis para " + formatarDiaExibicao(dia)
+                    + ". Escolha outro dia:\n\n" + opcoesDias();
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append("Horarios disponiveis para ").append(dia).append(":\n\n");
-        for (int i = 0; i < horarios.size(); i++) {
-            sb.append(i + 1).append(") ").append(horarios.get(i)).append("\n");
-        }
-        sb.append("\nDigite o numero ou o horario (ex: 13h):");
+        return montarMenuHorarios(dia, horarios, pagina);
+    }
+
+    private String montarMenuHorarios(String dia, List<String> horarios, int pagina) {
+        StringBuilder sb = new StringBuilder(
+                "Horários disponíveis para " + formatarDiaExibicao(dia) + ":\n\n");
+        appendPaginatedOptions(
+                sb, horarios, pagina, "horarios_pagina_",
+                "← Horários anteriores", "Mais horários →");
         return sb.toString();
     }
 
