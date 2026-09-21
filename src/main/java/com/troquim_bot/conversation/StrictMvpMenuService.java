@@ -738,27 +738,12 @@ public class StrictMvpMenuService {
             List<ConversationBookingGateway.Agendamento> ativos =
                     conversationBookingGateway.listarAgendamentosAtivos(numero);
             if (ativos.isEmpty()) {
-                return "Voce nao tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+                return "Você não tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
             }
             if (ativos.size() == 1) {
                 return cancelarAgendamento(numero, 0);
             }
-
-            StringBuilder sb = new StringBuilder(
-                    "Voce tem mais de um agendamento. Qual deseja cancelar?\n\n");
-            for (int i = 0; i < ativos.size(); i++) {
-                var a = ativos.get(i);
-                sb.append(i + 1).append(") ")
-                        .append(a.servico()).append(" em ")
-                        .append(formatarData(a.data())).append(" as ")
-                        .append(ConversationBookingGateway.formatarHorario(a.horario()))
-                        .append("\n");
-            }
-            ConversationState state = conversationStateService.buscarPorNumero(numero);
-            state.setStep(ConversationStep.AGUARDANDO_CANCELAMENTO);
-            conversationStateService.persistir(state);
-            sb.append("\nDigite apenas o numero ou, por exemplo: cancelar 1");
-            return sb.toString();
+            return menuCancelamentos(numero, 0, ativos);
         }
 
         ConversationState state = conversationStateService.buscarPorNumero(numero);
@@ -767,7 +752,43 @@ public class StrictMvpMenuService {
             conversationStateService.limparEstado(numero);
             return "Seu agendamento foi cancelado com sucesso.\n\n" + menuAcoes();
         }
-        return "Voce nao tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+        return "Você não tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+    }
+
+    private String menuCancelamentos(String numero, int pagina) {
+        if (conversationBookingGateway == null) {
+            return cancelarAgendamento(numero);
+        }
+        List<ConversationBookingGateway.Agendamento> ativos =
+                conversationBookingGateway.listarAgendamentosAtivos(numero);
+        if (ativos.isEmpty()) {
+            conversationStateService.limparEstado(numero);
+            return "Você não tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+        }
+        if (ativos.size() == 1) {
+            return cancelarAgendamento(numero, 0);
+        }
+        return menuCancelamentos(numero, pagina, ativos);
+    }
+
+    private String menuCancelamentos(String numero,
+                                     int pagina,
+                                     List<ConversationBookingGateway.Agendamento> ativos) {
+        List<String> opcoes = ativos.stream()
+                .map(a -> a.servico() + " em " + formatarData(a.data()) + " às "
+                        + ConversationBookingGateway.formatarHorario(a.horario()))
+                .toList();
+
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        state.setStep(ConversationStep.AGUARDANDO_CANCELAMENTO);
+        conversationStateService.persistir(state);
+
+        StringBuilder sb = new StringBuilder(
+                "Qual agendamento você deseja cancelar?\n\n");
+        appendPaginatedOptions(
+                sb, opcoes, pagina, "cancelamentos_pagina_",
+                "← Agendamentos anteriores", "Mais agendamentos →");
+        return sb.toString();
     }
 
     private String cancelarAgendamento(String numero, int indice) {
