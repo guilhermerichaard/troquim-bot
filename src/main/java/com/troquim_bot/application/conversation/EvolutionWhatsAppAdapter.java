@@ -2,7 +2,9 @@ package com.troquim_bot.application.conversation;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.troquim_bot.application.messaging.ConversationInteractivePresentation;
 import com.troquim_bot.application.messaging.InboundFlowCompletion;
+import com.troquim_bot.application.messaging.OutboundInteractiveOption;
 import com.troquim_bot.evolution.EvolutionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -150,7 +152,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
     }
 
     @Override
-    public void enviarLista(String numero, String texto, List<ListItem> itens) {
+    public void enviarLista(String numero, String texto, List<OutboundInteractiveOption> itens) {
         if (itens == null || itens.isEmpty()) {
             enviarMensagem(numero, texto);
             return;
@@ -182,7 +184,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
     }
 
     @Override
-    public void enviarOpcoes(String numero, String texto, List<QuickReply> opcoes) {
+    public void enviarOpcoes(String numero, String texto, List<OutboundInteractiveOption> opcoes) {
         if (opcoes == null || opcoes.isEmpty() || opcoes.size() > 3) {
             enviarMensagem(numero, texto);
             return;
@@ -251,14 +253,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
     }
 
     private String mapearIdRespostaRapida(String id) {
-        return switch (id) {
-            case "menu_agendar" -> "1";
-            case "menu_meus_agendamentos" -> "2";
-            case "menu_cancelar" -> "3";
-            case "confirmar_sim" -> "1";
-            case "confirmar_nao" -> "2";
-            default -> id;
-        };
+        return ConversationInteractivePresentation.canonicalInput(id);
     }
 
     @Override
