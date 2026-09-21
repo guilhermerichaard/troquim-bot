@@ -28,6 +28,18 @@ public interface WhatsAppAdapter {
         enviarMensagem(numero, texto);
     }
 
+    default void enviarLista(String numero, String texto, List<ListItem> itens) {
+        enviarMensagem(numero, texto);
+    }
+
+    record ListItem(String id, String titulo, String descricao) {
+        public ListItem {
+            if (id == null || id.isBlank() || titulo == null || titulo.isBlank()) {
+                throw new IllegalArgumentException("List item exige id e titulo");
+            }
+        }
+    }
+
     record QuickReply(String id, String titulo) {
         public QuickReply {
             if (id == null || id.isBlank() || titulo == null || titulo.isBlank()) {
