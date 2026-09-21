@@ -5,6 +5,7 @@ import java.util.UUID;
 public class AppointmentDraft {
     private String commandBase;
     private String servico;
+    private String servicoSugerido;
     private String dia;
     private String horario;
     private String nome;
@@ -32,6 +33,14 @@ public class AppointmentDraft {
 
     public void setServico(String servico) {
         this.servico = servico;
+    }
+
+    public String getServicoSugerido() {
+        return servicoSugerido;
+    }
+
+    public void setServicoSugerido(String servicoSugerido) {
+        this.servicoSugerido = servicoSugerido;
     }
 
     public String getDia() {
