@@ -86,6 +86,7 @@ public class ConversationStateSnapshot {
     public static class DraftSnapshot {
         private String commandBase;
         private String servico;
+        private String servicoSugerido;
         private String dia;
         private String horario;
         private String nome;
@@ -93,10 +94,11 @@ public class ConversationStateSnapshot {
 
         public DraftSnapshot() {}
 
-        public DraftSnapshot(String commandBase, String servico, String dia, String horario,
-                             String nome, boolean confirmado) {
+        public DraftSnapshot(String commandBase, String servico, String servicoSugerido,
+                             String dia, String horario, String nome, boolean confirmado) {
             this.commandBase = commandBase;
             this.servico = servico;
+            this.servicoSugerido = servicoSugerido;
             this.dia = dia;
             this.horario = horario;
             this.nome = nome;
@@ -107,6 +109,7 @@ public class ConversationStateSnapshot {
             return new DraftSnapshot(
                     draft.getCommandBase(),
                     draft.getServico(),
+                    draft.getServicoSugerido(),
                     draft.getDia(),
                     draft.getHorario(),
                     draft.getNome(),
@@ -118,6 +121,7 @@ public class ConversationStateSnapshot {
             AppointmentDraft draft = new AppointmentDraft();
             draft.setCommandBase(commandBase);
             draft.setServico(servico);
+            draft.setServicoSugerido(servicoSugerido);
             draft.setDia(dia);
             draft.setHorario(horario);
             draft.setNome(nome);
@@ -132,6 +136,9 @@ public class ConversationStateSnapshot {
 
         public String getServico() { return servico; }
         public void setServico(String servico) { this.servico = servico; }
+
+        public String getServicoSugerido() { return servicoSugerido; }
+        public void setServicoSugerido(String servicoSugerido) { this.servicoSugerido = servicoSugerido; }
 
         public String getDia() { return dia; }
         public void setDia(String dia) { this.dia = dia; }
