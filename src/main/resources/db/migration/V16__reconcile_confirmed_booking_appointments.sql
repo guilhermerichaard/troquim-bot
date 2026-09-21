@@ -12,7 +12,7 @@
 
 UPDATE appointments a
    SET status = 'CONFIRMADO',
-       updated_at = CURRENT_TIMESTAMP
+       atualizado_em = CURRENT_TIMESTAMP
  WHERE a.status = 'PENDENTE'
    AND EXISTS (
        SELECT 1
