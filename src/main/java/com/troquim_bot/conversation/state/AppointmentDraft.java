@@ -6,6 +6,7 @@ public class AppointmentDraft {
     private String commandBase;
     private String servico;
     private String servicoSugerido;
+    private String entradaServicoSugerida;
     private String dia;
     private String horario;
     private String nome;
@@ -41,6 +42,14 @@ public class AppointmentDraft {
 
     public void setServicoSugerido(String servicoSugerido) {
         this.servicoSugerido = servicoSugerido;
+    }
+
+    public String getEntradaServicoSugerida() {
+        return entradaServicoSugerida;
+    }
+
+    public void setEntradaServicoSugerida(String entradaServicoSugerida) {
+        this.entradaServicoSugerida = entradaServicoSugerida;
     }
 
     public String getDia() {
