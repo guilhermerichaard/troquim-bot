@@ -8,6 +8,7 @@ import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -48,8 +49,18 @@ public class JpaServiceInterpretationLearningStore implements ServiceInterpretat
             return Optional.empty();
         }
         Object valor = ids.get(0);
-        UUID id = valor instanceof UUID uuid ? uuid : UUID.fromString(String.valueOf(valor));
-        return Optional.of(ServiceId.from(id));
+        return Optional.of(ServiceId.from(converterUuid(valor)));
+    }
+
+    private static UUID converterUuid(Object valor) {
+        if (valor instanceof UUID uuid) {
+            return uuid;
+        }
+        if (valor instanceof byte[] bytes && bytes.length == 16) {
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            return new UUID(buffer.getLong(), buffer.getLong());
+        }
+        return UUID.fromString(String.valueOf(valor));
     }
 
     @Override
