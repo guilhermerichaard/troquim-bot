@@ -8,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Component
@@ -39,7 +41,8 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
 
         String messageId = root.path("data").path("key").path("id").asText();
         String sender = rawSender(root.path("sender").asText());
-        String mensagem = root.path("data").path("message").path("conversation").asText();
+        JsonNode messageNode = root.path("data").path("message");
+        String mensagem = extrairMensagemOuRespostaRapida(messageNode);
 
         if (mensagem == null || mensagem.isBlank()) {
             return Optional.empty();
@@ -144,6 +147,86 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
         } catch (Exception ignorado) {
             return null;
         }
+    }
+
+    @Override
+    public void enviarOpcoes(String numero, String texto, List<QuickReply> opcoes) {
+        if (opcoes == null || opcoes.isEmpty() || opcoes.size() > 3) {
+            enviarMensagem(numero, texto);
+            return;
+        }
+
+        String numeroNormalizado = WhatsAppContactResolver.normalizeForOutgoing(numero);
+        List<Map<String, Object>> botoes = opcoes.stream()
+                .map(opcao -> Map.<String, Object>of(
+                        "type", "reply",
+                        "displayText", opcao.titulo(),
+                        "id", opcao.id()))
+                .toList();
+
+        evolutionService.enviarBotoes(
+                numeroNormalizado,
+                "Troquim",
+                texto,
+                botoes);
+    }
+
+    private String extrairMensagemOuRespostaRapida(JsonNode message) {
+        String conversation = message.path("conversation").asText(null);
+        if (conversation != null && !conversation.isBlank()) {
+            return conversation;
+        }
+
+        String selectedButton = message.path("buttonsResponseMessage")
+                .path("selectedButtonId").asText(null);
+        if (selectedButton != null && !selectedButton.isBlank()) {
+            return mapearIdRespostaRapida(selectedButton);
+        }
+
+        String templateButton = message.path("templateButtonReplyMessage")
+                .path("selectedId").asText(null);
+        if (templateButton != null && !templateButton.isBlank()) {
+            return mapearIdRespostaRapida(templateButton);
+        }
+
+        String listRow = message.path("listResponseMessage")
+                .path("singleSelectReply").path("selectedRowId").asText(null);
+        if (listRow != null && !listRow.isBlank()) {
+            return mapearIdRespostaRapida(listRow);
+        }
+
+        JsonNode nativeFlow = message.path("interactiveResponseMessage")
+                .path("nativeFlowResponseMessage");
+        String paramsJson = nativeFlow.path("paramsJson").asText(null);
+        if (paramsJson == null || paramsJson.isBlank()) {
+            paramsJson = message.path("nativeFlowResponseMessage").path("paramsJson").asText(null);
+        }
+        if (paramsJson != null && !paramsJson.isBlank()) {
+            try {
+                JsonNode parsed = objectMapper.readTree(paramsJson);
+                for (String key : List.of("id", "selectedId", "selectedButtonId", "rowId")) {
+                    String value = parsed.path(key).asText(null);
+                    if (value != null && !value.isBlank()) {
+                        return mapearIdRespostaRapida(value);
+                    }
+                }
+            } catch (Exception ignorado) {
+                // Payload interativo desconhecido: nao inventa intencao.
+            }
+        }
+
+        return null;
+    }
+
+    private String mapearIdRespostaRapida(String id) {
+        return switch (id) {
+            case "menu_agendar" -> "1";
+            case "menu_meus_agendamentos" -> "2";
+            case "menu_cancelar" -> "3";
+            case "confirmar_sim" -> "1";
+            case "confirmar_nao" -> "2";
+            default -> id;
+        };
     }
 
     @Override
