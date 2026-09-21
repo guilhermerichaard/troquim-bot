@@ -330,7 +330,7 @@ class ConversaAteConfirmacaoTest {
         menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
 
         String sugestao = menu.processarMenu(
-                TELEFONE, "unhs", conversationStateService.buscarPorNumero(TELEFONE));
+                TELEFONE, "unhz", conversationStateService.buscarPorNumero(TELEFONE));
 
         assertTrue(sugestao.contains("Voce quis dizer " + CatalogoDeTeste.UNHAS), sugestao);
         assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
@@ -340,6 +340,19 @@ class ConversaAteConfirmacaoTest {
         String confirmado = menu.processarMenu(
                 TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
         assertTrue(confirmado.toLowerCase().contains("dia"), confirmado);
+        assertEquals(CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE).getDraftAtual().getServico());
+
+        // A correcao confirmada vira memoria do tenant. Em outro fluxo e outra frase,
+        // o mesmo token errado deve resolver direto, sem perguntar de novo.
+        menu.processarMenu(TELEFONE, "menu", conversationStateService.buscarPorNumero(TELEFONE));
+        menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        String reaprendido = menu.processarMenu(
+                TELEFONE, "preciso de unhz",
+                conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(reaprendido.toLowerCase().contains("dia"), reaprendido);
+        assertFalse(reaprendido.toLowerCase().contains("quis dizer"), reaprendido);
         assertEquals(CatalogoDeTeste.UNHAS,
                 conversationStateService.buscarPorNumero(TELEFONE).getDraftAtual().getServico());
     }
@@ -356,6 +369,63 @@ class ConversaAteConfirmacaoTest {
         assertTrue(resposta.toLowerCase().contains("dia"), resposta);
         assertEquals(CatalogoDeTeste.UNHAS,
                 conversationStateService.buscarPorNumero(TELEFONE).getDraftAtual().getServico());
+    }
+
+    @Test
+    @DisplayName("26. volta retorna uma etapa e menu principal funciona de qualquer etapa")
+    void navegacaoGlobalNaoPrendeClienteNoFormulario() {
+        menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        menu.processarMenu(TELEFONE, CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE));
+
+        String voltou = menu.processarMenu(
+                TELEFONE, "volta", conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(voltou.toLowerCase().contains("servico"), voltou);
+        assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
+                conversationStateService.buscarPorNumero(TELEFONE).getStep());
+
+        menu.processarMenu(TELEFONE, CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE));
+        String principal = menu.processarMenu(
+                TELEFONE, "menu principal", conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(principal.contains("1) Agendar"), principal);
+        assertEquals(com.troquim_bot.conversation.state.ConversationStep.INICIO,
+                conversationStateService.buscarPorNumero(TELEFONE).getStep());
+    }
+
+    @Test
+    @DisplayName("27. ao escolher cancelar, numero simples cancela o item selecionado")
+    void selecaoNumericaDeCancelamentoTemEstadoProprio() {
+        String dia = TestDias.futuroComAgenda();
+        criarAgendamentoTextual(TELEFONE, dia, "Ana Um");
+        criarAgendamentoTextual(TELEFONE, dia, "Ana Dois");
+
+        assertEquals(2, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
+
+        String lista = menu.processarMenu(
+                TELEFONE, "3", conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(lista.toLowerCase().contains("qual deseja cancelar"), lista);
+        assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_CANCELAMENTO,
+                conversationStateService.buscarPorNumero(TELEFONE).getStep());
+
+        String cancelado = menu.processarMenu(
+                TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(cancelado.toLowerCase().contains("cancelado com sucesso"), cancelado);
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size(),
+                "Numero simples apos a lista deve cancelar, nunca iniciar outro agendamento");
+    }
+
+    private void criarAgendamentoTextual(String numero, String dia, String nome) {
+        menu.processarMenu(numero, "1", conversationStateService.buscarPorNumero(numero));
+        menu.processarMenu(numero, CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(numero));
+        menu.processarMenu(numero, dia, conversationStateService.buscarPorNumero(numero));
+        menu.processarMenu(numero, "1", conversationStateService.buscarPorNumero(numero));
+        menu.processarMenu(numero, nome, conversationStateService.buscarPorNumero(numero));
+        String confirmacao = menu.processarMenu(
+                numero, "1", conversationStateService.buscarPorNumero(numero));
+        assertTrue(confirmacao.toLowerCase().contains("confirmado com sucesso"), confirmacao);
     }
 
     // ==================== helpers ====================
