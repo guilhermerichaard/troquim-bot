@@ -15,4 +15,21 @@ public interface OutboundMessageGateway {
      * @return resultado com o id externo (quando disponível)
      */
     OutboundResult sendText(String toPhone, String text);
+
+    /**
+     * Respostas rapidas clicaveis. Implementacoes sem suporte devem preservar o
+     * fallback textual, nunca descartar a resposta.
+     */
+    default OutboundResult sendButtons(String toPhone, String text,
+                                       java.util.List<OutboundInteractiveOption> options) {
+        return sendText(toPhone, text);
+    }
+
+    /**
+     * Lista clicavel para escolhas dinamicas curtas.
+     */
+    default OutboundResult sendList(String toPhone, String text,
+                                    java.util.List<OutboundInteractiveOption> options) {
+        return sendText(toPhone, text);
+    }
 }
