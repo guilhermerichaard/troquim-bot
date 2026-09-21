@@ -3,6 +3,7 @@ package com.troquim_bot.infrastructure.whatsappcloud;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import com.troquim_bot.application.messaging.OutboundInteractiveOption;
 import com.troquim_bot.application.messaging.OutboundResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -118,6 +120,50 @@ class WhatsAppCloudOutboundGatewayTest {
         // 29. 2xx captura external outbound id
         assertEquals("wamid.OUT123", result.externalMessageId());
         assertEquals("sent", result.status());
+    }
+
+    @Test
+    void botoesUsamInteractiveButtonOficial() throws Exception {
+        gateway(Duration.ofSeconds(5)).sendButtons(
+                "5511999990000",
+                "Posso te ajudar com algo mais?",
+                List.of(
+                        new OutboundInteractiveOption("menu_agendar", "Agendar"),
+                        new OutboundInteractiveOption("menu_meus_agendamentos", "Meus agendamentos"),
+                        new OutboundInteractiveOption("menu_cancelar", "Cancelar")));
+
+        JsonNode body = mapper.readTree(lastBody.get());
+        assertEquals("interactive", body.path("type").asText());
+        assertEquals("button", body.path("interactive").path("type").asText());
+        assertEquals("Posso te ajudar com algo mais?",
+                body.path("interactive").path("body").path("text").asText());
+        JsonNode buttons = body.path("interactive").path("action").path("buttons");
+        assertEquals(3, buttons.size());
+        assertEquals("reply", buttons.get(0).path("type").asText());
+        assertEquals("menu_agendar", buttons.get(0).path("reply").path("id").asText());
+        assertEquals("Agendar", buttons.get(0).path("reply").path("title").asText());
+    }
+
+    @Test
+    void listaUsaInteractiveListOficial() throws Exception {
+        gateway(Duration.ofSeconds(5)).sendList(
+                "5511999990000",
+                "Escolha o dia",
+                List.of(
+                        new OutboundInteractiveOption("1", "Segunda"),
+                        new OutboundInteractiveOption("2", "Terca"),
+                        new OutboundInteractiveOption("3", "Quarta")));
+
+        JsonNode body = mapper.readTree(lastBody.get());
+        assertEquals("interactive", body.path("type").asText());
+        assertEquals("list", body.path("interactive").path("type").asText());
+        assertEquals("Ver opcoes",
+                body.path("interactive").path("action").path("button").asText());
+        JsonNode rows = body.path("interactive").path("action")
+                .path("sections").get(0).path("rows");
+        assertEquals(3, rows.size());
+        assertEquals("2", rows.get(1).path("id").asText());
+        assertEquals("Terca", rows.get(1).path("title").asText());
     }
 
     @Test
