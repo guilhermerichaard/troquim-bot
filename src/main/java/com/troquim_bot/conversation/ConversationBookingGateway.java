@@ -1,13 +1,17 @@
 package com.troquim_bot.conversation;
 
+import com.troquim_bot.application.appointment.AppointmentApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.booking.BookingCommandKey;
 import com.troquim_bot.application.booking.BookingResult;
 import com.troquim_bot.application.catalog.ConfirmarAgendamentoDoCatalogo;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.appointment.Appointment;
+import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.RelogioDoNegocio;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.TenantProvider;
+import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.service.ServiceId;
 
@@ -49,6 +53,14 @@ public class ConversationBookingGateway {
     public record Servico(String nome) {
     }
 
+    /**
+     * Projecao de leitura para a conversa. O Appointment persistido continua sendo a
+     * autoridade; este record so carrega os campos necessarios para apresentacao.
+     */
+    public record Agendamento(String servico, LocalDate data, LocalTime horario,
+                              boolean confirmado) {
+    }
+
     public record ConsultaHorarios(Status status, String servico, String dia,
                                    List<LocalTime> horarios) {
 
@@ -81,6 +93,8 @@ public class ConversationBookingGateway {
     private final TenantProvider tenantProvider;
     private final ConsultarCatalogo consultarCatalogo;
     private final AvailabilityApplicationService availabilityApplicationService;
+    private final AppointmentApplicationService appointmentApplicationService;
+    private final CustomerProfileService customerProfileService;
     private final ConfirmarAgendamentoDoCatalogo confirmarAgendamento;
     private final RelogioDoNegocio relogio;
     private final TimeInputParser timeInputParser;
@@ -88,11 +102,15 @@ public class ConversationBookingGateway {
     public ConversationBookingGateway(TenantProvider tenantProvider,
                                       ConsultarCatalogo consultarCatalogo,
                                       AvailabilityApplicationService availabilityApplicationService,
+                                      AppointmentApplicationService appointmentApplicationService,
+                                      CustomerProfileService customerProfileService,
                                       ConfirmarAgendamentoDoCatalogo confirmarAgendamento,
                                       RelogioDoNegocio relogio) {
         this.tenantProvider = tenantProvider;
         this.consultarCatalogo = consultarCatalogo;
         this.availabilityApplicationService = availabilityApplicationService;
+        this.appointmentApplicationService = appointmentApplicationService;
+        this.customerProfileService = customerProfileService;
         this.confirmarAgendamento = confirmarAgendamento;
         this.relogio = relogio;
         this.timeInputParser = new TimeInputParser();
@@ -219,6 +237,57 @@ public class ConversationBookingGateway {
             return new Confirmacao(Status.FALHA_TECNICA, BookingResult.falhaTecnica(),
                     servico.item().nome(), diaInformado, horarioInformado);
         }
+    }
+
+    /**
+     * Le os agendamentos ATIVOS reais do cliente. ConversationState/draft nunca participa
+     * desta consulta: depois do commit, a fonte da verdade e Appointment.
+     */
+    public List<Agendamento> listarAgendamentosAtivos(String telefone) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        return agendamentosAtivosDoCliente(businessId, telefone).stream()
+                .map(appointment -> paraApresentacao(businessId, appointment))
+                .toList();
+    }
+
+    /**
+     * Cancela o agendamento pelo indice da lista retornada por listarAgendamentosAtivos.
+     * A decisao de transicao PENDENTE/CONFIRMADO -> CANCELADO continua no agregado
+     * Appointment, via AppointmentApplicationService.
+     */
+    public Optional<Agendamento> cancelarAgendamentoAtivo(String telefone, int indice) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        List<Appointment> ativos = agendamentosAtivosDoCliente(businessId, telefone);
+        if (indice < 0 || indice >= ativos.size()) {
+            return Optional.empty();
+        }
+
+        Appointment alvo = ativos.get(indice);
+        Agendamento apresentacao = paraApresentacao(businessId, alvo);
+        appointmentApplicationService.cancelarAgendamento(alvo.getId());
+        return Optional.of(apresentacao);
+    }
+
+    private List<Appointment> agendamentosAtivosDoCliente(BusinessId businessId, String telefone) {
+        return customerProfileService.localizarIdOficial(businessId, telefone)
+                .map(appointmentApplicationService::listarAtivosPorCliente)
+                .orElse(List.of()).stream()
+                .filter(appointment -> appointment.pertenceAoTenant(businessId))
+                .toList();
+    }
+
+    private Agendamento paraApresentacao(BusinessId businessId, Appointment appointment) {
+        String nomeServico = consultarCatalogo.consultar(businessId).itens().stream()
+                .filter(item -> item.id().equals(appointment.getServiceId()))
+                .map(ConsultarCatalogo.ItemDeCatalogo::nome)
+                .findFirst()
+                .orElse("Servico");
+
+        return new Agendamento(
+                nomeServico,
+                appointment.getDate(),
+                appointment.getStartTime(),
+                appointment.getStatus() == AppointmentStatus.CONFIRMADO);
     }
 
     public boolean horarioPertenceAOferta(String nomeInterpretado, String diaInformado,
