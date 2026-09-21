@@ -338,7 +338,7 @@ class ConversaAteConfirmacaoTest {
                 "Sugestao nao pode decidir pelo cliente");
 
         String confirmado = menu.processarMenu(
-                TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+                TELEFONE, "isso mesmo", conversationStateService.buscarPorNumero(TELEFONE));
         assertTrue(confirmado.toLowerCase().contains("dia"), confirmado);
         assertEquals(CatalogoDeTeste.UNHAS,
                 conversationStateService.buscarPorNumero(TELEFONE).getDraftAtual().getServico());
@@ -426,6 +426,48 @@ class ConversaAteConfirmacaoTest {
         String confirmacao = menu.processarMenu(
                 numero, "1", conversationStateService.buscarPorNumero(numero));
         assertTrue(confirmacao.toLowerCase().contains("confirmado com sucesso"), confirmacao);
+    }
+
+    @Test
+    @DisplayName("28. cancelar no meio do formulario abandona draft sem cancelar agenda salva")
+    void cancelarFormularioNaoCancelaAppointmentExistente() {
+        String dia = TestDias.futuroComAgenda();
+        criarAgendamentoTextual(TELEFONE, dia, "Cliente Existente");
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size());
+
+        menu.processarMenu(TELEFONE, "agendar",
+                conversationStateService.buscarPorNumero(TELEFONE));
+        menu.processarMenu(TELEFONE, CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE));
+
+        String resposta = menu.processarMenu(
+                TELEFONE, "cancelar", conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(resposta.toLowerCase().contains("atual descartado"), resposta);
+        assertTrue(resposta.contains("1) Agendar"), resposta);
+        assertEquals(1, appointmentApplicationService.listarAtivos(TestTenants.PILOT).size(),
+                "Cancelar o formulario nao pode cancelar Appointment ja persistido");
+    }
+
+    @Test
+    @DisplayName("29. confirmacao natural ok conclui o booking")
+    void confirmacaoNaturalOkConcluiBooking() {
+        String dia = TestDias.futuroComAgenda();
+
+        menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        menu.processarMenu(TELEFONE, CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE));
+        menu.processarMenu(TELEFONE, dia, conversationStateService.buscarPorNumero(TELEFONE));
+        menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        menu.processarMenu(TELEFONE, "Cliente Natural",
+                conversationStateService.buscarPorNumero(TELEFONE));
+
+        String resposta = menu.processarMenu(
+                TELEFONE, "ok", conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(resposta.toLowerCase().contains("confirmado com sucesso"), resposta);
+        assertEquals(AppointmentStatus.CONFIRMADO,
+                appointmentApplicationService.listarAtivos(TestTenants.PILOT).get(0).getStatus());
     }
 
     // ==================== helpers ====================
