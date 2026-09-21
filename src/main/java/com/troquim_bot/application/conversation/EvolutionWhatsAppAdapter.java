@@ -2,6 +2,7 @@ package com.troquim_bot.application.conversation;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.troquim_bot.application.messaging.InboundFlowCompletion;
 import com.troquim_bot.evolution.EvolutionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,6 +58,92 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
         }
 
         return Optional.of(new IncomingMessage(messageId, numero, sender, mensagem));
+    }
+
+    @Override
+    public Optional<InboundFlowCompletion> receberConclusaoFlow(String payload) throws Exception {
+        JsonNode root = objectMapper.readTree(payload);
+
+        if (!"messages.upsert".equals(root.path("event").asText())) {
+            return Optional.empty();
+        }
+        if (root.path("data").path("key").path("fromMe").asBoolean()) {
+            return Optional.empty();
+        }
+
+        String messageId = root.path("data").path("key").path("id").asText();
+        String numero = WhatsAppContactResolver.resolveContactNumber(root);
+        if (messageId == null || messageId.isBlank() || numero == null || numero.isBlank()) {
+            return Optional.empty();
+        }
+
+        JsonNode message = root.path("data").path("message");
+        String flowToken = extrairFlowToken(message);
+        if (flowToken == null || flowToken.isBlank()) {
+            return Optional.empty();
+        }
+
+        long timestamp = root.path("data").path("messageTimestamp").asLong(0L);
+        return Optional.of(new InboundFlowCompletion(
+                "evolution", messageId, numero, flowToken, timestamp));
+    }
+
+    /**
+     * Evolution/Baileys pode variar o envelope da resposta interativa entre versoes.
+     * Procuramos apenas dentro de data.message e aceitamos valores JSON em campos
+     * conhecidos (paramsJson/response_json); a validade REAL do token sera checada
+     * pela FlowSession emitida pelo Troquim.
+     */
+    private String extrairFlowToken(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+
+        if (node.isObject()) {
+            JsonNode direct = node.get("flow_token");
+            if (direct != null && direct.isTextual() && !direct.asText().isBlank()) {
+                return direct.asText();
+            }
+
+            java.util.Iterator<java.util.Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                var entry = fields.next();
+                String key = entry.getKey();
+                JsonNode value = entry.getValue();
+
+                if (("paramsJson".equals(key) || "response_json".equals(key))
+                        && value != null && value.isTextual()) {
+                    String token = extrairFlowTokenDeJsonString(value.asText());
+                    if (token != null) {
+                        return token;
+                    }
+                }
+
+                String nested = extrairFlowToken(value);
+                if (nested != null) {
+                    return nested;
+                }
+            }
+        } else if (node.isArray()) {
+            for (JsonNode item : node) {
+                String nested = extrairFlowToken(item);
+                if (nested != null) {
+                    return nested;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String extrairFlowTokenDeJsonString(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return extrairFlowToken(objectMapper.readTree(raw));
+        } catch (Exception ignorado) {
+            return null;
+        }
     }
 
     @Override
