@@ -8,9 +8,11 @@ import java.util.Optional;
 
 public final class ConversationNavigationPolicy {
 
-    public sealed interface NavigationAction permits ResetToMenu, NoOp {}
+    public sealed interface NavigationAction permits ResetToMenu, Back, NoOp {}
 
     public record ResetToMenu() implements NavigationAction {}
+
+    public record Back() implements NavigationAction {}
 
     public record NoOp() implements NavigationAction {}
 
@@ -21,6 +23,9 @@ public final class ConversationNavigationPolicy {
 
         String texto = normalizar(mensagem);
 
+        if (isComandoVoltar(texto)) {
+            return Optional.of(new Back());
+        }
         if (isComandoReinicio(texto)) {
             return Optional.of(new ResetToMenu());
         }
@@ -28,13 +33,18 @@ public final class ConversationNavigationPolicy {
         return Optional.empty();
     }
 
+    private boolean isComandoVoltar(String texto) {
+        return texto.equals("volta")
+                || texto.equals("voltar")
+                || texto.equals("anterior")
+                || texto.equals("passo anterior");
+    }
+
     private boolean isComandoReinicio(String texto) {
         return texto.equals("oi")
                 || texto.equals("ola")
                 || texto.equals("menu")
                 || texto.equals("menu principal")
-                || texto.equals("voltar")
-                || texto.equals("volta")
                 || texto.equals("inicio")
                 || texto.equals("comecar novamente")
                 || texto.equals("recomecar")
