@@ -157,7 +157,7 @@ class WhatsAppCloudOutboundGatewayTest {
         JsonNode body = mapper.readTree(lastBody.get());
         assertEquals("interactive", body.path("type").asText());
         assertEquals("list", body.path("interactive").path("type").asText());
-        assertEquals("Ver opcoes",
+        assertEquals("Escolher dia",
                 body.path("interactive").path("action").path("button").asText());
         JsonNode rows = body.path("interactive").path("action")
                 .path("sections").get(0).path("rows");
