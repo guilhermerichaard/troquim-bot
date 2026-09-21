@@ -14,7 +14,6 @@ import java.util.UUID;
  * dentro do limite transacional do {@code InboundReceiptProcessor}.
  */
 @Component
-@ConditionalOnWhatsAppCloud
 public class JpaInboundReceiptStore implements InboundReceiptStore {
 
     private final SpringDataInboundMessageReceiptRepository repository;

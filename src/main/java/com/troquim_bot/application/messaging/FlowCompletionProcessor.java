@@ -5,7 +5,6 @@ import com.troquim_bot.application.booking.BookingIdempotencyStore;
 import com.troquim_bot.application.booking.BookingIdempotencyOutcome;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.conversation.state.ConversationStateService;
-import com.troquim_bot.infrastructure.whatsappcloud.ConditionalOnWhatsAppCloud;
 import com.troquim_bot.whatsapp.flow.application.session.FlowConfirmationOutcome;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSession;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSessionStore;
@@ -29,7 +28,6 @@ import java.util.Optional;
  * outbound quando a Meta reentregar o mesmo nfm_reply.
  */
 @Service
-@ConditionalOnWhatsAppCloud
 @ConditionalOnWhatsAppFlow
 public class FlowCompletionProcessor {
 
@@ -52,6 +50,15 @@ public class FlowCompletionProcessor {
         this.sessionStore = sessionStore;
         this.bookingStore = bookingStore;
         this.conversationStateService = conversationStateService;
+    }
+
+    @Transactional
+    public void markSent(InboundFlowCompletion completion) {
+        if (completion == null) {
+            return;
+        }
+        receiptStore.markSent(
+                completion.provider(), completion.externalMessageId(), null);
     }
 
     @Transactional
