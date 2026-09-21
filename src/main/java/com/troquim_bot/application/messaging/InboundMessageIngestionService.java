@@ -168,7 +168,17 @@ public class InboundMessageIngestionService {
             return true;
         }
         try {
-            OutboundResult result = outboundGateway.sendText(fromPhone, responseText);
+            var presentation = ConversationInteractivePresentation.from(responseText);
+            OutboundResult result;
+            if (presentation.isEmpty()) {
+                result = outboundGateway.sendText(fromPhone, responseText);
+            } else if (presentation.get().type() == ConversationInteractivePresentation.Type.BUTTONS) {
+                result = outboundGateway.sendButtons(
+                        fromPhone, responseText, presentation.get().options());
+            } else {
+                result = outboundGateway.sendList(
+                        fromPhone, responseText, presentation.get().options());
+            }
             receiptProcessor.markSent(provider, externalMessageId, result);
             return true;
         } catch (RuntimeException outboundFailure) {
