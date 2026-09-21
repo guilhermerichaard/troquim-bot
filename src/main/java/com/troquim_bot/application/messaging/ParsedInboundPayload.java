@@ -11,15 +11,24 @@ import java.util.List;
  *
  * @param recognizedEvent true se o payload pertence ao objeto esperado do provedor
  *                        (ex: whatsapp_business_account), mesmo sem mensagens de texto
- * @param textMessages    mensagens de texto neutras (pode ser vazio)
+ * @param textMessages     mensagens de texto neutras (pode ser vazio)
+ * @param flowCompletions   conclusoes de Flow neutras (pode ser vazio)
  */
-public record ParsedInboundPayload(boolean recognizedEvent, List<InboundTextMessage> textMessages) {
+public record ParsedInboundPayload(boolean recognizedEvent,
+                                   List<InboundTextMessage> textMessages,
+                                   List<InboundFlowCompletion> flowCompletions) {
 
     public ParsedInboundPayload {
         textMessages = textMessages == null ? List.of() : List.copyOf(textMessages);
+        flowCompletions = flowCompletions == null ? List.of() : List.copyOf(flowCompletions);
+    }
+
+    /** Compatibilidade para parsers/testes que produzem somente texto. */
+    public ParsedInboundPayload(boolean recognizedEvent, List<InboundTextMessage> textMessages) {
+        this(recognizedEvent, textMessages, List.of());
     }
 
     public static ParsedInboundPayload ignored() {
-        return new ParsedInboundPayload(false, List.of());
+        return new ParsedInboundPayload(false, List.of(), List.of());
     }
 }
