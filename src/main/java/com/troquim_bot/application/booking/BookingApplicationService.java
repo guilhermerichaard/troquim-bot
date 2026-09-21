@@ -291,6 +291,10 @@ public class BookingApplicationService {
         Appointment appointment;
         try {
             appointment = appointmentApplicationService.criarAgendamentoDeReserva(reservation.getId());
+            // O cliente acabou de confirmar um slot que foi revalidado sob a secao critica.
+            // No MVP nao existe uma segunda aprovacao manual do salao: sucesso do booking
+            // significa Appointment CONFIRMADO, na mesma transacao.
+            appointment = appointmentApplicationService.confirmarAgendamento(appointment.getId());
         } catch (HorarioIndisponivelException conflito) {
             compensar(reservation);
             return concluirConflito(chave, servico, rotuloDia, rotuloHorario, nomeCliente);
