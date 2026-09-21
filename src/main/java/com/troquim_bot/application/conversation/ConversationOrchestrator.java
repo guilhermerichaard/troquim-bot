@@ -127,7 +127,7 @@ public class ConversationOrchestrator {
                 return;
             }
 
-            whatsAppAdapter.enviarMensagem(numero, outcome.responseText());
+            enviarResposta(numero, outcome.responseText());
             flowCompletionProcessor.markSent(completion);
             logger.info("Confirmacao pos-Flow enviada (provider={}, id={}).",
                     completion.provider(), completion.externalMessageId());
@@ -140,6 +140,44 @@ public class ConversationOrchestrator {
         } finally {
             lock.unlock();
         }
+    }
+
+    private void enviarResposta(String numero, String resposta) {
+        if (resposta == null || resposta.isBlank()) {
+            return;
+        }
+
+        List<WhatsAppAdapter.QuickReply> opcoes = opcoesRapidas(resposta);
+        if (opcoes.isEmpty()) {
+            whatsAppAdapter.enviarMensagem(numero, resposta);
+            return;
+        }
+        whatsAppAdapter.enviarOpcoes(numero, resposta, opcoes);
+    }
+
+    /**
+     * Somente apresenta como botao decisoes que a Conversation ja tornou explicitas.
+     * Nenhuma regra de negocio nasce aqui; se o provider nao suporta, o texto continua
+     * exatamente o mesmo.
+     */
+    private List<WhatsAppAdapter.QuickReply> opcoesRapidas(String resposta) {
+        if (resposta.contains("1) Agendar")
+                && resposta.contains("2) Meus agendamentos")
+                && resposta.contains("3) Cancelar")) {
+            return List.of(
+                    new WhatsAppAdapter.QuickReply("menu_agendar", "Agendar"),
+                    new WhatsAppAdapter.QuickReply("menu_meus_agendamentos", "Meus agendamentos"),
+                    new WhatsAppAdapter.QuickReply("menu_cancelar", "Cancelar"));
+        }
+
+        if ((resposta.contains("1) Sim") && resposta.contains("2) Nao"))
+                || (resposta.contains("1) Confirmar") && resposta.contains("2) Cancelar"))) {
+            return List.of(
+                    new WhatsAppAdapter.QuickReply("confirmar_sim", "Confirmar"),
+                    new WhatsAppAdapter.QuickReply("confirmar_nao", "Cancelar"));
+        }
+
+        return List.of();
     }
 
     public void receberWebhookWhatsApp(String payload) throws Exception {
@@ -181,7 +219,7 @@ public class ConversationOrchestrator {
                     logger.info("Processando mensagem - messageId: {}, numero: {}", message.messageId(), numero);
 
                     String resposta = processarMensagem(numero, message.mensagem());
-                    whatsAppAdapter.enviarMensagem(numero, resposta);
+                    enviarResposta(numero, resposta);
 
                     logger.info("Resposta enviada - messageId: {}, numero: {}, resposta: {}",
                         message.messageId(), numero, resposta);
