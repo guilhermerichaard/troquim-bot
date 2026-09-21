@@ -28,22 +28,24 @@ public final class ConversationInteractivePresentation {
         if (responseText.contains("1) Agendar")
                 && responseText.contains("2) Meus agendamentos")
                 && responseText.contains("3) Cancelar")) {
-            return Optional.of(Presentation.buttons(List.of(
+            List<OutboundInteractiveOption> options = List.of(
                     new OutboundInteractiveOption("menu_agendar", "Agendar"),
                     new OutboundInteractiveOption("menu_meus_agendamentos", "Meus agendamentos"),
-                    new OutboundInteractiveOption("menu_cancelar", "Cancelar"))));
+                    new OutboundInteractiveOption("menu_cancelar", "Cancelar"));
+            return Optional.of(Presentation.buttons(interactiveBody(responseText, options), options));
         }
 
         if ((responseText.contains("1) Sim") && responseText.contains("2) Nao"))
                 || (responseText.contains("1) Confirmar") && responseText.contains("2) Cancelar"))) {
-            return Optional.of(Presentation.buttons(List.of(
+            List<OutboundInteractiveOption> options = List.of(
                     new OutboundInteractiveOption("confirmar_sim", "Confirmar"),
-                    new OutboundInteractiveOption("confirmar_nao", "Cancelar"))));
+                    new OutboundInteractiveOption("confirmar_nao", "Cancelar"));
+            return Optional.of(Presentation.buttons(interactiveBody(responseText, options), options));
         }
 
         List<OutboundInteractiveOption> numbered = numberedOptions(responseText);
         if (numbered.size() >= 2 && numbered.size() <= 10) {
-            return Optional.of(Presentation.list(numbered));
+            return Optional.of(Presentation.list(interactiveBody(responseText, numbered), numbered));
         }
 
         return Optional.empty();
@@ -67,6 +69,38 @@ public final class ConversationInteractivePresentation {
         };
     }
 
+    private static String interactiveBody(String responseText,
+                                          List<OutboundInteractiveOption> options) {
+        java.util.Set<String> titles = options.stream()
+                .map(option -> option.title().trim().toLowerCase(java.util.Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+
+        java.util.ArrayList<String> kept = new java.util.ArrayList<>();
+        for (String line : responseText.split("\\R")) {
+            String trimmed = line.trim();
+            Matcher matcher = NUMBERED_OPTION.matcher(trimmed);
+            if (matcher.matches()) {
+                String title = matcher.group(2).trim().toLowerCase(java.util.Locale.ROOT);
+                if (titles.contains(title)) {
+                    continue;
+                }
+            }
+
+            String lower = trimmed.toLowerCase(java.util.Locale.ROOT);
+            if (lower.startsWith("digite o numero")
+                    || lower.startsWith("digite apenas o numero")
+                    || lower.startsWith("digite, por exemplo")) {
+                continue;
+            }
+            kept.add(line);
+        }
+
+        String cleaned = String.join("\n", kept)
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+        return cleaned.isBlank() ? responseText : cleaned;
+    }
+
     private static List<OutboundInteractiveOption> numberedOptions(String responseText) {
         ArrayList<OutboundInteractiveOption> options = new ArrayList<>();
         for (String line : responseText.split("\\R")) {
@@ -88,17 +122,20 @@ public final class ConversationInteractivePresentation {
         LIST
     }
 
-    public record Presentation(Type type, List<OutboundInteractiveOption> options) {
+    public record Presentation(Type type, String text,
+                               List<OutboundInteractiveOption> options) {
         public Presentation {
             options = List.copyOf(options);
         }
 
-        public static Presentation buttons(List<OutboundInteractiveOption> options) {
-            return new Presentation(Type.BUTTONS, options);
+        public static Presentation buttons(String text,
+                                           List<OutboundInteractiveOption> options) {
+            return new Presentation(Type.BUTTONS, text, options);
         }
 
-        public static Presentation list(List<OutboundInteractiveOption> options) {
-            return new Presentation(Type.LIST, options);
+        public static Presentation list(String text,
+                                        List<OutboundInteractiveOption> options) {
+            return new Presentation(Type.LIST, text, options);
         }
     }
 }
