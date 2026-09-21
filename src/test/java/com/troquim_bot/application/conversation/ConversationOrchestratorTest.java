@@ -3,6 +3,7 @@ package com.troquim_bot.application.conversation;
 import com.troquim_bot.application.intent.IntentEngine;
 import com.troquim_bot.application.intent.IntentResult;
 import com.troquim_bot.application.intent.IntentType;
+import com.troquim_bot.application.messaging.OutboundInteractiveOption;
 import com.troquim_bot.conversation.StrictMvpMenuService;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import org.junit.jupiter.api.BeforeEach;
