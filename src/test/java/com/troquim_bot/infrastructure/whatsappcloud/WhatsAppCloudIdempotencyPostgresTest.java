@@ -1,5 +1,6 @@
 package com.troquim_bot.infrastructure.whatsappcloud;
 
+import com.troquim_bot.application.messaging.ConversationInteractivePresentation;
 import com.troquim_bot.application.messaging.InboundMessageIngestionService;
 import com.troquim_bot.application.messaging.IngestOutcome;
 import com.troquim_bot.application.messaging.OutboundMessageGateway;
@@ -205,8 +206,11 @@ class WhatsAppCloudIdempotencyPostgresTest {
         ingestionService.ingest(body, sig);
         assertEquals(1, receipts.count(), "nenhuma acao de negocio adicional (sem duplicar)");
         assertEquals(1, outbound.count(), "a resposta foi reenviada exatamente uma vez");
-        assertEquals(persisted, outbound.sent.get(0),
-                "reenviou a resposta PERSISTIDA (prova de que a Conversation nao rodou de novo)");
+        String expectedPresentation = ConversationInteractivePresentation.from(persisted)
+                .map(ConversationInteractivePresentation.Presentation::text)
+                .orElse(persisted);
+        assertEquals(expectedPresentation, outbound.sent.get(0),
+                "retry deve rerenderizar deterministicamente a resposta canonica persistida");
         InboundMessageReceiptJpaEntity afterRetry = receipts
                 .findByProviderAndExternalMessageId("whatsapp_cloud", "wamid.FAIL1").orElseThrow();
         assertEquals("SENT", afterRetry.getStatus(), "apos sucesso do outbound → SENT");
