@@ -327,10 +327,12 @@ public class ConversationBookingGateway {
     }
 
     private List<Appointment> agendamentosAtivosDoCliente(BusinessId businessId, String telefone) {
+        LocalDate hoje = relogio.hoje();
         return customerProfileService.localizarIdOficial(businessId, telefone)
                 .map(appointmentApplicationService::listarAtivosPorCliente)
                 .orElse(List.of()).stream()
                 .filter(appointment -> appointment.pertenceAoTenant(businessId))
+                .filter(appointment -> !appointment.getDate().isBefore(hoje))
                 .toList();
     }
 

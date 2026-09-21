@@ -106,6 +106,10 @@ public class StrictMvpMenuService {
         if (ehConsultaAgendamentos(texto)) {
             return consultarAgendamentos(numero);
         }
+        if (ehCancelarFluxoAtual(texto, step)) {
+            conversationStateService.limparEstado(numero);
+            return "Agendamento atual descartado.\n\n" + menuAcoes();
+        }
         Integer indiceCancelamento = indiceDeCancelamento(texto);
         if (indiceCancelamento != null && step != ConversationStep.AGUARDANDO_CONFIRMACAO) {
             return cancelarAgendamento(numero, indiceCancelamento);
@@ -261,8 +265,7 @@ public class StrictMvpMenuService {
             ConversationState state = conversationStateService.buscarPorNumero(numero);
             var draft = state.getDraftAtual();
             if (draft != null && draft.getServicoSugerido() != null) {
-                if (texto.equals("1") || texto.equals("sim") || texto.equals("isso")
-                        || texto.equals("correto") || texto.equals("confirmar")) {
+                if (ehConfirmacaoPositiva(texto)) {
                     String confirmado = draft.getServicoSugerido();
                     String entradaOriginal = draft.getEntradaServicoSugerida();
                     conversationBookingGateway.aprenderCorrecaoDeServico(entradaOriginal, confirmado);
@@ -271,8 +274,7 @@ public class StrictMvpMenuService {
                     conversationStateService.atualizarServico(numero, confirmado);
                     return menuDias();
                 }
-                if (texto.equals("2") || texto.equals("nao") || texto.equals("não")
-                        || texto.equals("outro")) {
+                if (ehConfirmacaoNegativa(texto)) {
                     draft.setServicoSugerido(null);
                     draft.setEntradaServicoSugerida(null);
                     conversationStateService.persistir(state);
@@ -559,7 +561,7 @@ public class StrictMvpMenuService {
     }
 
     private String processarConfirmacao(String numero, String texto) {
-        if (texto.contains("2") || texto.contains("cancelar") || texto.contains("nao")) {
+        if (ehConfirmacaoNegativa(texto)) {
             conversationStateService.limparEstado(numero);
             return "Agendamento cancelado.\n\n" +
                    "Deseja fazer algo mais?\n\n" +
@@ -567,7 +569,7 @@ public class StrictMvpMenuService {
                    "2) Meus agendamentos\n" +
                    "3) Cancelar";
         }
-        if (texto.contains("1") || texto.contains("confirmar") || texto.contains("sim")) {
+        if (ehConfirmacaoPositiva(texto)) {
             ConversationState state = conversationStateService.buscarPorNumero(numero);
             var draft = state.getDraftAtual();
             if (draft == null || !draft.isCompleto()) {
@@ -737,6 +739,43 @@ public class StrictMvpMenuService {
                 + "1) Agendar\n"
                 + "2) Meus agendamentos\n"
                 + "3) Cancelar";
+    }
+
+    private boolean ehCancelarFluxoAtual(String texto, ConversationStep step) {
+        boolean emFormulario = step == ConversationStep.AGUARDANDO_SERVICO
+                || step == ConversationStep.AGUARDANDO_DIA
+                || step == ConversationStep.AGUARDANDO_HORARIO
+                || step == ConversationStep.AGUARDANDO_NOME;
+
+        if (!emFormulario) {
+            return false;
+        }
+
+        // "cancelar agendamento"/"desmarcar" continuam sendo comandos explicitos para
+        // cancelar um Appointment persistido. As formas abaixo abandonam apenas o draft.
+        return texto.equals("cancelar")
+                || texto.equals("cancela")
+                || texto.equals("sair")
+                || texto.equals("parar")
+                || texto.equals("deixa")
+                || texto.equals("deixa pra la")
+                || texto.equals("deixa para la");
+    }
+
+    private boolean ehConfirmacaoPositiva(String texto) {
+        return switch (texto) {
+            case "1", "sim", "s", "isso", "isso mesmo", "correto", "certo",
+                    "confirmar", "confirma", "pode ser", "ok", "beleza" -> true;
+            default -> false;
+        };
+    }
+
+    private boolean ehConfirmacaoNegativa(String texto) {
+        return switch (texto) {
+            case "2", "nao", "n", "negativo", "outro", "cancelar", "cancela",
+                    "deixa", "deixa pra la", "deixa para la" -> true;
+            default -> false;
+        };
     }
 
     private boolean ehComandoAgendar(String texto) {
