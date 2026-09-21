@@ -6,6 +6,7 @@ import com.troquim_bot.application.booking.BookingIdempotencyOutcome;
 import com.troquim_bot.application.booking.BookingIdempotencyRecord;
 import com.troquim_bot.application.booking.BookingIdempotencyStore;
 import com.troquim_bot.appointment.AppointmentId;
+import com.troquim_bot.business.BusinessId;
 
 import java.util.Map;
 import java.util.Optional;
@@ -80,6 +81,16 @@ public final class InMemoryBookingIdempotencyStore implements BookingIdempotency
     @Override
     public Optional<BookingIdempotencyRecord> buscar(String commandKey) {
         return Optional.ofNullable(registros.get(commandKey));
+    }
+
+    @Override
+    public Optional<BookingIdempotencyRecord> buscarConfirmadoPorBase(BusinessId businessId,
+                                                                       String commandBase) {
+        if (businessId == null || commandBase == null || commandBase.isBlank()) {
+            return Optional.empty();
+        }
+        String key = confirmadaTenantBase.get(businessId.getValue() + "|" + commandBase);
+        return Optional.ofNullable(key).map(registros::get);
     }
 
     /**

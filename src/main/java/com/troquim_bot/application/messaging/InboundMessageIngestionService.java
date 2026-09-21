@@ -3,6 +3,8 @@ package com.troquim_bot.application.messaging;
 import com.troquim_bot.infrastructure.whatsappcloud.ConditionalOnWhatsAppCloud;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,6 +31,7 @@ public class InboundMessageIngestionService {
     private final InboundMessageParser parser;
     private final InboundReceiptProcessor receiptProcessor;
     private final OutboundMessageGateway outboundGateway;
+    private final FlowCompletionProcessor flowCompletionProcessor;
 
     // Serializa o processamento por telefone (mesma conversa) para evitar o read-modify-write
     // concorrente de ConversationState (lost update). Mesmo padrão in-memory já usado no fluxo
@@ -37,6 +40,20 @@ public class InboundMessageIngestionService {
     // Não segura conexão de banco durante o outbound — a transação do processOnce já comitou.
     private final ConcurrentHashMap<String, ReentrantLock> locksPorNumero = new ConcurrentHashMap<>();
 
+    @Autowired
+    public InboundMessageIngestionService(WebhookSignatureVerifier signatureVerifier,
+                                          InboundMessageParser parser,
+                                          InboundReceiptProcessor receiptProcessor,
+                                          OutboundMessageGateway outboundGateway,
+                                          ObjectProvider<FlowCompletionProcessor> flowCompletionProcessor) {
+        this.signatureVerifier = signatureVerifier;
+        this.parser = parser;
+        this.receiptProcessor = receiptProcessor;
+        this.outboundGateway = outboundGateway;
+        this.flowCompletionProcessor = flowCompletionProcessor.getIfAvailable();
+    }
+
+    /** Compatibilidade para testes/unitarios sem capacidade de Flow. */
     public InboundMessageIngestionService(WebhookSignatureVerifier signatureVerifier,
                                           InboundMessageParser parser,
                                           InboundReceiptProcessor receiptProcessor,
@@ -45,6 +62,7 @@ public class InboundMessageIngestionService {
         this.parser = parser;
         this.receiptProcessor = receiptProcessor;
         this.outboundGateway = outboundGateway;
+        this.flowCompletionProcessor = null;
     }
 
     public IngestOutcome ingest(byte[] rawBody, String signatureHeader) {
@@ -67,10 +85,48 @@ public class InboundMessageIngestionService {
                 outboundFailed = true;
             }
         }
+        for (InboundFlowCompletion completion : parsed.flowCompletions()) {
+            if (!processFlowCompletion(completion)) {
+                outboundFailed = true;
+            }
+        }
         // Se algum envio outbound falhou, NÃO retornar 2xx: a WhatsApp Cloud API só reentrega
         // o evento em resposta não-2xx. O 503 faz a Meta reentregar, e a re-entrega tenta
         // somente o outbound (a conversa não é reprocessada — receipt PENDING).
         return outboundFailed ? IngestOutcome.OUTBOUND_UNAVAILABLE : IngestOutcome.ACCEPTED;
+    }
+
+    private boolean processFlowCompletion(InboundFlowCompletion completion) {
+        FlowCompletionProcessor processor = flowCompletionProcessor;
+        if (processor == null) {
+            // Flow desligado: reconhece o evento sem efeito. Nao e erro de transporte.
+            return true;
+        }
+
+        ReentrantLock lock = locksPorNumero.computeIfAbsent(
+                completion.fromPhone(), k -> new ReentrantLock());
+        lock.lock();
+        try {
+            ProcessOutcome outcome;
+            try {
+                outcome = processor.processOnce(completion);
+            } catch (ConcurrentReceiptClaimException concurrentDuplicate) {
+                log.info("Conclusao de Flow duplicada concorrente ignorada (provider={}, id={}).",
+                        completion.provider(), completion.externalMessageId());
+                return true;
+            }
+
+            if (!outcome.processed()) {
+                return true;
+            }
+            return sendReply(
+                    completion.provider(),
+                    completion.externalMessageId(),
+                    completion.fromPhone(),
+                    outcome.responseText());
+        } finally {
+            lock.unlock();
+        }
     }
 
     /** @return {@code false} se o envio outbound falhou (evento deve ser reentregue pela Meta). */
@@ -97,28 +153,29 @@ public class InboundMessageIngestionService {
                 return true;
             }
 
-            return sendReply(message, outcome.responseText());
+            return sendReply(
+                    message.provider(), message.externalMessageId(),
+                    message.fromPhone(), outcome.responseText());
         } finally {
             lock.unlock();
         }
     }
 
     /** @return {@code false} se o envio outbound falhou. */
-    private boolean sendReply(InboundTextMessage message, String responseText) {
+    private boolean sendReply(String provider, String externalMessageId,
+                              String fromPhone, String responseText) {
         if (responseText == null || responseText.isBlank()) {
             return true;
         }
         try {
-            OutboundResult result = outboundGateway.sendText(message.fromPhone(), responseText);
-            receiptProcessor.markSent(message, result);
+            OutboundResult result = outboundGateway.sendText(fromPhone, responseText);
+            receiptProcessor.markSent(provider, externalMessageId, result);
             return true;
         } catch (RuntimeException outboundFailure) {
-            // O receipt já está durável (PENDING) com a resposta persistida. Não reprocessa
-            // (não duplica ação de negócio); a resposta NÃO se perde — o webhook responde
-            // não-2xx para a Meta reentregar e o retry tenta somente o outbound.
+            // O receipt ja esta duravel (PENDING) com a resposta persistida. Nao
+            // reprocessa o evento; a reentrega tenta somente o outbound.
             log.error("Falha no envio outbound (provider={}, id={}, erro={}). Receipt PENDING; solicitando reentrega.",
-                    message.provider(), message.externalMessageId(),
-                    outboundFailure.getClass().getSimpleName());
+                    provider, externalMessageId, outboundFailure.getClass().getSimpleName());
             return false;
         }
     }

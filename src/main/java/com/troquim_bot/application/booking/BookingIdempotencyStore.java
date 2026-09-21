@@ -1,6 +1,7 @@
 package com.troquim_bot.application.booking;
 
 import com.troquim_bot.appointment.AppointmentId;
+import com.troquim_bot.business.BusinessId;
 
 import java.util.Optional;
 
@@ -82,4 +83,11 @@ public interface BookingIdempotencyStore {
 
     /** Consulta direta, sem reivindicar. Usada por testes e diagnóstico. */
     Optional<BookingIdempotencyRecord> buscar(String commandKey);
+
+    /**
+     * Localiza o booking confirmado produzido por uma base (ex.: flow_token), escopada
+     * pelo tenant. Usada para reconstruir apresentação pós-Flow sem depender do estado
+     * auxiliar da FlowSession.
+     */
+    Optional<BookingIdempotencyRecord> buscarConfirmadoPorBase(BusinessId businessId, String commandBase);
 }

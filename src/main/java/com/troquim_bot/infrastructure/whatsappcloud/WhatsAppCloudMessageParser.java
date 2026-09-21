@@ -3,6 +3,7 @@ package com.troquim_bot.infrastructure.whatsappcloud;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.conversation.PhoneNumberNormalizer;
+import com.troquim_bot.application.messaging.InboundFlowCompletion;
 import com.troquim_bot.application.messaging.InboundMessageParser;
 import com.troquim_bot.application.messaging.InboundTextMessage;
 import com.troquim_bot.application.messaging.ParsedInboundPayload;
@@ -66,6 +67,7 @@ public class WhatsAppCloudMessageParser implements InboundMessageParser {
         }
 
         List<InboundTextMessage> textMessages = new ArrayList<>();
+        List<InboundFlowCompletion> flowCompletions = new ArrayList<>();
         for (JsonNode entry : root.path("entry")) {
             for (JsonNode change : entry.path("changes")) {
                 JsonNode value = change.path("value");
@@ -77,11 +79,46 @@ public class WhatsAppCloudMessageParser implements InboundMessageParser {
                 }
                 for (JsonNode message : value.path("messages")) {
                     toTextMessage(message).ifPresent(textMessages::add);
+                    toFlowCompletion(message).ifPresent(flowCompletions::add);
                 }
                 // value.statuses[] é intencionalmente ignorado (status-only → sem ação).
             }
         }
-        return new ParsedInboundPayload(true, textMessages);
+        return new ParsedInboundPayload(true, textMessages, flowCompletions);
+    }
+
+    private java.util.Optional<InboundFlowCompletion> toFlowCompletion(JsonNode message) {
+        if (!"interactive".equals(message.path("type").asText())) {
+            return java.util.Optional.empty();
+        }
+
+        JsonNode interactive = message.path("interactive");
+        if (!"nfm_reply".equals(interactive.path("type").asText())) {
+            return java.util.Optional.empty();
+        }
+
+        String id = textOrNull(message.path("id"));
+        String from = PhoneNumberNormalizer.normalizar(textOrNull(message.path("from")));
+        String responseJson = textOrNull(interactive.path("nfm_reply").path("response_json"));
+        if (id == null || from == null || responseJson == null || responseJson.isBlank()) {
+            return java.util.Optional.empty();
+        }
+
+        String flowToken;
+        try {
+            JsonNode response = objectMapper.readTree(responseJson);
+            flowToken = textOrNull(response.path("flow_token"));
+        } catch (Exception invalidResponse) {
+            return java.util.Optional.empty();
+        }
+
+        if (flowToken == null || flowToken.isBlank()) {
+            return java.util.Optional.empty();
+        }
+
+        long timestamp = parseEpoch(textOrNull(message.path("timestamp")));
+        return java.util.Optional.of(new InboundFlowCompletion(
+                PROVIDER, id, from, flowToken, timestamp));
     }
 
     private boolean phoneNumberIdMatchesPilot(JsonNode value) {

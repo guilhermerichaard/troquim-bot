@@ -103,7 +103,13 @@ public class InboundReceiptProcessor {
     /** Marca SENT após envio outbound bem-sucedido. Transação própria, curta. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markSent(InboundTextMessage message, OutboundResult result) {
-        receiptStore.markSent(message.provider(), message.externalMessageId(),
+        markSent(message.provider(), message.externalMessageId(), result);
+    }
+
+    /** Marca SENT para qualquer evento inbound provider-neutral, inclusive conclusao de Flow. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markSent(String provider, String externalMessageId, OutboundResult result) {
+        receiptStore.markSent(provider, externalMessageId,
                 result == null ? null : result.externalMessageId());
     }
 
