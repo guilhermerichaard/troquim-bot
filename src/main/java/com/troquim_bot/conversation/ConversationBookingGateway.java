@@ -6,6 +6,8 @@ import com.troquim_bot.application.booking.BookingCommandKey;
 import com.troquim_bot.application.booking.BookingResult;
 import com.troquim_bot.application.catalog.ConfirmarAgendamentoDoCatalogo;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.application.language.ServiceInterpretationLearningStore;
+import com.troquim_bot.application.service.ServiceApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.RelogioDoNegocio;
@@ -95,6 +97,8 @@ public class ConversationBookingGateway {
     private final AvailabilityApplicationService availabilityApplicationService;
     private final AppointmentApplicationService appointmentApplicationService;
     private final CustomerProfileService customerProfileService;
+    private final ServiceApplicationService serviceApplicationService;
+    private final ServiceInterpretationLearningStore interpretationLearningStore;
     private final ConfirmarAgendamentoDoCatalogo confirmarAgendamento;
     private final RelogioDoNegocio relogio;
     private final TimeInputParser timeInputParser;
@@ -104,6 +108,8 @@ public class ConversationBookingGateway {
                                       AvailabilityApplicationService availabilityApplicationService,
                                       AppointmentApplicationService appointmentApplicationService,
                                       CustomerProfileService customerProfileService,
+                                      ServiceApplicationService serviceApplicationService,
+                                      ServiceInterpretationLearningStore interpretationLearningStore,
                                       ConfirmarAgendamentoDoCatalogo confirmarAgendamento,
                                       RelogioDoNegocio relogio) {
         this.tenantProvider = tenantProvider;
@@ -111,6 +117,8 @@ public class ConversationBookingGateway {
         this.availabilityApplicationService = availabilityApplicationService;
         this.appointmentApplicationService = appointmentApplicationService;
         this.customerProfileService = customerProfileService;
+        this.serviceApplicationService = serviceApplicationService;
+        this.interpretationLearningStore = interpretationLearningStore;
         this.confirmarAgendamento = confirmarAgendamento;
         this.relogio = relogio;
         this.timeInputParser = new TimeInputParser();
@@ -126,6 +134,24 @@ public class ConversationBookingGateway {
     public Optional<String> nomeCanonicoDoServico(String nomeInterpretado) {
         ServicoResolvido resolvido = resolverServico(nomeInterpretado);
         return resolvido.ok() ? Optional.of(resolvido.item().nome()) : Optional.empty();
+    }
+
+    /**
+     * Registra uma correcao somente depois da confirmacao explicita do cliente.
+     * O ServiceId e resolvido do catalogo atual; nenhuma string sugerida vira regra por si.
+     */
+    public void aprenderCorrecaoDeServico(String entradaOriginal, String nomeCanonicoConfirmado) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        String entrada = normalizar(entradaOriginal);
+        if (entrada.isBlank()) {
+            return;
+        }
+
+        consultarCatalogo.consultar(businessId).itens().stream()
+                .filter(item -> item.nome().equalsIgnoreCase(nomeCanonicoConfirmado))
+                .findFirst()
+                .ifPresent(item -> interpretationLearningStore.aprender(
+                        businessId, chaveDeCorrecao(item.nome(), entrada), item.id()));
     }
 
     /**
@@ -309,11 +335,9 @@ public class ConversationBookingGateway {
     }
 
     private Agendamento paraApresentacao(BusinessId businessId, Appointment appointment) {
-        String nomeServico = consultarCatalogo.consultar(businessId).itens().stream()
-                .filter(item -> item.id().equals(appointment.getServiceId()))
-                .map(ConsultarCatalogo.ItemDeCatalogo::nome)
-                .findFirst()
-                .orElse("Servico");
+        String nomeServico = serviceApplicationService.buscarPorId(appointment.getServiceId())
+                .map(com.troquim_bot.service.Service::getNome)
+                .orElse("Servico legado");
 
         return new Agendamento(
                 nomeServico,
@@ -349,6 +373,16 @@ public class ConversationBookingGateway {
             return new ServicoResolvido(Status.CATALOGO_NAO_CONFIGURADO, null, null);
         }
 
+        Optional<ServiceId> aprendido = buscarAprendido(businessId, nomeInterpretado);
+        if (aprendido.isPresent()) {
+            Optional<ConsultarCatalogo.ItemDeCatalogo> itemAprendido = catalogo.itens().stream()
+                    .filter(item -> item.id().equals(aprendido.get()))
+                    .findFirst();
+            if (itemAprendido.isPresent()) {
+                return resolverProfissional(itemAprendido.get());
+            }
+        }
+
         List<ConsultarCatalogo.ItemDeCatalogo> candidatos = catalogo.itens().stream()
                 .filter(item -> mesmoServico(item.nome(), nomeInterpretado))
                 .toList();
@@ -356,13 +390,15 @@ public class ConversationBookingGateway {
             return new ServicoResolvido(Status.SERVICO_INDISPONIVEL, null, null);
         }
 
-        ConsultarCatalogo.ItemDeCatalogo item = candidatos.get(0);
+        return resolverProfissional(candidatos.get(0));
+    }
+
+    private ServicoResolvido resolverProfissional(ConsultarCatalogo.ItemDeCatalogo item) {
         if (item.profissionais().size() != 1) {
             // A conversa textual ainda nao coleta profissional. Nunca escolhemos o primeiro
             // silenciosamente: isso seria uma decisao de negocio fabricada pelo canal.
             return new ServicoResolvido(Status.PROFISSIONAL_AMBIGUO, item, null);
         }
-
         return new ServicoResolvido(Status.OK, item, item.profissionais().get(0).id());
     }
 
@@ -396,6 +432,35 @@ public class ConversationBookingGateway {
         } catch (RuntimeException invalido) {
             return Optional.empty();
         }
+    }
+
+    private Optional<ServiceId> buscarAprendido(BusinessId businessId, String entrada) {
+        String normalizada = normalizar(entrada);
+        java.util.LinkedHashSet<ServiceId> encontrados = new java.util.LinkedHashSet<>();
+
+        interpretationLearningStore.buscar(businessId, normalizada).ifPresent(encontrados::add);
+        for (String token : normalizada.split("\\s+")) {
+            interpretationLearningStore.buscar(businessId, token).ifPresent(encontrados::add);
+        }
+
+        return encontrados.size() == 1
+                ? Optional.of(encontrados.iterator().next())
+                : Optional.empty();
+    }
+
+    private static String chaveDeCorrecao(String nomeCanonico, String entradaNormalizada) {
+        String alvo = singularSimples(normalizar(nomeCanonico));
+        String melhor = entradaNormalizada;
+        int melhorDistancia = distanciaLevenshtein(alvo, singularSimples(entradaNormalizada));
+
+        for (String token : entradaNormalizada.split("\\s+")) {
+            int distancia = distanciaLevenshtein(alvo, singularSimples(token));
+            if (distancia < melhorDistancia) {
+                melhorDistancia = distancia;
+                melhor = token;
+            }
+        }
+        return melhor;
     }
 
     private static boolean mesmoServico(String catalogo, String interpretado) {

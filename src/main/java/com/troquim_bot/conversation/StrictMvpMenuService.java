@@ -89,6 +89,9 @@ public class StrictMvpMenuService {
                 conversationStateService.persistir(resetState);
                 return menuPrincipal();
             }
+            if (action instanceof ConversationNavigationPolicy.Back) {
+                return voltarUmaEtapa(numero, state);
+            }
         }
 
         String texto = normalizar(mensagem);
@@ -133,8 +136,59 @@ public class StrictMvpMenuService {
         if (step == ConversationStep.AGUARDANDO_CONFIRMACAO) {
             return processarConfirmacao(numero, texto);
         }
+        if (step == ConversationStep.AGUARDANDO_CANCELAMENTO) {
+            if (texto.matches("^\\d+$")) {
+                try {
+                    return cancelarAgendamento(numero, Integer.parseInt(texto) - 1);
+                } catch (NumberFormatException invalido) {
+                    return cancelarAgendamento(numero);
+                }
+            }
+            return cancelarAgendamento(numero);
+        }
 
         return null;
+    }
+
+    private String voltarUmaEtapa(String numero, ConversationState state) {
+        if (state == null) {
+            return menuPrincipal();
+        }
+
+        var draft = state.getDraftAtual();
+        switch (state.getStep()) {
+            case AGUARDANDO_SERVICO, INICIO, FINALIZADO, AGUARDANDO_CANCELAMENTO -> {
+                conversationStateService.limparEstado(numero);
+                return menuPrincipal();
+            }
+            case AGUARDANDO_DIA -> {
+                if (draft != null) {
+                    draft.setServico(null);
+                    draft.setServicoSugerido(null);
+                    draft.setEntradaServicoSugerida(null);
+                }
+                state.setStep(ConversationStep.AGUARDANDO_SERVICO);
+                conversationStateService.persistir(state);
+                return menuServicos();
+            }
+            case AGUARDANDO_HORARIO -> {
+                if (draft != null) {
+                    draft.setDia(null);
+                }
+                state.setStep(ConversationStep.AGUARDANDO_DIA);
+                conversationStateService.persistir(state);
+                return menuDias();
+            }
+            case AGUARDANDO_NOME, AGUARDANDO_CONFIRMACAO -> {
+                if (draft != null) {
+                    draft.setHorario(null);
+                }
+                state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+                conversationStateService.persistir(state);
+                return menuHorarios(numero);
+            }
+        }
+        return menuPrincipal();
     }
 
     private String processarEscolhaMenuPrincipal(String numero, String texto) {
@@ -210,19 +264,24 @@ public class StrictMvpMenuService {
                 if (texto.equals("1") || texto.equals("sim") || texto.equals("isso")
                         || texto.equals("correto") || texto.equals("confirmar")) {
                     String confirmado = draft.getServicoSugerido();
+                    String entradaOriginal = draft.getEntradaServicoSugerida();
+                    conversationBookingGateway.aprenderCorrecaoDeServico(entradaOriginal, confirmado);
                     draft.setServicoSugerido(null);
+                    draft.setEntradaServicoSugerida(null);
                     conversationStateService.atualizarServico(numero, confirmado);
                     return menuDias();
                 }
                 if (texto.equals("2") || texto.equals("nao") || texto.equals("não")
                         || texto.equals("outro")) {
                     draft.setServicoSugerido(null);
+                    draft.setEntradaServicoSugerida(null);
                     conversationStateService.persistir(state);
                     return menuServicos();
                 }
                 // O cliente escreveu outra coisa: descarta a sugestao antiga e interpreta
                 // a nova mensagem normalmente.
                 draft.setServicoSugerido(null);
+                draft.setEntradaServicoSugerida(null);
                 conversationStateService.persistir(state);
             }
 
@@ -250,6 +309,7 @@ public class StrictMvpMenuService {
                     ConversationState atual = conversationStateService.buscarPorNumero(numero);
                     if (atual.getDraftAtual() != null) {
                         atual.getDraftAtual().setServicoSugerido(sugestao.get());
+                        atual.getDraftAtual().setEntradaServicoSugerida(mensagemOriginal);
                         conversationStateService.persistir(atual);
                     }
                     return "Voce quis dizer " + sugestao.get() + "?\n\n"
@@ -598,7 +658,7 @@ public class StrictMvpMenuService {
                 var a = ativos.get(i);
                 sb.append(i + 1).append(") ")
                         .append(a.servico()).append(" em ")
-                        .append(a.data()).append(" as ")
+                        .append(formatarData(a.data())).append(" as ")
                         .append(ConversationBookingGateway.formatarHorario(a.horario()))
                         .append(a.confirmado() ? " - CONFIRMADO" : " - PENDENTE")
                         .append("\n");
@@ -634,11 +694,14 @@ public class StrictMvpMenuService {
                 var a = ativos.get(i);
                 sb.append(i + 1).append(") ")
                         .append(a.servico()).append(" em ")
-                        .append(a.data()).append(" as ")
+                        .append(formatarData(a.data())).append(" as ")
                         .append(ConversationBookingGateway.formatarHorario(a.horario()))
                         .append("\n");
             }
-            sb.append("\nDigite, por exemplo: cancelar 1");
+            ConversationState state = conversationStateService.buscarPorNumero(numero);
+            state.setStep(ConversationStep.AGUARDANDO_CANCELAMENTO);
+            conversationStateService.persistir(state);
+            sb.append("\nDigite apenas o numero ou, por exemplo: cancelar 1");
             return sb.toString();
         }
 
@@ -664,7 +727,7 @@ public class StrictMvpMenuService {
 
         conversationStateService.limparEstado(numero);
         var a = cancelado.get();
-        return "Agendamento cancelado com sucesso: " + a.servico() + " em " + a.data()
+        return "Agendamento cancelado com sucesso: " + a.servico() + " em " + formatarData(a.data())
                 + " as " + ConversationBookingGateway.formatarHorario(a.horario())
                 + ".\n\n" + menuAcoes();
     }
@@ -713,6 +776,13 @@ public class StrictMvpMenuService {
         } catch (NumberFormatException invalido) {
             return null;
         }
+    }
+
+    private String formatarData(java.time.LocalDate data) {
+        if (data == null) {
+            return "";
+        }
+        return String.format("%02d/%02d/%04d", data.getDayOfMonth(), data.getMonthValue(), data.getYear());
     }
 
     private String normalizar(String texto) {
