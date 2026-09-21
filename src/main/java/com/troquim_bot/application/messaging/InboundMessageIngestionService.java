@@ -3,6 +3,7 @@ package com.troquim_bot.application.messaging;
 import com.troquim_bot.infrastructure.whatsappcloud.ConditionalOnWhatsAppCloud;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +40,7 @@ public class InboundMessageIngestionService {
     // Não segura conexão de banco durante o outbound — a transação do processOnce já comitou.
     private final ConcurrentHashMap<String, ReentrantLock> locksPorNumero = new ConcurrentHashMap<>();
 
+    @Autowired
     public InboundMessageIngestionService(WebhookSignatureVerifier signatureVerifier,
                                           InboundMessageParser parser,
                                           InboundReceiptProcessor receiptProcessor,
