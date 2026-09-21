@@ -150,6 +150,38 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
     }
 
     @Override
+    public void enviarLista(String numero, String texto, List<ListItem> itens) {
+        if (itens == null || itens.isEmpty()) {
+            enviarMensagem(numero, texto);
+            return;
+        }
+
+        String numeroNormalizado = WhatsAppContactResolver.normalizeForOutgoing(numero);
+        List<Map<String, Object>> rows = itens.stream()
+                .map(item -> Map.<String, Object>of(
+                        "title", limitar(item.titulo(), 24),
+                        "description", limitar(item.descricao() == null ? "" : item.descricao(), 72),
+                        "rowId", item.id()))
+                .toList();
+
+        evolutionService.enviarLista(
+                numeroNormalizado,
+                "Troquim",
+                texto,
+                "Ver opcoes",
+                List.of(Map.of(
+                        "title", "Escolha uma opcao",
+                        "rows", rows)));
+    }
+
+    private String limitar(String valor, int max) {
+        if (valor == null || valor.length() <= max) {
+            return valor == null ? "" : valor;
+        }
+        return valor.substring(0, Math.max(1, max - 1)) + "…";
+    }
+
+    @Override
     public void enviarOpcoes(String numero, String texto, List<QuickReply> opcoes) {
         if (opcoes == null || opcoes.isEmpty() || opcoes.size() > 3) {
             enviarMensagem(numero, texto);
