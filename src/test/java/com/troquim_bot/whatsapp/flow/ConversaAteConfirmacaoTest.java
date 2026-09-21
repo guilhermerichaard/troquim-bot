@@ -324,6 +324,40 @@ class ConversaAteConfirmacaoTest {
         assertTrue(depois.toLowerCase().contains("nao tem agendamentos ativos"), depois);
     }
 
+    @Test
+    @DisplayName("24. erro de digitacao sugere servico do catalogo e exige confirmacao")
+    void erroDeDigitacaoSugereServicoSemInventar() {
+        menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+
+        String sugestao = menu.processarMenu(
+                TELEFONE, "unhs", conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(sugestao.contains("Voce quis dizer " + CatalogoDeTeste.UNHAS), sugestao);
+        assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
+                conversationStateService.buscarPorNumero(TELEFONE).getStep(),
+                "Sugestao nao pode decidir pelo cliente");
+
+        String confirmado = menu.processarMenu(
+                TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(confirmado.toLowerCase().contains("dia"), confirmado);
+        assertEquals(CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE).getDraftAtual().getServico());
+    }
+
+    @Test
+    @DisplayName("25. frase natural com servico do catalogo avanca sem lista rigida")
+    void fraseNaturalComServicoDoCatalogo() {
+        menu.processarMenu(TELEFONE, "1", conversationStateService.buscarPorNumero(TELEFONE));
+
+        String resposta = menu.processarMenu(
+                TELEFONE, "quero fazer unhas",
+                conversationStateService.buscarPorNumero(TELEFONE));
+
+        assertTrue(resposta.toLowerCase().contains("dia"), resposta);
+        assertEquals(CatalogoDeTeste.UNHAS,
+                conversationStateService.buscarPorNumero(TELEFONE).getDraftAtual().getServico());
+    }
+
     // ==================== helpers ====================
 
     private JsonNode trocar(String corpoClaro) throws Exception {
