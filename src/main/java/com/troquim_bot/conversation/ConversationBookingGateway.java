@@ -151,7 +151,7 @@ public class ConversationBookingGateway {
                 .filter(item -> item.nome().equalsIgnoreCase(nomeCanonicoConfirmado))
                 .findFirst()
                 .ifPresent(item -> interpretationLearningStore.aprender(
-                        businessId, entrada, item.id()));
+                        businessId, chaveDeCorrecao(item.nome(), entrada), item.id()));
     }
 
     /**
@@ -373,8 +373,7 @@ public class ConversationBookingGateway {
             return new ServicoResolvido(Status.CATALOGO_NAO_CONFIGURADO, null, null);
         }
 
-        Optional<ServiceId> aprendido = interpretationLearningStore.buscar(
-                businessId, normalizar(nomeInterpretado));
+        Optional<ServiceId> aprendido = buscarAprendido(businessId, nomeInterpretado);
         if (aprendido.isPresent()) {
             Optional<ConsultarCatalogo.ItemDeCatalogo> itemAprendido = catalogo.itens().stream()
                     .filter(item -> item.id().equals(aprendido.get()))
@@ -433,6 +432,35 @@ public class ConversationBookingGateway {
         } catch (RuntimeException invalido) {
             return Optional.empty();
         }
+    }
+
+    private Optional<ServiceId> buscarAprendido(BusinessId businessId, String entrada) {
+        String normalizada = normalizar(entrada);
+        java.util.LinkedHashSet<ServiceId> encontrados = new java.util.LinkedHashSet<>();
+
+        interpretationLearningStore.buscar(businessId, normalizada).ifPresent(encontrados::add);
+        for (String token : normalizada.split("\\s+")) {
+            interpretationLearningStore.buscar(businessId, token).ifPresent(encontrados::add);
+        }
+
+        return encontrados.size() == 1
+                ? Optional.of(encontrados.iterator().next())
+                : Optional.empty();
+    }
+
+    private static String chaveDeCorrecao(String nomeCanonico, String entradaNormalizada) {
+        String alvo = singularSimples(normalizar(nomeCanonico));
+        String melhor = entradaNormalizada;
+        int melhorDistancia = distanciaLevenshtein(alvo, singularSimples(entradaNormalizada));
+
+        for (String token : entradaNormalizada.split("\\s+")) {
+            int distancia = distanciaLevenshtein(alvo, singularSimples(token));
+            if (distancia < melhorDistancia) {
+                melhorDistancia = distancia;
+                melhor = token;
+            }
+        }
+        return melhor;
     }
 
     private static boolean mesmoServico(String catalogo, String interpretado) {
