@@ -9,6 +9,7 @@ import com.troquim_bot.infrastructure.whatsappcloud.ConditionalOnWhatsAppCloud;
 import com.troquim_bot.whatsapp.flow.application.session.FlowConfirmationOutcome;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSession;
 import com.troquim_bot.whatsapp.flow.application.session.FlowSessionStore;
+import com.troquim_bot.whatsapp.flow.infrastructure.crypto.ConditionalOnWhatsAppFlow;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ import java.util.Optional;
  */
 @Service
 @ConditionalOnWhatsAppCloud
+@ConditionalOnWhatsAppFlow
 public class FlowCompletionProcessor {
 
     private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
