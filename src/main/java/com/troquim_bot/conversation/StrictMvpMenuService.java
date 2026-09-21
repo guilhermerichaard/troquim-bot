@@ -50,6 +50,7 @@ public class StrictMvpMenuService {
     private final TimeInputParser timeInputParser;
     private final boolean strictMvpEnabled;
     private final ConversationBookingGateway conversationBookingGateway;
+    private final SaudacaoDoNegocio saudacaoDoNegocio;
 
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
@@ -60,13 +61,25 @@ public class StrictMvpMenuService {
                 aberturaDeAgenda, conversationMode, null);
     }
 
-    @Autowired
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
                                 BookingApplicationService bookingApplicationService,
                                 ObjectProvider<AberturaDeAgenda> aberturaDeAgenda,
                                 @Value("${conversation.mode:STRICT_MVP}") String conversationMode,
                                 ConversationBookingGateway conversationBookingGateway) {
+        this(conversationStateService, availabilityApplicationService, bookingApplicationService,
+                aberturaDeAgenda, conversationMode, conversationBookingGateway,
+                new SaudacaoDoNegocio(new com.troquim_bot.availability.RelogioDoNegocio()));
+    }
+
+    @Autowired
+    public StrictMvpMenuService(ConversationStateService conversationStateService,
+                                AvailabilityApplicationService availabilityApplicationService,
+                                BookingApplicationService bookingApplicationService,
+                                ObjectProvider<AberturaDeAgenda> aberturaDeAgenda,
+                                @Value("${conversation.mode:STRICT_MVP}") String conversationMode,
+                                ConversationBookingGateway conversationBookingGateway,
+                                SaudacaoDoNegocio saudacaoDoNegocio) {
         this.conversationStateService = conversationStateService;
         this.availabilityApplicationService = availabilityApplicationService;
         this.bookingApplicationService = bookingApplicationService;
@@ -75,6 +88,7 @@ public class StrictMvpMenuService {
         this.timeInputParser = new TimeInputParser();
         this.strictMvpEnabled = "STRICT_MVP".equalsIgnoreCase(conversationMode);
         this.conversationBookingGateway = conversationBookingGateway;
+        this.saudacaoDoNegocio = saudacaoDoNegocio;
     }
 
     public boolean isStrictMvpEnabled() {
@@ -231,7 +245,8 @@ public class StrictMvpMenuService {
     }
 
     private String menuPrincipal() {
-        return "Olá! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
+        return saudacaoDoNegocio.atual()
+                + "! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
                "1) Agendar\n" +
                "2) Meus agendamentos\n" +
                "3) Cancelar";
