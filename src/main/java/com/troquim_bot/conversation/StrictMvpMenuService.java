@@ -35,6 +35,10 @@ public class StrictMvpMenuService {
             "Te mandei a agenda aqui em cima. E so tocar em \"Abrir agenda\" e escolher.\n\n"
                     + "Se preferir, pode continuar por aqui digitando o servico.";
 
+    private static final String MENSAGEM_FALHA_CONSULTA_HORARIOS =
+            "Nao consegui consultar os horarios agora. Tente novamente em instantes "
+                    + "ou digite \"voltar\" para escolher outro dia.";
+
     private final ConversationStateService conversationStateService;
     private final AvailabilityApplicationService availabilityApplicationService;
     private final BookingApplicationService bookingApplicationService;
@@ -373,25 +377,7 @@ public class StrictMvpMenuService {
     }
 
     private String processarEscolhaDia(String numero, String texto, String mensagemOriginal) {
-        String dia = null;
-        if (texto.matches("^[1-6]$")) {
-            dia = switch (texto) {
-                case "1" -> "segunda";
-                case "2" -> "terca";
-                case "3" -> "quarta";
-                case "4" -> "quinta";
-                case "5" -> "sexta";
-                case "6" -> "sabado";
-                default -> null;
-            };
-        } else {
-            if (texto.contains("segunda")) dia = "segunda";
-            else if (texto.contains("terca")) dia = "terca";
-            else if (texto.contains("quarta")) dia = "quarta";
-            else if (texto.contains("quinta")) dia = "quinta";
-            else if (texto.contains("sexta")) dia = "sexta";
-            else if (texto.contains("sabado")) dia = "sabado";
-        }
+        String dia = resolverDia(texto);
         if (dia == null) {
             return "Nao entendi. Por favor, escolha um dia:\n\n" +
                    "1) Segunda\n" +
@@ -404,6 +390,43 @@ public class StrictMvpMenuService {
         }
         conversationStateService.atualizarDia(numero, dia);
         return menuHorarios(numero);
+    }
+
+    private String resolverDia(String texto) {
+        if (texto == null) {
+            return null;
+        }
+        if (texto.matches("^[1-6]$")) {
+            return switch (texto) {
+                case "1" -> "segunda";
+                case "2" -> "terca";
+                case "3" -> "quarta";
+                case "4" -> "quinta";
+                case "5" -> "sexta";
+                case "6" -> "sabado";
+                default -> null;
+            };
+        }
+        if (texto.contains("segunda")) return "segunda";
+        if (texto.contains("terca")) return "terca";
+        if (texto.contains("quarta")) return "quarta";
+        if (texto.contains("quinta")) return "quinta";
+        if (texto.contains("sexta")) return "sexta";
+        if (texto.contains("sabado")) return "sabado";
+        return null;
+    }
+
+    private void voltarParaEscolhaDeDia(ConversationState state) {
+        if (state == null) {
+            return;
+        }
+        var draft = state.getDraftAtual();
+        if (draft != null) {
+            draft.setDia(null);
+            draft.setHorario(null);
+        }
+        conversationStateService.atualizarStep(state);
+        conversationStateService.persistir(state);
     }
 
     private String menuHorarios(String numero) {
@@ -427,14 +450,26 @@ public class StrictMvpMenuService {
             if (consulta.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
                 return "Esse servico tem mais de um profissional disponivel. Abra a agenda visual para escolher o profissional.";
             }
-            if (!consulta.ok() || consulta.horarios().isEmpty()) {
-                return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n" +
-                       "1) Segunda\n" +
-                       "2) Terca\n" +
-                       "3) Quarta\n" +
-                       "4) Quinta\n" +
-                       "5) Sexta\n" +
-                       "6) Sabado";
+            if (consulta.status() == ConversationBookingGateway.Status.FALHA_TECNICA) {
+                return MENSAGEM_FALHA_CONSULTA_HORARIOS;
+            }
+            if (consulta.status() == ConversationBookingGateway.Status.DIA_INVALIDO) {
+                voltarParaEscolhaDeDia(state);
+                return "Esse dia nao e valido para a agenda. Escolha outro dia:\n\n"
+                        + menuDias();
+            }
+            if (!consulta.ok()) {
+                return MENSAGEM_FALHA_CONSULTA_HORARIOS;
+            }
+            if (consulta.horarios().isEmpty()) {
+                voltarParaEscolhaDeDia(state);
+                return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n"
+                        + "1) Segunda\n"
+                        + "2) Terca\n"
+                        + "3) Quarta\n"
+                        + "4) Quinta\n"
+                        + "5) Sexta\n"
+                        + "6) Sabado";
             }
 
             StringBuilder sb = new StringBuilder();
@@ -450,13 +485,14 @@ public class StrictMvpMenuService {
 
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
         if (horarios.isEmpty()) {
-            return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n" +
-                   "1) Segunda\n" +
-                   "2) Terca\n" +
-                   "3) Quarta\n" +
-                   "4) Quinta\n" +
-                   "5) Sexta\n" +
-                   "6) Sabado";
+            voltarParaEscolhaDeDia(state);
+            return "Nao tenho horarios disponiveis para " + dia + ". Por favor, escolha outro dia:\n\n"
+                    + "1) Segunda\n"
+                    + "2) Terca\n"
+                    + "3) Quarta\n"
+                    + "4) Quinta\n"
+                    + "5) Sexta\n"
+                    + "6) Sabado";
         }
         StringBuilder sb = new StringBuilder();
         sb.append("Horarios disponiveis para ").append(dia).append(":\n\n");
@@ -476,6 +512,12 @@ public class StrictMvpMenuService {
             ConversationBookingGateway.ConsultaHorarios consulta =
                     conversationBookingGateway.consultarHorarios(servico, dia);
             if (!consulta.ok() || consulta.horarios().isEmpty()) {
+                // Compatibilidade com estados produzidos antes da correcao: se a
+                // conversa ficou em AGUARDANDO_HORARIO sem nenhum slot, uma entrada
+                // que claramente representa dia deve trocar o dia imediatamente.
+                if (resolverDia(texto) != null) {
+                    return processarEscolhaDia(numero, texto, mensagemOriginal);
+                }
                 return menuHorarios(numero);
             }
 
@@ -505,6 +547,10 @@ public class StrictMvpMenuService {
 
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
         if (horarios.isEmpty()) {
+            if (resolverDia(texto) != null) {
+                return processarEscolhaDia(numero, texto, mensagemOriginal);
+            }
+            voltarParaEscolhaDeDia(state);
             return menuDias();
         }
         String horario = null;

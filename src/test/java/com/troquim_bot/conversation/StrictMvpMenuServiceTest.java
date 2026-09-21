@@ -18,8 +18,14 @@ import com.troquim_bot.support.OptionalBeans;
 import com.troquim_bot.support.InMemoryBookingIdempotencyStore;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalTime;
+import java.util.List;
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class StrictMvpMenuServiceTest {
 
@@ -63,6 +69,80 @@ class StrictMvpMenuServiceTest {
         assertTrue(respostaServico.contains("Para qual dia"),
                 "Esperava avançar para o menu de dias, mas recebeu: " + respostaServico);
         assertFalseContemMenuPrincipal(respostaServico);
+    }
+
+    @Test
+    void semHorarioVoltaParaEscolhaDeDiaEProximaOpcaoTrocaODia() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.listarServicos()).thenReturn(
+                List.of(new ConversationBookingGateway.Servico("Manicure")));
+        when(gateway.nomeCanonicoDoServico("manicure")).thenReturn(Optional.of("Manicure"));
+        when(gateway.consultarHorarios("Manicure", "segunda"))
+                .thenReturn(new ConversationBookingGateway.ConsultaHorarios(
+                        ConversationBookingGateway.Status.OK, "Manicure", "segunda", List.of()));
+        when(gateway.consultarHorarios("Manicure", "terca"))
+                .thenReturn(new ConversationBookingGateway.ConsultaHorarios(
+                        ConversationBookingGateway.Status.OK, "Manicure", "terca",
+                        List.of(LocalTime.of(9, 15), LocalTime.of(10, 30))));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+
+        menu.processarMenu(NUMERO, "1", states.buscarPorNumero(NUMERO));
+        menu.processarMenu(NUMERO, "manicure", states.buscarPorNumero(NUMERO));
+
+        String semVaga = menu.processarMenu(NUMERO, "1", states.buscarPorNumero(NUMERO));
+        assertTrue(semVaga.contains("Nao tenho horarios disponiveis para segunda"), semVaga);
+        assertEquals(ConversationStep.AGUARDANDO_DIA, states.buscarPorNumero(NUMERO).getStep());
+        assertTrue(states.buscarPorNumero(NUMERO).getDraftAtual().getDia() == null,
+                "Dia sem vaga deve ser limpo para a proxima escolha substituir de verdade");
+
+        String terca = menu.processarMenu(NUMERO, "2", states.buscarPorNumero(NUMERO));
+        assertTrue(terca.contains("Horarios disponiveis para terca"), terca);
+        assertEquals("terca", states.buscarPorNumero(NUMERO).getDraftAtual().getDia());
+        assertEquals(ConversationStep.AGUARDANDO_HORARIO, states.buscarPorNumero(NUMERO).getStep());
+    }
+
+    @Test
+    void estadoAntigoPresoEmHorarioSemSlotsSeAutoCorrigeAoEscolherOutroDia() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.consultarHorarios("Manicure", "segunda"))
+                .thenReturn(new ConversationBookingGateway.ConsultaHorarios(
+                        ConversationBookingGateway.Status.OK, "Manicure", "segunda", List.of()));
+        when(gateway.consultarHorarios("Manicure", "terca"))
+                .thenReturn(new ConversationBookingGateway.ConsultaHorarios(
+                        ConversationBookingGateway.Status.OK, "Manicure", "terca",
+                        List.of(LocalTime.of(9, 15))));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+
+        ConversationState state = states.buscarPorNumero(NUMERO);
+        state.criarNovoDraft();
+        state.getDraftAtual().setServico("Manicure");
+        state.getDraftAtual().setDia("segunda");
+        state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+        states.persistir(state);
+
+        String resposta = menu.processarMenu(NUMERO, "2", states.buscarPorNumero(NUMERO));
+
+        assertTrue(resposta.contains("Horarios disponiveis para terca"), resposta);
+        assertEquals("terca", states.buscarPorNumero(NUMERO).getDraftAtual().getDia());
+    }
+
+    private StrictMvpMenuService menuComGateway(ConversationStateService states,
+                                                 ConversationBookingGateway gateway) {
+        return new StrictMvpMenuService(
+                states,
+                mock(AvailabilityApplicationService.class),
+                mock(BookingApplicationService.class),
+                OptionalBeans.ausente(),
+                "STRICT_MVP",
+                gateway);
     }
 
     private void assertFalseContemMenuPrincipal(String resposta) {

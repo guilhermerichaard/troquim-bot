@@ -1,6 +1,7 @@
 package com.troquim_bot.application.conversation;
 
 import com.troquim_bot.application.messaging.InboundFlowCompletion;
+import com.troquim_bot.application.messaging.OutboundInteractiveOption;
 
 import java.util.List;
 import java.util.Optional;
@@ -24,28 +25,12 @@ public interface WhatsAppAdapter {
      * experiencia enviando o mesmo texto; o Domain/Conversation continua entendendo
      * os valores digitados normalmente.
      */
-    default void enviarOpcoes(String numero, String texto, List<QuickReply> opcoes) {
+    default void enviarOpcoes(String numero, String texto, List<OutboundInteractiveOption> opcoes) {
         enviarMensagem(numero, texto);
     }
 
-    default void enviarLista(String numero, String texto, List<ListItem> itens) {
+    default void enviarLista(String numero, String texto, List<OutboundInteractiveOption> itens) {
         enviarMensagem(numero, texto);
-    }
-
-    record ListItem(String id, String titulo, String descricao) {
-        public ListItem {
-            if (id == null || id.isBlank() || titulo == null || titulo.isBlank()) {
-                throw new IllegalArgumentException("List item exige id e titulo");
-            }
-        }
-    }
-
-    record QuickReply(String id, String titulo) {
-        public QuickReply {
-            if (id == null || id.isBlank() || titulo == null || titulo.isBlank()) {
-                throw new IllegalArgumentException("Quick reply exige id e titulo");
-            }
-        }
     }
 
     record IncomingMessage(String messageId, String numero, String sender, String mensagem) {

@@ -2,6 +2,7 @@ package com.troquim_bot.infrastructure.whatsappcloud;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.troquim_bot.application.messaging.OutboundInteractiveOption;
 import com.troquim_bot.application.messaging.OutboundMessageGateway;
 import com.troquim_bot.application.messaging.OutboundResult;
 import org.slf4j.Logger;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,13 +44,77 @@ public class WhatsAppCloudOutboundGateway implements OutboundMessageGateway {
 
     @Override
     public OutboundResult sendText(String toPhone, String text) {
-        Map<String, Object> payload = Map.of(
+        Map<String, Object> payload = basePayload(
+                toPhone,
+                "text",
+                Map.of("preview_url", false, "body", text));
+        return sendPayload(payload);
+    }
+
+    @Override
+    public OutboundResult sendButtons(String toPhone, String text,
+                                      List<OutboundInteractiveOption> options) {
+        if (options == null || options.isEmpty() || options.size() > 3) {
+            return sendText(toPhone, text);
+        }
+
+        List<Map<String, Object>> buttons = options.stream()
+                .map(option -> Map.<String, Object>of(
+                        "type", "reply",
+                        "reply", Map.of(
+                                "id", option.id(),
+                                "title", limit(option.title(), 20))))
+                .toList();
+
+        Map<String, Object> interactive = Map.of(
+                "type", "button",
+                "body", Map.of("text", text),
+                "action", Map.of("buttons", buttons));
+
+        return sendPayload(basePayload(toPhone, "interactive", interactive));
+    }
+
+    @Override
+    public OutboundResult sendList(String toPhone, String text,
+                                   List<OutboundInteractiveOption> options) {
+        if (options == null || options.size() < 2 || options.size() > 10) {
+            return sendText(toPhone, text);
+        }
+
+        List<Map<String, Object>> rows = options.stream()
+                .map(option -> {
+                    java.util.LinkedHashMap<String, Object> row = new java.util.LinkedHashMap<>();
+                    row.put("id", option.id());
+                    row.put("title", limit(option.title(), 24));
+                    if (option.description() != null && !option.description().isBlank()) {
+                        row.put("description", limit(option.description(), 72));
+                    }
+                    return Map.copyOf(row);
+                })
+                .toList();
+
+        Map<String, Object> interactive = Map.of(
+                "type", "list",
+                "body", Map.of("text", text),
+                "action", Map.of(
+                        "button", "Ver opcoes",
+                        "sections", List.of(Map.of(
+                                "title", "Escolha uma opcao",
+                                "rows", rows))));
+
+        return sendPayload(basePayload(toPhone, "interactive", interactive));
+    }
+
+    private Map<String, Object> basePayload(String toPhone, String type, Object body) {
+        return Map.of(
                 "messaging_product", "whatsapp",
                 "recipient_type", "individual",
                 "to", toPhone,
-                "type", "text",
-                "text", Map.of("preview_url", false, "body", text));
+                "type", type,
+                type, body);
+    }
 
+    private OutboundResult sendPayload(Map<String, Object> payload) {
         try {
             String responseBody = restClient.post()
                     .uri("/{version}/{phoneNumberId}/messages",
@@ -75,6 +141,13 @@ public class WhatsAppCloudOutboundGateway implements OutboundMessageGateway {
                     "Falha de transporte ao chamar a Graph API: "
                             + transportError.getClass().getSimpleName(), null, transportError);
         }
+    }
+
+    private static String limit(String value, int max) {
+        if (value == null || value.length() <= max) {
+            return value == null ? "" : value;
+        }
+        return value.substring(0, Math.max(1, max - 1)) + "…";
     }
 
     private String extractMessageId(String responseBody) {

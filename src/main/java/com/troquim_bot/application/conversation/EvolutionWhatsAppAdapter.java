@@ -2,7 +2,9 @@ package com.troquim_bot.application.conversation;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.troquim_bot.application.messaging.ConversationInteractivePresentation;
 import com.troquim_bot.application.messaging.InboundFlowCompletion;
+import com.troquim_bot.application.messaging.OutboundInteractiveOption;
 import com.troquim_bot.evolution.EvolutionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -150,7 +152,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
     }
 
     @Override
-    public void enviarLista(String numero, String texto, List<ListItem> itens) {
+    public void enviarLista(String numero, String texto, List<OutboundInteractiveOption> itens) {
         if (itens == null || itens.isEmpty()) {
             enviarMensagem(numero, texto);
             return;
@@ -159,8 +161,8 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
         String numeroNormalizado = WhatsAppContactResolver.normalizeForOutgoing(numero);
         List<Map<String, Object>> rows = itens.stream()
                 .map(item -> Map.<String, Object>of(
-                        "title", limitar(item.titulo(), 24),
-                        "description", limitar(item.descricao() == null ? "" : item.descricao(), 72),
+                        "title", limitar(item.title(), 24),
+                        "description", limitar(item.description() == null ? "" : item.description(), 72),
                         "rowId", item.id()))
                 .toList();
 
@@ -182,7 +184,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
     }
 
     @Override
-    public void enviarOpcoes(String numero, String texto, List<QuickReply> opcoes) {
+    public void enviarOpcoes(String numero, String texto, List<OutboundInteractiveOption> opcoes) {
         if (opcoes == null || opcoes.isEmpty() || opcoes.size() > 3) {
             enviarMensagem(numero, texto);
             return;
@@ -192,7 +194,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
         List<Map<String, Object>> botoes = opcoes.stream()
                 .map(opcao -> Map.<String, Object>of(
                         "type", "reply",
-                        "displayText", opcao.titulo(),
+                        "displayText", opcao.title(),
                         "id", opcao.id()))
                 .toList();
 
@@ -251,14 +253,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
     }
 
     private String mapearIdRespostaRapida(String id) {
-        return switch (id) {
-            case "menu_agendar" -> "1";
-            case "menu_meus_agendamentos" -> "2";
-            case "menu_cancelar" -> "3";
-            case "confirmar_sim" -> "1";
-            case "confirmar_nao" -> "2";
-            default -> id;
-        };
+        return ConversationInteractivePresentation.canonicalInput(id);
     }
 
     @Override
