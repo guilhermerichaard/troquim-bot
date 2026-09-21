@@ -55,7 +55,9 @@ public final class ConversationInteractivePresentation {
         }
 
         List<OutboundInteractiveOption> choices = selectableOptions(responseText);
-        if (choices.size() == 1 && "nav_voltar".equals(choices.get(0).id())) {
+        if (!choices.isEmpty()
+                && choices.size() <= 3
+                && choices.stream().noneMatch(option -> option.id().matches("^\\d+$"))) {
             return Optional.of(Presentation.buttons(
                     interactiveBody(responseText, choices), choices));
         }
@@ -81,6 +83,7 @@ public final class ConversationInteractivePresentation {
             case "confirmar_sim" -> "1";
             case "confirmar_nao" -> "2";
             case "nav_voltar" -> "voltar";
+            case "retry_confirmacao" -> "1";
             default -> interactiveId;
         };
     }
