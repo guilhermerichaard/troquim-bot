@@ -3,6 +3,7 @@ package com.troquim_bot.infrastructure.whatsappcloud;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.troquim_bot.application.conversation.PhoneNumberNormalizer;
+import com.troquim_bot.application.messaging.ConversationInteractivePresentation;
 import com.troquim_bot.application.messaging.InboundFlowCompletion;
 import com.troquim_bot.application.messaging.InboundMessageParser;
 import com.troquim_bot.application.messaging.InboundTextMessage;
@@ -131,12 +132,26 @@ public class WhatsAppCloudMessageParser implements InboundMessageParser {
     }
 
     private java.util.Optional<InboundTextMessage> toTextMessage(JsonNode message) {
-        if (!"text".equals(message.path("type").asText())) {
+        String type = message.path("type").asText();
+        String body;
+
+        if ("text".equals(type)) {
+            body = textOrNull(message.path("text").path("body"));
+        } else if ("interactive".equals(type)) {
+            JsonNode interactive = message.path("interactive");
+            String interactiveType = interactive.path("type").asText();
+            String interactiveId = switch (interactiveType) {
+                case "button_reply" -> textOrNull(interactive.path("button_reply").path("id"));
+                case "list_reply" -> textOrNull(interactive.path("list_reply").path("id"));
+                default -> null; // nfm_reply continua sendo tratado como FlowCompletion.
+            };
+            body = ConversationInteractivePresentation.canonicalInput(interactiveId);
+        } else {
             return java.util.Optional.empty();
         }
+
         String id = textOrNull(message.path("id"));
         String from = PhoneNumberNormalizer.normalizar(textOrNull(message.path("from")));
-        String body = textOrNull(message.path("text").path("body"));
         if (id == null || from == null || body == null || body.isBlank()) {
             return java.util.Optional.empty();
         }
