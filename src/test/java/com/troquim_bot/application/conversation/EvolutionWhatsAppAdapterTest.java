@@ -174,8 +174,8 @@ class EvolutionWhatsAppAdapterTest {
                 "5511999999999",
                 "Posso ajudar?",
                 List.of(
-                        new WhatsAppAdapter.QuickReply("menu_agendar", "Agendar"),
-                        new WhatsAppAdapter.QuickReply("menu_cancelar", "Cancelar")));
+                        new OutboundInteractiveOption("menu_agendar", "Agendar"),
+                        new OutboundInteractiveOption("menu_cancelar", "Cancelar")));
 
         assertEquals("5511999999999", evolutionService.numeroBotoes);
         assertEquals("Posso ajudar?", evolutionService.descricaoBotoes);
@@ -193,8 +193,8 @@ class EvolutionWhatsAppAdapterTest {
                 "5511999999999",
                 "Escolha o servico",
                 List.of(
-                        new WhatsAppAdapter.ListItem("1", "Manicure", ""),
-                        new WhatsAppAdapter.ListItem("2", "Design de sobrancelhas", "")));
+                        new OutboundInteractiveOption("1", "Manicure", ""),
+                        new OutboundInteractiveOption("2", "Design de sobrancelhas", "")));
 
         assertEquals("5511999999999", evolutionService.numeroLista);
         assertEquals("Escolha o servico", evolutionService.descricaoLista);
