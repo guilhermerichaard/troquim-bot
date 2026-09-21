@@ -161,8 +161,8 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
         String numeroNormalizado = WhatsAppContactResolver.normalizeForOutgoing(numero);
         List<Map<String, Object>> rows = itens.stream()
                 .map(item -> Map.<String, Object>of(
-                        "title", limitar(item.titulo(), 24),
-                        "description", limitar(item.descricao() == null ? "" : item.descricao(), 72),
+                        "title", limitar(item.title(), 24),
+                        "description", limitar(item.description() == null ? "" : item.description(), 72),
                         "rowId", item.id()))
                 .toList();
 
@@ -194,7 +194,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
         List<Map<String, Object>> botoes = opcoes.stream()
                 .map(opcao -> Map.<String, Object>of(
                         "type", "reply",
-                        "displayText", opcao.titulo(),
+                        "displayText", opcao.title(),
                         "id", opcao.id()))
                 .toList();
 
