@@ -37,8 +37,16 @@ public final class ConversationInteractivePresentation {
             return Optional.of(Presentation.buttons(interactiveBody(responseText, options), options));
         }
 
-        if ((responseText.contains("1) Sim") && responseText.contains("2) Nao"))
-                || (responseText.contains("1) Confirmar") && responseText.contains("2) Cancelar"))) {
+        if (responseText.contains("1) Sim")
+                && (responseText.contains("2) Nao") || responseText.contains("2) Não"))) {
+            List<OutboundInteractiveOption> options = List.of(
+                    new OutboundInteractiveOption("confirmar_sim", "Sim"),
+                    new OutboundInteractiveOption("confirmar_nao", "Não"),
+                    new OutboundInteractiveOption("nav_voltar", "Voltar"));
+            return Optional.of(Presentation.buttons(interactiveBody(responseText, options), options));
+        }
+
+        if (responseText.contains("1) Confirmar") && responseText.contains("2) Cancelar")) {
             List<OutboundInteractiveOption> options = List.of(
                     new OutboundInteractiveOption("confirmar_sim", "Confirmar"),
                     new OutboundInteractiveOption("confirmar_nao", "Cancelar"),
