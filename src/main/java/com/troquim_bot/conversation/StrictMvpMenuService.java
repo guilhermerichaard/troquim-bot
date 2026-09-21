@@ -94,6 +94,23 @@ public class StrictMvpMenuService {
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
 
+        // Intencoes globais nao podem ficar presas na etapa atual do formulario textual.
+        // "ver agendamento" durante AGUARDANDO_SERVICO continua sendo consulta, nao nome
+        // de servico. O mesmo vale para iniciar um novo agendamento.
+        if (ehComandoAgendar(texto)) {
+            return iniciarNovoAgendamento(numero);
+        }
+        if (ehConsultaAgendamentos(texto)) {
+            return consultarAgendamentos(numero);
+        }
+        Integer indiceCancelamento = indiceDeCancelamento(texto);
+        if (indiceCancelamento != null && step != ConversationStep.AGUARDANDO_CONFIRMACAO) {
+            return cancelarAgendamento(numero, indiceCancelamento);
+        }
+        if (ehComandoCancelar(texto) && step != ConversationStep.AGUARDANDO_CONFIRMACAO) {
+            return cancelarAgendamento(numero);
+        }
+
         if (step == ConversationStep.FINALIZADO || step == ConversationStep.INICIO) {
             if (texto.matches("^[123]$")) {
                 return processarEscolhaMenuPrincipal(numero, texto);
@@ -502,7 +519,7 @@ public class StrictMvpMenuService {
                 draft.setConfirmado(true);
                 state.setStep(ConversationStep.FINALIZADO);
                 conversationStateService.persistir(state);
-                return "Seu agendamento foi registrado com sucesso!\n\n" +
+                return "Agendamento confirmado com sucesso!\n\n" +
                        "Deseja fazer algo mais?\n\n" +
                        "1) Agendar\n" +
                        "2) Meus agendamentos\n" +
@@ -526,7 +543,7 @@ public class StrictMvpMenuService {
             draft.setConfirmado(true);
             state.setStep(ConversationStep.FINALIZADO);
             conversationStateService.persistir(state);
-            return "Seu agendamento foi registrado com sucesso! Em breve o salao confirmara a disponibilidade.\n\n" +
+            return "Agendamento confirmado com sucesso!\n\n" +
                    "Deseja fazer algo mais?\n\n" +
                    "1) Agendar\n" +
                    "2) Meus agendamentos\n" +
@@ -536,40 +553,133 @@ public class StrictMvpMenuService {
     }
 
     private String consultarAgendamentos(String numero) {
+        if (conversationBookingGateway != null) {
+            List<ConversationBookingGateway.Agendamento> ativos =
+                    conversationBookingGateway.listarAgendamentosAtivos(numero);
+            if (ativos.isEmpty()) {
+                return "Voce ainda nao tem agendamentos ativos.\n\n" + menuAcoes();
+            }
+
+            StringBuilder sb = new StringBuilder("Seus agendamentos ativos:\n\n");
+            for (int i = 0; i < ativos.size(); i++) {
+                var a = ativos.get(i);
+                sb.append(i + 1).append(") ")
+                        .append(a.servico()).append(" em ")
+                        .append(a.data()).append(" as ")
+                        .append(ConversationBookingGateway.formatarHorario(a.horario()))
+                        .append(a.confirmado() ? " - CONFIRMADO" : " - PENDENTE")
+                        .append("\n");
+            }
+            sb.append("\n").append(menuAcoes());
+            return sb.toString();
+        }
+
+        // Compatibilidade dos testes/instancias antigas construidas manualmente.
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         var draft = state.getDraftAtual();
         if (draft != null && draft.isCompleto()) {
-            return "Voce tem um agendamento pendente:\n\n" +
-                   draft.getResumo() + "\n\n" +
-                   "Aguardando confirmacao do salao.\n\n" +
-                   "Deseja fazer algo mais?\n\n" +
-                   "1) Agendar\n" +
-                   "2) Meus agendamentos\n" +
-                   "3) Cancelar";
+            return "Voce tem um agendamento registrado:\n\n" +
+                   draft.getResumo() + "\n\n" + menuAcoes();
         }
-        return "Voce ainda nao tem agendamentos ativos.\n\n" +
-               "Deseja fazer algo mais?\n\n" +
-               "1) Agendar\n" +
-               "2) Meus agendamentos\n" +
-               "3) Cancelar";
+        return "Voce ainda nao tem agendamentos ativos.\n\n" + menuAcoes();
     }
 
     private String cancelarAgendamento(String numero) {
+        if (conversationBookingGateway != null) {
+            List<ConversationBookingGateway.Agendamento> ativos =
+                    conversationBookingGateway.listarAgendamentosAtivos(numero);
+            if (ativos.isEmpty()) {
+                return "Voce nao tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+            }
+            if (ativos.size() == 1) {
+                return cancelarAgendamento(numero, 0);
+            }
+
+            StringBuilder sb = new StringBuilder(
+                    "Voce tem mais de um agendamento. Qual deseja cancelar?\n\n");
+            for (int i = 0; i < ativos.size(); i++) {
+                var a = ativos.get(i);
+                sb.append(i + 1).append(") ")
+                        .append(a.servico()).append(" em ")
+                        .append(a.data()).append(" as ")
+                        .append(ConversationBookingGateway.formatarHorario(a.horario()))
+                        .append("\n");
+            }
+            sb.append("\nDigite, por exemplo: cancelar 1");
+            return sb.toString();
+        }
+
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         var draft = state.getDraftAtual();
         if (draft != null && draft.isCompleto()) {
             conversationStateService.limparEstado(numero);
-            return "Seu agendamento foi cancelado com sucesso.\n\n" +
-                   "Deseja fazer algo mais?\n\n" +
-                   "1) Agendar\n" +
-                   "2) Meus agendamentos\n" +
-                   "3) Cancelar";
+            return "Seu agendamento foi cancelado com sucesso.\n\n" + menuAcoes();
         }
-        return "Voce nao tem agendamentos ativos para cancelar.\n\n" +
-               "Deseja fazer algo mais?\n\n" +
-               "1) Agendar\n" +
-               "2) Meus agendamentos\n" +
-               "3) Cancelar";
+        return "Voce nao tem agendamentos ativos para cancelar.\n\n" + menuAcoes();
+    }
+
+    private String cancelarAgendamento(String numero, int indice) {
+        if (conversationBookingGateway == null) {
+            return cancelarAgendamento(numero);
+        }
+
+        Optional<ConversationBookingGateway.Agendamento> cancelado =
+                conversationBookingGateway.cancelarAgendamentoAtivo(numero, indice);
+        if (cancelado.isEmpty()) {
+            return "Nao encontrei esse agendamento.\n\n" + cancelarAgendamento(numero);
+        }
+
+        conversationStateService.limparEstado(numero);
+        var a = cancelado.get();
+        return "Agendamento cancelado com sucesso: " + a.servico() + " em " + a.data()
+                + " as " + ConversationBookingGateway.formatarHorario(a.horario())
+                + ".\n\n" + menuAcoes();
+    }
+
+    private String menuAcoes() {
+        return "Deseja fazer algo mais?\n\n"
+                + "1) Agendar\n"
+                + "2) Meus agendamentos\n"
+                + "3) Cancelar";
+    }
+
+    private boolean ehComandoAgendar(String texto) {
+        return texto.equals("agendar")
+                || texto.equals("marcar")
+                || texto.equals("novo agendamento")
+                || texto.equals("quero agendar")
+                || texto.equals("quero marcar");
+    }
+
+    private boolean ehConsultaAgendamentos(String texto) {
+        return texto.equals("meus agendamentos")
+                || texto.equals("ver agendamento")
+                || texto.equals("ver agendamentos")
+                || texto.equals("qual meu agendamento")
+                || texto.equals("agendou")
+                || texto.equals("agendou?")
+                || texto.equals("foi agendado")
+                || texto.equals("esta agendado");
+    }
+
+    private boolean ehComandoCancelar(String texto) {
+        return texto.equals("cancelar")
+                || texto.equals("desmarcar")
+                || texto.equals("cancelar agendamento")
+                || texto.equals("desmarcar agendamento");
+    }
+
+    private Integer indiceDeCancelamento(String texto) {
+        if (texto == null || !texto.matches("^(cancelar|desmarcar)\\s+\\d+$")) {
+            return null;
+        }
+        String[] partes = texto.split("\\s+");
+        try {
+            int indiceHumano = Integer.parseInt(partes[partes.length - 1]);
+            return indiceHumano - 1;
+        } catch (NumberFormatException invalido) {
+            return null;
+        }
     }
 
     private String normalizar(String texto) {
