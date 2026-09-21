@@ -128,6 +128,38 @@ public class ConversationBookingGateway {
         return resolvido.ok() ? Optional.of(resolvido.item().nome()) : Optional.empty();
     }
 
+    /**
+     * Sugere um unico servico do catalogo quando a entrada parece conter um erro de
+     * digitacao. A sugestao nunca decide o booking: Conversation pede confirmacao ao
+     * cliente antes de gravar o servico no draft.
+     */
+    public Optional<String> sugerirServico(String entrada) {
+        String texto = normalizar(entrada);
+        if (texto.isBlank()) {
+            return Optional.empty();
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        List<ConsultarCatalogo.ItemDeCatalogo> itens = consultarCatalogo.consultar(businessId).itens();
+
+        record Candidato(String nome, int distancia) {}
+        List<Candidato> candidatos = itens.stream()
+                .map(item -> new Candidato(item.nome(), distanciaParaEntrada(item.nome(), texto)))
+                .filter(candidato -> candidato.distancia() <= limiteDeCorrecao(candidato.nome()))
+                .sorted(java.util.Comparator.comparingInt(Candidato::distancia)
+                        .thenComparing(Candidato::nome))
+                .toList();
+
+        if (candidatos.isEmpty()) {
+            return Optional.empty();
+        }
+        if (candidatos.size() > 1
+                && candidatos.get(0).distancia() == candidatos.get(1).distancia()) {
+            return Optional.empty();
+        }
+        return Optional.of(candidatos.get(0).nome());
+    }
+
     public Status statusDoServico(String nomeInterpretado) {
         return resolverServico(nomeInterpretado).status();
     }
@@ -369,7 +401,57 @@ public class ConversationBookingGateway {
     private static boolean mesmoServico(String catalogo, String interpretado) {
         String a = singularSimples(normalizar(catalogo));
         String b = singularSimples(normalizar(interpretado));
-        return !a.isBlank() && a.equals(b);
+        if (a.isBlank() || b.isBlank()) {
+            return false;
+        }
+        if (a.equals(b)) {
+            return true;
+        }
+
+        // Linguagem natural simples: "quero fazer manicure" continua sendo interpretacao
+        // da conversa. A identidade aceita continua vindo do item real do catalogo.
+        return (" " + b + " ").contains(" " + a + " ");
+    }
+
+    private static int distanciaParaEntrada(String nomeCatalogo, String entradaNormalizada) {
+        String alvo = singularSimples(normalizar(nomeCatalogo));
+        int melhor = distanciaLevenshtein(alvo, singularSimples(entradaNormalizada));
+        for (String token : entradaNormalizada.split("\\s+")) {
+            melhor = Math.min(melhor, distanciaLevenshtein(alvo, singularSimples(token)));
+        }
+        return melhor;
+    }
+
+    private static int limiteDeCorrecao(String nomeCatalogo) {
+        int tamanho = singularSimples(normalizar(nomeCatalogo)).length();
+        if (tamanho <= 4) {
+            return 1;
+        }
+        return 2;
+    }
+
+    private static int distanciaLevenshtein(String a, String b) {
+        if (a.equals(b)) {
+            return 0;
+        }
+        int[] anterior = new int[b.length() + 1];
+        int[] atual = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            anterior[j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            atual[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int custo = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                atual[j] = Math.min(
+                        Math.min(atual[j - 1] + 1, anterior[j] + 1),
+                        anterior[j - 1] + custo);
+            }
+            int[] troca = anterior;
+            anterior = atual;
+            atual = troca;
+        }
+        return anterior[b.length()];
     }
 
     private static String singularSimples(String valor) {
