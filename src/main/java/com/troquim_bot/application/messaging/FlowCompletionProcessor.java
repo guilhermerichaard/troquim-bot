@@ -33,6 +33,10 @@ import java.util.Optional;
 @ConditionalOnWhatsAppFlow
 public class FlowCompletionProcessor {
 
+    private static final String RECEIPT_UNIQUE_CONSTRAINT =
+            "uq_inbound_receipt_provider_external_id";
+    private static final String SQLSTATE_UNIQUE_VIOLATION = "23505";
+
     private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final InboundReceiptStore receiptStore;
@@ -62,9 +66,12 @@ public class FlowCompletionProcessor {
 
         try {
             receiptStore.claimPending(completion.provider(), completion.externalMessageId());
-        } catch (DataIntegrityViolationException concurrent) {
-            throw new ConcurrentReceiptClaimException(
-                    completion.provider(), completion.externalMessageId(), concurrent);
+        } catch (DataIntegrityViolationException integrityViolation) {
+            if (isReceiptUniqueViolation(integrityViolation)) {
+                throw new ConcurrentReceiptClaimException(
+                        completion.provider(), completion.externalMessageId(), integrityViolation);
+            }
+            throw integrityViolation;
         }
 
         Optional<FlowSession> sessionOpt = sessionStore.buscar(completion.flowToken());
@@ -108,6 +115,20 @@ public class FlowCompletionProcessor {
         receiptStore.completeProcessing(
                 completion.provider(), completion.externalMessageId(), response);
         return ProcessOutcome.processed(completion.fromPhone(), response);
+    }
+
+    private static boolean isReceiptUniqueViolation(DataIntegrityViolationException exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof java.sql.SQLException sqlException) {
+                boolean uniqueViolation =
+                        SQLSTATE_UNIQUE_VIOLATION.equals(sqlException.getSQLState());
+                String message = sqlException.getMessage() == null ? "" : sqlException.getMessage();
+                if (uniqueViolation && message.contains(RECEIPT_UNIQUE_CONSTRAINT)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static FlowConfirmationOutcome outcomeFromBooking(BookingIdempotencyRecord record) {
