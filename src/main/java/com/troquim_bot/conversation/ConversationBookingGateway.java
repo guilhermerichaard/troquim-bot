@@ -6,6 +6,7 @@ import com.troquim_bot.application.booking.BookingCommandKey;
 import com.troquim_bot.application.booking.BookingResult;
 import com.troquim_bot.application.catalog.ConfirmarAgendamentoDoCatalogo;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
+import com.troquim_bot.application.service.ServiceApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.RelogioDoNegocio;
@@ -95,6 +96,7 @@ public class ConversationBookingGateway {
     private final AvailabilityApplicationService availabilityApplicationService;
     private final AppointmentApplicationService appointmentApplicationService;
     private final CustomerProfileService customerProfileService;
+    private final ServiceApplicationService serviceApplicationService;
     private final ConfirmarAgendamentoDoCatalogo confirmarAgendamento;
     private final RelogioDoNegocio relogio;
     private final TimeInputParser timeInputParser;
@@ -104,6 +106,7 @@ public class ConversationBookingGateway {
                                       AvailabilityApplicationService availabilityApplicationService,
                                       AppointmentApplicationService appointmentApplicationService,
                                       CustomerProfileService customerProfileService,
+                                      ServiceApplicationService serviceApplicationService,
                                       ConfirmarAgendamentoDoCatalogo confirmarAgendamento,
                                       RelogioDoNegocio relogio) {
         this.tenantProvider = tenantProvider;
@@ -111,6 +114,7 @@ public class ConversationBookingGateway {
         this.availabilityApplicationService = availabilityApplicationService;
         this.appointmentApplicationService = appointmentApplicationService;
         this.customerProfileService = customerProfileService;
+        this.serviceApplicationService = serviceApplicationService;
         this.confirmarAgendamento = confirmarAgendamento;
         this.relogio = relogio;
         this.timeInputParser = new TimeInputParser();
@@ -309,11 +313,9 @@ public class ConversationBookingGateway {
     }
 
     private Agendamento paraApresentacao(BusinessId businessId, Appointment appointment) {
-        String nomeServico = consultarCatalogo.consultar(businessId).itens().stream()
-                .filter(item -> item.id().equals(appointment.getServiceId()))
-                .map(ConsultarCatalogo.ItemDeCatalogo::nome)
-                .findFirst()
-                .orElse("Servico");
+        String nomeServico = serviceApplicationService.buscarPorId(appointment.getServiceId())
+                .map(com.troquim_bot.service.Service::getNome)
+                .orElse("Servico legado");
 
         return new Agendamento(
                 nomeServico,
