@@ -198,7 +198,7 @@ public class ConversationStateService {
             case AGUARDANDO_DIA -> contemDia(texto);
             case AGUARDANDO_HORARIO -> contemHorario(mensagem);
             case AGUARDANDO_NOME -> extrairNomeResposta(mensagem).isPresent();
-            case AGUARDANDO_CONFIRMACAO, FINALIZADO ->
+            case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO ->
                     intent == IntentType.AGENDAMENTO && contemDadosAgendamento(texto, mensagem);
         };
     }
@@ -215,7 +215,7 @@ public class ConversationStateService {
             case AGUARDANDO_DIA -> Optional.of("Perfeito. Para qual dia você gostaria?");
             case AGUARDANDO_HORARIO -> Optional.of(montarPerguntaHorario(state));
             case AGUARDANDO_NOME -> Optional.of("Perfeito. Como você prefere que eu te chame?");
-            case AGUARDANDO_CONFIRMACAO, FINALIZADO -> Optional.of(montarRespostaPosAgendamento(state, mensagem));
+            case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO -> Optional.of(montarRespostaPosAgendamento(state, mensagem));
             default -> Optional.empty();
         };
     }
@@ -572,7 +572,7 @@ public class ConversationStateService {
             case AGUARDANDO_DIA -> "Para qual dia você gostaria?";
             case AGUARDANDO_HORARIO -> montarPerguntaHorario(state);
             case AGUARDANDO_NOME -> "Como você prefere que eu te chame?";
-            case AGUARDANDO_CONFIRMACAO, FINALIZADO -> "Confirmar que a solicitação foi recebida e será validada.";
+            case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO -> "Confirmar que a solicitação foi recebida e será validada.";
             default -> "";
         };
     }
@@ -583,7 +583,7 @@ public class ConversationStateService {
             case AGUARDANDO_DIA -> "Me fala para qual dia você gostaria.";
             case AGUARDANDO_HORARIO -> "Me fala o horário que você prefere.";
             case AGUARDANDO_NOME -> "Me fala como você prefere que eu te chame.";
-            case AGUARDANDO_CONFIRMACAO, FINALIZADO -> montarConfirmacao(state);
+            case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO -> montarConfirmacao(state);
             default -> "Me fala como posso ajudar.";
         };
     }
@@ -691,7 +691,7 @@ public class ConversationStateService {
             case AGUARDANDO_DIA -> "dia desejado";
             case AGUARDANDO_HORARIO -> "horário desejado";
             case AGUARDANDO_NOME -> "nome da cliente";
-            case AGUARDANDO_CONFIRMACAO, FINALIZADO -> "confirmar solicitação";
+            case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO -> "confirmar solicitação";
         };
     }
 
