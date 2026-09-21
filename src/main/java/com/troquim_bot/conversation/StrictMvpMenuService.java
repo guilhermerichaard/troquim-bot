@@ -204,6 +204,28 @@ public class StrictMvpMenuService {
 
     private String processarEscolhaServico(String numero, String texto, String mensagemOriginal) {
         if (conversationBookingGateway != null) {
+            ConversationState state = conversationStateService.buscarPorNumero(numero);
+            var draft = state.getDraftAtual();
+            if (draft != null && draft.getServicoSugerido() != null) {
+                if (texto.equals("1") || texto.equals("sim") || texto.equals("isso")
+                        || texto.equals("correto") || texto.equals("confirmar")) {
+                    String confirmado = draft.getServicoSugerido();
+                    draft.setServicoSugerido(null);
+                    conversationStateService.atualizarServico(numero, confirmado);
+                    return menuDias();
+                }
+                if (texto.equals("2") || texto.equals("nao") || texto.equals("não")
+                        || texto.equals("outro")) {
+                    draft.setServicoSugerido(null);
+                    conversationStateService.persistir(state);
+                    return menuServicos();
+                }
+                // O cliente escreveu outra coisa: descarta a sugestao antiga e interpreta
+                // a nova mensagem normalmente.
+                draft.setServicoSugerido(null);
+                conversationStateService.persistir(state);
+            }
+
             List<ConversationBookingGateway.Servico> servicos = conversationBookingGateway.listarServicos();
             if (servicos.isEmpty()) {
                 return "Nenhum servico disponivel no momento.";
@@ -223,6 +245,17 @@ public class StrictMvpMenuService {
                 servico = conversationBookingGateway.nomeCanonicoDoServico(mensagemOriginal).orElse(null);
             }
             if (servico == null) {
+                Optional<String> sugestao = conversationBookingGateway.sugerirServico(mensagemOriginal);
+                if (sugestao.isPresent()) {
+                    ConversationState atual = conversationStateService.buscarPorNumero(numero);
+                    if (atual.getDraftAtual() != null) {
+                        atual.getDraftAtual().setServicoSugerido(sugestao.get());
+                        conversationStateService.persistir(atual);
+                    }
+                    return "Voce quis dizer " + sugestao.get() + "?\n\n"
+                            + "1) Sim\n"
+                            + "2) Nao";
+                }
                 return "Esse servico nao esta disponivel.\n\n" + menuServicos();
             }
 
