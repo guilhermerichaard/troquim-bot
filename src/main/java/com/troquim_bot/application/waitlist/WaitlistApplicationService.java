@@ -40,10 +40,18 @@ public class WaitlistApplicationService {
                               LocalTime latestTime) {
         String e164 = new PhoneNumber(phone).getE164();
 
-        return repository.findActiveRequest(businessId, e164, serviceId, professionalId)
-                .orElseGet(() -> repository.save(WaitlistEntry.active(
-                        businessId, e164, serviceId, professionalId,
-                        requestedDate, earliestTime, latestTime)));
+        var existente = repository.findActiveRequest(
+                businessId, e164, serviceId, professionalId);
+        if (existente.isPresent()
+                && java.util.Objects.equals(existente.get().getRequestedDate(), requestedDate)
+                && java.util.Objects.equals(existente.get().getEarliestTime(), earliestTime)
+                && java.util.Objects.equals(existente.get().getLatestTime(), latestTime)) {
+            return existente.get();
+        }
+
+        return repository.save(WaitlistEntry.active(
+                businessId, e164, serviceId, professionalId,
+                requestedDate, earliestTime, latestTime));
     }
 
     public boolean slotReleased(BusinessId businessId,
