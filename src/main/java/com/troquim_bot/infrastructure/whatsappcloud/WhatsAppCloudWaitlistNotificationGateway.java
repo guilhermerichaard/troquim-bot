@@ -36,7 +36,8 @@ public class WhatsAppCloudWaitlistNotificationGateway implements WaitlistNotific
     }
 
     @Override
-    public boolean notifySlotAvailable(String phoneE164,
+    public boolean notifySlotAvailable(java.util.UUID waitlistId,
+                                       String phoneE164,
                                        String serviceName,
                                        LocalDate date,
                                        LocalTime time) {
@@ -58,13 +59,23 @@ public class WhatsAppCloudWaitlistNotificationGateway implements WaitlistNotific
                 "template", Map.of(
                         "name", template,
                         "language", Map.of("code", language),
-                        "components", List.of(Map.of(
-                                "type", "body",
-                                "parameters", List.of(
-                                        Map.of("type", "text", "text", serviceName),
-                                        Map.of("type", "text", "text", formatDate(date)),
-                                        Map.of("type", "text", "text", formatTime(time))
-                                )))));
+                        "components", List.of(
+                                Map.of(
+                                        "type", "body",
+                                        "parameters", List.of(
+                                                Map.of("type", "text", "text", serviceName),
+                                                Map.of("type", "text", "text", formatDate(date)),
+                                                Map.of("type", "text", "text", formatTime(time))
+                                        )),
+                                Map.of(
+                                        "type", "button",
+                                        "sub_type", "quick_reply",
+                                        "index", "0",
+                                        "parameters", List.of(Map.of(
+                                                "type", "payload",
+                                                "payload", claimPayload(waitlistId, date, time)
+                                        )))
+                        )));
 
         try {
             restClient.post()
@@ -82,6 +93,13 @@ public class WhatsAppCloudWaitlistNotificationGateway implements WaitlistNotific
                     error.getClass().getSimpleName());
             return false;
         }
+    }
+
+    private static String claimPayload(java.util.UUID waitlistId,
+                                       LocalDate date,
+                                       LocalTime time) {
+        return "waitlist_claim_" + waitlistId + "_" + date + "_"
+                + String.format("%02d%02d", time.getHour(), time.getMinute());
     }
 
     private static String formatDate(LocalDate date) {
