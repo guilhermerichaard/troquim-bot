@@ -256,7 +256,8 @@ public class ConversationBookingGateway {
                     continue;
                 }
                 candidatos.add(new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
-                        data, horario, gapAdjacenteMinutos(businessId, servico.profissional(), data, horario)));
+                        data, horario, gapAdjacenteMinutos(
+                                businessId, servico.profissional(), data, horario, servico.item().duracao())));
             }
         }
 
@@ -282,8 +283,10 @@ public class ConversationBookingGateway {
     private int gapAdjacenteMinutos(BusinessId businessId,
                                     ProfessionalId profissional,
                                     LocalDate data,
-                                    LocalTime horario) {
+                                    LocalTime horario,
+                                    java.time.Duration duracaoServico) {
         int melhor = Integer.MAX_VALUE;
+        LocalTime fimCandidato = horario.plus(duracaoServico);
         for (Appointment appointment : appointmentApplicationService.listarAtivos(businessId)) {
             if (!appointment.getProfessionalId().equals(profissional)
                     || !appointment.getDate().equals(data)) {
@@ -292,7 +295,7 @@ public class ConversationBookingGateway {
             long ateInicio = Math.abs(java.time.temporal.ChronoUnit.MINUTES.between(
                     appointment.getEndTime(), horario));
             long ateFim = Math.abs(java.time.temporal.ChronoUnit.MINUTES.between(
-                    horario, appointment.getStartTime()));
+                    fimCandidato, appointment.getStartTime()));
             melhor = (int) Math.min(melhor, Math.min(ateInicio, ateFim));
         }
         return melhor == Integer.MAX_VALUE ? 24 * 60 : melhor;
