@@ -336,6 +336,47 @@ class StrictMvpMenuServiceTest {
     }
 
     @Test
+    void turboSemVagaOfereceWaitlistClicavelEConfirmaEntrada() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.recomendar(eq(NUMERO), any(BookingIntent.class)))
+                .thenReturn(new ConversationBookingGateway.Recomendacao(
+                        ConversationBookingGateway.Status.OK,
+                        "Manicure",
+                        List.of(),
+                        false));
+        when(gateway.entrarNaEspera(
+                eq(NUMERO),
+                eq("Manicure"),
+                eq("sexta"),
+                eq(LocalTime.of(16, 0)),
+                eq(null)))
+                .thenReturn(true);
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+
+        String semVaga = menu.processarMenu(
+                NUMERO,
+                "quero manicure sexta depois das 16",
+                states.buscarPorNumero(NUMERO));
+
+        var presentation = ConversationInteractivePresentation.from(semVaga).orElseThrow();
+        assertEquals(ConversationInteractivePresentation.Type.BUTTONS, presentation.type());
+        assertTrue(presentation.options().get(0).id().startsWith("waitlist_join_sexta_1600_"));
+        assertEquals("waitlist_other", presentation.options().get(1).id());
+        assertEquals("nav_voltar", presentation.options().get(2).id());
+
+        String entrou = menu.processarMenu(
+                NUMERO,
+                presentation.options().get(0).id(),
+                states.buscarPorNumero(NUMERO));
+
+        assertTrue(entrou.contains("entrou na espera"), entrou);
+    }
+
+    @Test
     void cancelamentoComMultiplosAgendamentosEhClicavelETemVoltar() {
         ConversationStateService states =
                 new ConversationStateService(new InMemoryConversationStateRepository());
