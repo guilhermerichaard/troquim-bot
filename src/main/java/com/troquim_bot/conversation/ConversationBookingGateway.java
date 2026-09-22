@@ -8,6 +8,7 @@ import com.troquim_bot.application.catalog.ConfirmarAgendamentoDoCatalogo;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.language.ServiceInterpretationLearningStore;
 import com.troquim_bot.application.service.ServiceApplicationService;
+import com.troquim_bot.application.waitlist.WaitlistApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.RelogioDoNegocio;
@@ -115,6 +116,7 @@ public class ConversationBookingGateway {
     private final ServiceInterpretationLearningStore interpretationLearningStore;
     private final ConfirmarAgendamentoDoCatalogo confirmarAgendamento;
     private final RelogioDoNegocio relogio;
+    private final WaitlistApplicationService waitlistApplicationService;
     private final TimeInputParser timeInputParser;
 
     public ConversationBookingGateway(TenantProvider tenantProvider,
@@ -125,7 +127,8 @@ public class ConversationBookingGateway {
                                       ServiceApplicationService serviceApplicationService,
                                       ServiceInterpretationLearningStore interpretationLearningStore,
                                       ConfirmarAgendamentoDoCatalogo confirmarAgendamento,
-                                      RelogioDoNegocio relogio) {
+                                      RelogioDoNegocio relogio,
+                                      WaitlistApplicationService waitlistApplicationService) {
         this.tenantProvider = tenantProvider;
         this.consultarCatalogo = consultarCatalogo;
         this.availabilityApplicationService = availabilityApplicationService;
@@ -135,6 +138,7 @@ public class ConversationBookingGateway {
         this.interpretationLearningStore = interpretationLearningStore;
         this.confirmarAgendamento = confirmarAgendamento;
         this.relogio = relogio;
+        this.waitlistApplicationService = waitlistApplicationService;
         this.timeInputParser = new TimeInputParser();
     }
 
@@ -312,6 +316,48 @@ public class ConversationBookingGateway {
         return new ConsultaHorarios(Status.OK, servico.item().nome(), diaInformado, horarios);
     }
 
+    /**
+     * Registra interesse em um slot futuro. A waitlist não reserva nada e nunca pula a
+     * confirmação canônica quando o horário reaparece.
+     */
+    public boolean entrarNaEspera(String telefone,
+                                  String nomeServico,
+                                  String diaInformado,
+                                  LocalTime earliestTime,
+                                  LocalTime latestTime) {
+        if (waitlistApplicationService == null) {
+            return false;
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        ServicoResolvido servico = resolverServico(nomeServico);
+        if (!servico.ok()) {
+            return false;
+        }
+
+        LocalDate data = null;
+        if (diaInformado != null && !diaInformado.isBlank()) {
+            data = resolverData(diaInformado).orElse(null);
+            if (data == null) {
+                return false;
+            }
+        }
+
+        try {
+            waitlistApplicationService.join(
+                    businessId,
+                    telefone,
+                    servico.item().id(),
+                    servico.profissional(),
+                    data,
+                    earliestTime,
+                    latestTime);
+            return true;
+        } catch (RuntimeException invalido) {
+            return false;
+        }
+    }
+
     public Confirmacao confirmar(String commandBase,
                                  String telefone,
                                  String nomeCliente,
@@ -427,6 +473,16 @@ public class ConversationBookingGateway {
         Appointment alvo = ativos.get(indice);
         Agendamento apresentacao = paraApresentacao(businessId, alvo);
         appointmentApplicationService.cancelarAgendamento(alvo.getId());
+
+        if (waitlistApplicationService != null) {
+            waitlistApplicationService.slotReleased(
+                    businessId,
+                    alvo.getServiceId(),
+                    alvo.getProfessionalId(),
+                    apresentacao.servico(),
+                    alvo.getDate(),
+                    alvo.getStartTime());
+        }
         return Optional.of(apresentacao);
     }
 
