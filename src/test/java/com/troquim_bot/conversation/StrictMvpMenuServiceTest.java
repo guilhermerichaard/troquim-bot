@@ -315,7 +315,7 @@ class StrictMvpMenuServiceTest {
                 states.buscarPorNumero(NUMERO));
 
         var presentation = ConversationInteractivePresentation.from(sugestoes).orElseThrow();
-        assertEquals(ConversationInteractivePresentation.Type.LIST, presentation.type());
+        assertEquals(ConversationInteractivePresentation.Type.BUTTONS, presentation.type());
         assertEquals("turbo_slot_2026-09-25_1600", presentation.options().get(0).id());
         assertEquals("turbo_slot_2026-09-25_1700", presentation.options().get(1).id());
         assertEquals("nav_voltar", presentation.options().get(2).id());
