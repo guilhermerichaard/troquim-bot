@@ -53,6 +53,7 @@ public class StrictMvpMenuService {
     private final boolean strictMvpEnabled;
     private final ConversationBookingGateway conversationBookingGateway;
     private final SaudacaoDoNegocio saudacaoDoNegocio;
+    private final BookingIntentInterpreter bookingIntentInterpreter;
 
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
@@ -71,7 +72,8 @@ public class StrictMvpMenuService {
                                 ConversationBookingGateway conversationBookingGateway) {
         this(conversationStateService, availabilityApplicationService, bookingApplicationService,
                 aberturaDeAgenda, conversationMode, conversationBookingGateway,
-                new SaudacaoDoNegocio(new com.troquim_bot.availability.RelogioDoNegocio()));
+                new SaudacaoDoNegocio(new com.troquim_bot.availability.RelogioDoNegocio()),
+                new HeuristicBookingIntentInterpreter());
     }
 
     @Autowired
@@ -81,7 +83,8 @@ public class StrictMvpMenuService {
                                 ObjectProvider<AberturaDeAgenda> aberturaDeAgenda,
                                 @Value("${conversation.mode:STRICT_MVP}") String conversationMode,
                                 ConversationBookingGateway conversationBookingGateway,
-                                SaudacaoDoNegocio saudacaoDoNegocio) {
+                                SaudacaoDoNegocio saudacaoDoNegocio,
+                                BookingIntentInterpreter bookingIntentInterpreter) {
         this.conversationStateService = conversationStateService;
         this.availabilityApplicationService = availabilityApplicationService;
         this.bookingApplicationService = bookingApplicationService;
@@ -91,6 +94,7 @@ public class StrictMvpMenuService {
         this.strictMvpEnabled = "STRICT_MVP".equalsIgnoreCase(conversationMode);
         this.conversationBookingGateway = conversationBookingGateway;
         this.saudacaoDoNegocio = saudacaoDoNegocio;
+        this.bookingIntentInterpreter = bookingIntentInterpreter;
     }
 
     public boolean isStrictMvpEnabled() {
@@ -120,6 +124,10 @@ public class StrictMvpMenuService {
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
 
+        if (step == ConversationStep.AGUARDANDO_HORARIO && texto.startsWith("turbo_slot_")) {
+            return selecionarSlotTurbo(numero, texto);
+        }
+
         Integer paginaHorarios = paginaDe(texto, "horarios_pagina_");
         if (paginaHorarios != null && step == ConversationStep.AGUARDANDO_HORARIO) {
             return menuHorarios(numero, paginaHorarios);
@@ -133,6 +141,14 @@ public class StrictMvpMenuService {
         Integer paginaCancelamentos = paginaDe(texto, "cancelamentos_pagina_");
         if (paginaCancelamentos != null && step == ConversationStep.AGUARDANDO_CANCELAMENTO) {
             return menuCancelamentos(numero, paginaCancelamentos);
+        }
+
+        if ((step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO)
+                && !texto.matches("^[123]$")) {
+            Optional<String> turbo = tentarTurbo(numero, mensagem);
+            if (turbo.isPresent()) {
+                return turbo.get();
+            }
         }
 
         // Intencoes globais nao podem ficar presas na etapa atual do formulario textual.
@@ -244,6 +260,109 @@ public class StrictMvpMenuService {
             return cancelarAgendamento(numero);
         }
         return menuPrincipal();
+    }
+
+    private Optional<String> tentarTurbo(String numero, String mensagem) {
+        if (conversationBookingGateway == null || bookingIntentInterpreter == null) {
+            return Optional.empty();
+        }
+
+        Optional<BookingIntent> interpretada = bookingIntentInterpreter.interpretar(mensagem);
+        if (interpretada.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ConversationBookingGateway.Recomendacao recomendacao =
+                conversationBookingGateway.recomendar(numero, interpretada.get());
+
+        if (!recomendacao.ok()) {
+            return Optional.empty();
+        }
+
+        if (recomendacao.slots().isEmpty()) {
+            return Optional.empty();
+        }
+
+        conversationStateService.limparEstado(numero);
+        ConversationState atual = conversationStateService.buscarPorNumero(numero);
+        var draft = atual.criarNovoDraft();
+        draft.setServico(recomendacao.servico());
+        atual.setStep(ConversationStep.AGUARDANDO_HORARIO);
+        conversationStateService.persistir(atual);
+
+        StringBuilder resposta = new StringBuilder();
+        if (recomendacao.repetindoHistorico()) {
+            resposta.append("Fechado — o mesmo de sempre: ")
+                    .append(recomendacao.servico()).append(".\n\n");
+        } else {
+            resposta.append("Achei estes horários para ")
+                    .append(recomendacao.servico()).append(":\n\n");
+        }
+
+        for (ConversationBookingGateway.SlotSugerido slot : recomendacao.slots()) {
+            String id = "turbo_slot_" + slot.data() + "_"
+                    + String.format("%02d%02d", slot.horario().getHour(), slot.horario().getMinute());
+            resposta.append("[[choice:").append(id).append("|")
+                    .append(rotuloSlotTurbo(slot.data(), slot.horario())).append("]]\n");
+        }
+        resposta.append(CHOICE_BACK);
+        return Optional.of(resposta.toString());
+    }
+
+    private String selecionarSlotTurbo(String numero, String texto) {
+        String payload = texto.substring("turbo_slot_".length());
+        int separador = payload.lastIndexOf('_');
+        if (separador <= 0 || separador + 5 != payload.length()) {
+            return menuHorarios(numero);
+        }
+
+        try {
+            java.time.LocalDate data = java.time.LocalDate.parse(payload.substring(0, separador));
+            String hhmm = payload.substring(separador + 1);
+            java.time.LocalTime horario = java.time.LocalTime.of(
+                    Integer.parseInt(hhmm.substring(0, 2)),
+                    Integer.parseInt(hhmm.substring(2, 4)));
+
+            ConversationState state = conversationStateService.buscarPorNumero(numero);
+            var draft = state.getDraftAtual();
+            if (draft == null || draft.getServico() == null) {
+                return menuPrincipal();
+            }
+
+            String diaCanonico = data.toString();
+            String horarioCanonico = ConversationBookingGateway.formatarHorario(horario);
+            if (!conversationBookingGateway.horarioPertenceAOferta(
+                    draft.getServico(), diaCanonico, horarioCanonico)) {
+                draft.setDia(diaCanonico);
+                draft.setHorario(null);
+                state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+                conversationStateService.persistir(state);
+                return "Esse horário acabou de ficar indisponível. Escolha outro:\n\n"
+                        + menuHorarios(numero);
+            }
+
+            draft.setDia(diaCanonico);
+            draft.setHorario(horarioCanonico);
+            state.setStep(ConversationStep.AGUARDANDO_NOME);
+            conversationStateService.persistir(state);
+            return menuNome(numero);
+        } catch (RuntimeException invalido) {
+            return menuHorarios(numero);
+        }
+    }
+
+    private String rotuloSlotTurbo(java.time.LocalDate data, java.time.LocalTime horario) {
+        String dia = switch (data.getDayOfWeek()) {
+            case MONDAY -> "Seg";
+            case TUESDAY -> "Ter";
+            case WEDNESDAY -> "Qua";
+            case THURSDAY -> "Qui";
+            case FRIDAY -> "Sex";
+            case SATURDAY -> "Sáb";
+            case SUNDAY -> "Dom";
+        };
+        return dia + " " + String.format("%02d/%02d", data.getDayOfMonth(), data.getMonthValue())
+                + " " + ConversationBookingGateway.formatarHorario(horario);
     }
 
     private String menuPrincipal() {
