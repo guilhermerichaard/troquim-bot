@@ -146,6 +146,10 @@ public class WhatsAppCloudMessageParser implements InboundMessageParser {
                 default -> null; // nfm_reply continua sendo tratado como FlowCompletion.
             };
             body = ConversationInteractivePresentation.canonicalInput(interactiveId);
+        } else if ("button".equals(type)) {
+            // Quick reply de template aprovado: a Meta devolve o payload como message.button.
+            body = ConversationInteractivePresentation.canonicalInput(
+                    textOrNull(message.path("button").path("payload")));
         } else {
             return java.util.Optional.empty();
         }
