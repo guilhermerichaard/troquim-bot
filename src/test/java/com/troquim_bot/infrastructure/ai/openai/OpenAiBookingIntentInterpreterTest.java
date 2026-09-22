@@ -125,7 +125,9 @@ class OpenAiBookingIntentInterpreterTest {
                 new HeuristicBookingIntentInterpreter(),
                 RelogioDoNegocio.fixo(LocalDateTime.of(2026, 9, 22, 12, 0)));
 
-        assertTrue(interpreter.interpretar("oi, tudo bem?").isEmpty());
+        // O heurístico antigo classificaria "sexta?" como sinal de agendamento por conter
+        // um dia da semana. Uma resposta válida da IA dizendo "não é booking" deve vencer.
+        assertTrue(interpreter.interpretar("sexta?").isEmpty());
     }
 
     private OpenAiBookingIntentProperties enabledProperties() {
