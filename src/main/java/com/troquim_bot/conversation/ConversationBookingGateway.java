@@ -8,6 +8,7 @@ import com.troquim_bot.application.catalog.ConfirmarAgendamentoDoCatalogo;
 import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.language.ServiceInterpretationLearningStore;
 import com.troquim_bot.application.service.ServiceApplicationService;
+import com.troquim_bot.application.waitlist.WaitlistApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.RelogioDoNegocio;
@@ -16,6 +17,7 @@ import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.service.ServiceId;
+import com.troquim_bot.waitlist.WaitlistEntry;
 
 import org.springframework.stereotype.Service;
 
@@ -75,11 +77,35 @@ public class ConversationBookingGateway {
         }
     }
 
+    public record SlotSugerido(String servico, LocalDate data, LocalTime horario) {
+    }
+
+    public record Recomendacao(Status status, String servico, List<SlotSugerido> slots,
+                               boolean repetindoHistorico) {
+        public Recomendacao {
+            slots = slots == null ? List.of() : List.copyOf(slots);
+        }
+
+        public boolean ok() {
+            return status == Status.OK;
+        }
+    }
+
     public record Confirmacao(Status status, BookingResult resultado,
                               String servico, String dia, String horario) {
 
         public boolean confirmada() {
             return status == Status.OK && resultado != null && resultado.isConfirmado();
+        }
+    }
+
+    public record WaitlistClaim(Status status,
+                                String servico,
+                                LocalDate data,
+                                LocalTime horario,
+                                String nomeCliente) {
+        public boolean ok() {
+            return status == Status.OK;
         }
     }
 
@@ -101,6 +127,7 @@ public class ConversationBookingGateway {
     private final ServiceInterpretationLearningStore interpretationLearningStore;
     private final ConfirmarAgendamentoDoCatalogo confirmarAgendamento;
     private final RelogioDoNegocio relogio;
+    private final WaitlistApplicationService waitlistApplicationService;
     private final TimeInputParser timeInputParser;
 
     public ConversationBookingGateway(TenantProvider tenantProvider,
@@ -111,7 +138,8 @@ public class ConversationBookingGateway {
                                       ServiceApplicationService serviceApplicationService,
                                       ServiceInterpretationLearningStore interpretationLearningStore,
                                       ConfirmarAgendamentoDoCatalogo confirmarAgendamento,
-                                      RelogioDoNegocio relogio) {
+                                      RelogioDoNegocio relogio,
+                                      WaitlistApplicationService waitlistApplicationService) {
         this.tenantProvider = tenantProvider;
         this.consultarCatalogo = consultarCatalogo;
         this.availabilityApplicationService = availabilityApplicationService;
@@ -121,6 +149,7 @@ public class ConversationBookingGateway {
         this.interpretationLearningStore = interpretationLearningStore;
         this.confirmarAgendamento = confirmarAgendamento;
         this.relogio = relogio;
+        this.waitlistApplicationService = waitlistApplicationService;
         this.timeInputParser = new TimeInputParser();
     }
 
@@ -190,6 +219,99 @@ public class ConversationBookingGateway {
         return resolverServico(nomeInterpretado).status();
     }
 
+    /**
+     * Turbo Booking: converte uma preferência já interpretada em slots reais.
+     *
+     * A intenção nunca cria disponibilidade. Cada candidato vem exclusivamente do caso
+     * de uso canônico de disponibilidade e é apenas ordenado por preferência/compactação.
+     */
+    public Recomendacao recomendar(String telefone, BookingIntent intent) {
+        if (intent == null) {
+            return new Recomendacao(Status.SERVICO_INDISPONIVEL, "", List.of(), false);
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        ServicoResolvido servico = intent.sameAsUsual()
+                ? resolverServicoDoHistorico(businessId, telefone)
+                : resolverServico(intent.serviceQuery());
+
+        if (!servico.ok()) {
+            return new Recomendacao(servico.status(),
+                    servico.item() == null ? "" : servico.item().nome(),
+                    List.of(), intent.sameAsUsual());
+        }
+
+        List<LocalDate> datas;
+        if (intent.hasDayPreference()) {
+            Optional<LocalDate> data = resolverData(intent.dayQuery());
+            if (data.isEmpty()) {
+                return new Recomendacao(Status.DIA_INVALIDO, servico.item().nome(),
+                        List.of(), intent.sameAsUsual());
+            }
+            datas = List.of(data.get());
+        } else {
+            LocalDate hoje = relogio.hoje();
+            datas = availabilityApplicationService.datasComVaga(
+                    businessId, servico.item().id(), servico.profissional(), hoje, hoje.plusDays(6));
+        }
+
+        com.troquim_bot.availability.SlotRecommendationPolicy policy =
+                new com.troquim_bot.availability.SlotRecommendationPolicy();
+
+        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
+                new java.util.ArrayList<>();
+        for (LocalDate data : datas) {
+            for (LocalTime horario : availabilityApplicationService.horariosLivres(
+                    businessId, servico.item().id(), servico.profissional(), data)) {
+                if (!intent.accepts(horario)) {
+                    continue;
+                }
+                candidatos.add(new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
+                        data, horario, gapAdjacenteMinutos(
+                                businessId, servico.profissional(), data, horario, servico.item().duracao())));
+            }
+        }
+
+        List<SlotSugerido> slots = policy.rank(candidatos, intent.targetTime(), 3).stream()
+                .map(candidato -> new SlotSugerido(
+                        servico.item().nome(), candidato.date(), candidato.time()))
+                .toList();
+
+        return new Recomendacao(Status.OK, servico.item().nome(), slots, intent.sameAsUsual());
+    }
+
+    private ServicoResolvido resolverServicoDoHistorico(BusinessId businessId, String telefone) {
+        return customerProfileService.localizarIdOficial(businessId, telefone)
+                .flatMap(customerId -> appointmentApplicationService
+                        .listarHistoricoPorCliente(customerId).stream()
+                        .filter(appointment -> appointment.pertenceAoTenant(businessId))
+                        .findFirst())
+                .flatMap(appointment -> serviceApplicationService.buscarPorId(appointment.getServiceId()))
+                .map(servico -> resolverServico(servico.getNome()))
+                .orElseGet(() -> new ServicoResolvido(Status.SERVICO_INDISPONIVEL, null, null));
+    }
+
+    private int gapAdjacenteMinutos(BusinessId businessId,
+                                    ProfessionalId profissional,
+                                    LocalDate data,
+                                    LocalTime horario,
+                                    java.time.Duration duracaoServico) {
+        int melhor = Integer.MAX_VALUE;
+        LocalTime fimCandidato = horario.plus(duracaoServico);
+        for (Appointment appointment : appointmentApplicationService.listarAtivos(businessId)) {
+            if (!appointment.getProfessionalId().equals(profissional)
+                    || !appointment.getDate().equals(data)) {
+                continue;
+            }
+            long ateInicio = Math.abs(java.time.temporal.ChronoUnit.MINUTES.between(
+                    appointment.getEndTime(), horario));
+            long ateFim = Math.abs(java.time.temporal.ChronoUnit.MINUTES.between(
+                    fimCandidato, appointment.getStartTime()));
+            melhor = (int) Math.min(melhor, Math.min(ateInicio, ateFim));
+        }
+        return melhor == Integer.MAX_VALUE ? 24 * 60 : melhor;
+    }
+
     public ConsultaHorarios consultarHorarios(String nomeInterpretado, String diaInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
         ServicoResolvido servico = resolverServico(nomeInterpretado);
@@ -206,6 +328,91 @@ public class ConversationBookingGateway {
                 businessId, servico.item().id(), servico.profissional(), data.get());
 
         return new ConsultaHorarios(Status.OK, servico.item().nome(), diaInformado, horarios);
+    }
+
+    /**
+     * Registra interesse em um slot futuro. A waitlist não reserva nada e nunca pula a
+     * confirmação canônica quando o horário reaparece.
+     */
+    public boolean entrarNaEspera(String telefone,
+                                  String nomeServico,
+                                  String diaInformado,
+                                  LocalTime earliestTime,
+                                  LocalTime latestTime) {
+        if (waitlistApplicationService == null) {
+            return false;
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        ServicoResolvido servico = resolverServico(nomeServico);
+        if (!servico.ok()) {
+            return false;
+        }
+
+        LocalDate data = null;
+        if (diaInformado != null && !diaInformado.isBlank()) {
+            data = resolverData(diaInformado).orElse(null);
+            if (data == null) {
+                return false;
+            }
+        }
+
+        try {
+            waitlistApplicationService.join(
+                    businessId,
+                    telefone,
+                    servico.item().id(),
+                    servico.profissional(),
+                    data,
+                    earliestTime,
+                    latestTime);
+            return true;
+        } catch (RuntimeException invalido) {
+            return false;
+        }
+    }
+
+    /**
+     * Valida o clique do template de waitlist contra a entrada persistida, o catálogo
+     * atual e a disponibilidade atual. O payload do botão nunca vira autoridade.
+     */
+    public WaitlistClaim prepararResgateWaitlist(String telefone,
+                                                 java.util.UUID waitlistId,
+                                                 LocalDate data,
+                                                 LocalTime horario) {
+        if (waitlistApplicationService == null || waitlistId == null || data == null || horario == null) {
+            return new WaitlistClaim(Status.FALHA_TECNICA, "", data, horario, null);
+        }
+
+        WaitlistEntry entry = waitlistApplicationService.claim(waitlistId, telefone).orElse(null);
+        if (entry == null) {
+            return new WaitlistClaim(Status.SERVICO_INDISPONIVEL, "", data, horario, null);
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        if (!entry.getBusinessId().equals(businessId)
+                || (entry.getRequestedDate() != null && !entry.getRequestedDate().equals(data))
+                || (entry.getEarliestTime() != null && horario.isBefore(entry.getEarliestTime()))
+                || (entry.getLatestTime() != null && horario.isAfter(entry.getLatestTime()))) {
+            return new WaitlistClaim(Status.HORARIO_INVALIDO, "", data, horario, null);
+        }
+
+        var item = consultarCatalogo.porServico(businessId, entry.getServiceId()).orElse(null);
+        if (item == null || item.profissionais().stream()
+                .noneMatch(p -> p.id().equals(entry.getProfessionalId()))) {
+            return new WaitlistClaim(Status.SERVICO_INDISPONIVEL, "", data, horario, null);
+        }
+
+        boolean livre = availabilityApplicationService.estaLivre(
+                businessId, entry.getServiceId(), entry.getProfessionalId(), data, horario);
+        if (!livre) {
+            waitlistApplicationService.reactivate(waitlistId, telefone);
+            return new WaitlistClaim(
+                    Status.HORARIO_INDISPONIVEL, item.nome(), data, horario, null);
+        }
+
+        String nome = customerProfileService.nomePreferido(telefone).orElse(null);
+        return new WaitlistClaim(Status.OK, item.nome(), data, horario, nome);
     }
 
     public Confirmacao confirmar(String commandBase,
@@ -323,6 +530,16 @@ public class ConversationBookingGateway {
         Appointment alvo = ativos.get(indice);
         Agendamento apresentacao = paraApresentacao(businessId, alvo);
         appointmentApplicationService.cancelarAgendamento(alvo.getId());
+
+        if (waitlistApplicationService != null) {
+            waitlistApplicationService.slotReleased(
+                    businessId,
+                    alvo.getServiceId(),
+                    alvo.getProfessionalId(),
+                    apresentacao.servico(),
+                    alvo.getDate(),
+                    alvo.getStartTime());
+        }
         return Optional.of(apresentacao);
     }
 

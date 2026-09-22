@@ -26,6 +26,8 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -284,6 +286,126 @@ class StrictMvpMenuServiceTest {
         assertEquals("nav_voltar", presentation.options().get(2).id());
         assertEquals(ConversationStep.AGUARDANDO_CONFIRMACAO,
                 states.buscarPorNumero(NUMERO).getStep());
+    }
+
+    @Test
+    void turboVaiDaFraseNaturalDiretoParaSlotsERevalidaOClique() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.recomendar(eq(NUMERO), any(BookingIntent.class)))
+                .thenReturn(new ConversationBookingGateway.Recomendacao(
+                        ConversationBookingGateway.Status.OK,
+                        "Manicure",
+                        List.of(
+                                new ConversationBookingGateway.SlotSugerido(
+                                        "Manicure", LocalDate.of(2026, 9, 25), LocalTime.of(16, 0)),
+                                new ConversationBookingGateway.SlotSugerido(
+                                        "Manicure", LocalDate.of(2026, 9, 25), LocalTime.of(17, 0))),
+                        false));
+        when(gateway.horarioPertenceAOferta("Manicure", "2026-09-25", "17h"))
+                .thenReturn(true);
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+
+        String sugestoes = menu.processarMenu(
+                NUMERO,
+                "quero manicure sexta depois das 16",
+                states.buscarPorNumero(NUMERO));
+
+        var presentation = ConversationInteractivePresentation.from(sugestoes).orElseThrow();
+        assertEquals(ConversationInteractivePresentation.Type.BUTTONS, presentation.type());
+        assertEquals("turbo_slot_2026-09-25_1600", presentation.options().get(0).id());
+        assertEquals("turbo_slot_2026-09-25_1700", presentation.options().get(1).id());
+        assertEquals("nav_voltar", presentation.options().get(2).id());
+        assertEquals(ConversationStep.AGUARDANDO_HORARIO,
+                states.buscarPorNumero(NUMERO).getStep());
+        assertEquals("Manicure", states.buscarPorNumero(NUMERO).getDraftAtual().getServico());
+
+        String proximo = menu.processarMenu(
+                NUMERO,
+                "turbo_slot_2026-09-25_1700",
+                states.buscarPorNumero(NUMERO));
+
+        assertTrue(proximo.contains("Qual é o seu nome"), proximo);
+        assertEquals("2026-09-25", states.buscarPorNumero(NUMERO).getDraftAtual().getDia());
+        assertEquals("17h", states.buscarPorNumero(NUMERO).getDraftAtual().getHorario());
+        assertEquals(ConversationStep.AGUARDANDO_NOME,
+                states.buscarPorNumero(NUMERO).getStep());
+    }
+
+    @Test
+    void turboSemVagaOfereceWaitlistClicavelEConfirmaEntrada() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.recomendar(eq(NUMERO), any(BookingIntent.class)))
+                .thenReturn(new ConversationBookingGateway.Recomendacao(
+                        ConversationBookingGateway.Status.OK,
+                        "Manicure",
+                        List.of(),
+                        false));
+        when(gateway.entrarNaEspera(
+                eq(NUMERO),
+                eq("Manicure"),
+                eq("sexta"),
+                eq(LocalTime.of(16, 0)),
+                eq(null)))
+                .thenReturn(true);
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+
+        String semVaga = menu.processarMenu(
+                NUMERO,
+                "quero manicure sexta depois das 16",
+                states.buscarPorNumero(NUMERO));
+
+        var presentation = ConversationInteractivePresentation.from(semVaga).orElseThrow();
+        assertEquals(ConversationInteractivePresentation.Type.BUTTONS, presentation.type());
+        assertTrue(presentation.options().get(0).id().startsWith("waitlist_join_sexta_1600_"));
+        assertEquals("waitlist_other", presentation.options().get(1).id());
+        assertEquals("nav_voltar", presentation.options().get(2).id());
+
+        String entrou = menu.processarMenu(
+                NUMERO,
+                presentation.options().get(0).id(),
+                states.buscarPorNumero(NUMERO));
+
+        assertTrue(entrou.contains("entrou na espera"), entrou);
+    }
+
+    @Test
+    void waitlistQuickReplyGlobalRetomaDiretoNaConfirmacaoComNomeSalvo() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+        java.util.UUID waitlistId = java.util.UUID.randomUUID();
+        LocalDate data = LocalDate.of(2026, 9, 25);
+        LocalTime horario = LocalTime.of(17, 0);
+
+        when(gateway.prepararResgateWaitlist(NUMERO, waitlistId, data, horario))
+                .thenReturn(new ConversationBookingGateway.WaitlistClaim(
+                        ConversationBookingGateway.Status.OK,
+                        "Manicure",
+                        data,
+                        horario,
+                        "Gui"));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+        String payload = "waitlist_claim_" + waitlistId + "_2026-09-25_1700";
+
+        String resposta = menu.processarMenu(
+                NUMERO, payload, states.buscarPorNumero(NUMERO));
+
+        assertTrue(resposta.contains("Vou confirmar seu agendamento"), resposta);
+        ConversationState salvo = states.buscarPorNumero(NUMERO);
+        assertEquals(ConversationStep.AGUARDANDO_CONFIRMACAO, salvo.getStep());
+        assertEquals("Manicure", salvo.getDraftAtual().getServico());
+        assertEquals("2026-09-25", salvo.getDraftAtual().getDia());
+        assertEquals("17h", salvo.getDraftAtual().getHorario());
+        assertEquals("Gui", salvo.getDraftAtual().getNome());
     }
 
     @Test

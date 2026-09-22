@@ -38,6 +38,12 @@ public class WhatsAppCloudProperties {
     /** Base URL da Graph API. Default oficial público, sobrescrevível em teste. */
     private String baseUrl = "https://graph.facebook.com";
 
+    /** Template aprovado para avisar que um slot da waitlist ficou disponível. */
+    private String waitlistTemplateName;
+
+    /** Idioma exato do template aprovado. */
+    private String waitlistTemplateLanguage = "pt_BR";
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -100,5 +106,21 @@ public class WhatsAppCloudProperties {
 
     public void setBaseUrl(String baseUrl) {
         this.baseUrl = baseUrl;
+    }
+
+    public String getWaitlistTemplateName() {
+        return waitlistTemplateName;
+    }
+
+    public void setWaitlistTemplateName(String waitlistTemplateName) {
+        this.waitlistTemplateName = waitlistTemplateName;
+    }
+
+    public String getWaitlistTemplateLanguage() {
+        return waitlistTemplateLanguage;
+    }
+
+    public void setWaitlistTemplateLanguage(String waitlistTemplateLanguage) {
+        this.waitlistTemplateLanguage = waitlistTemplateLanguage;
     }
 }

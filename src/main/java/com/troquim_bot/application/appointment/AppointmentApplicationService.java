@@ -188,6 +188,23 @@ public class AppointmentApplicationService {
     }
 
     /**
+     * Histórico completo do cliente, mais recente primeiro.
+     *
+     * Usado para preferências explícitas como "o mesmo de sempre". O histórico apenas
+     * fornece evidência; catálogo e disponibilidade atuais continuam revalidando a escolha.
+     */
+    public List<Appointment> listarHistoricoPorCliente(CustomerId customerId) {
+        if (customerId == null) {
+            return List.of();
+        }
+        return appointmentRepository.findByCustomerId(customerId).stream()
+                .sorted(Comparator.comparing(Appointment::getDate)
+                        .thenComparing(Appointment::getStartTime)
+                        .reversed())
+                .toList();
+    }
+
+    /**
      * Busca o proximo agendamento ativo de um cliente.
      */
     public Optional<Appointment> buscarAtivoPorCliente(CustomerId customerId) {
