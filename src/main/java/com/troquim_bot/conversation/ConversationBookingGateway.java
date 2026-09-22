@@ -17,6 +17,7 @@ import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.customer.CustomerProfileService;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.service.ServiceId;
+import com.troquim_bot.waitlist.WaitlistEntry;
 
 import org.springframework.stereotype.Service;
 
@@ -95,6 +96,16 @@ public class ConversationBookingGateway {
 
         public boolean confirmada() {
             return status == Status.OK && resultado != null && resultado.isConfirmado();
+        }
+    }
+
+    public record WaitlistClaim(Status status,
+                                String servico,
+                                LocalDate data,
+                                LocalTime horario,
+                                String nomeCliente) {
+        public boolean ok() {
+            return status == Status.OK;
         }
     }
 
@@ -359,6 +370,49 @@ public class ConversationBookingGateway {
         } catch (RuntimeException invalido) {
             return false;
         }
+    }
+
+    /**
+     * Valida o clique do template de waitlist contra a entrada persistida, o catálogo
+     * atual e a disponibilidade atual. O payload do botão nunca vira autoridade.
+     */
+    public WaitlistClaim prepararResgateWaitlist(String telefone,
+                                                 java.util.UUID waitlistId,
+                                                 LocalDate data,
+                                                 LocalTime horario) {
+        if (waitlistApplicationService == null || waitlistId == null || data == null || horario == null) {
+            return new WaitlistClaim(Status.FALHA_TECNICA, "", data, horario, null);
+        }
+
+        WaitlistEntry entry = waitlistApplicationService.claim(waitlistId, telefone).orElse(null);
+        if (entry == null) {
+            return new WaitlistClaim(Status.SERVICO_INDISPONIVEL, "", data, horario, null);
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        if (!entry.getBusinessId().equals(businessId)
+                || (entry.getRequestedDate() != null && !entry.getRequestedDate().equals(data))
+                || (entry.getEarliestTime() != null && horario.isBefore(entry.getEarliestTime()))
+                || (entry.getLatestTime() != null && horario.isAfter(entry.getLatestTime()))) {
+            return new WaitlistClaim(Status.HORARIO_INVALIDO, "", data, horario, null);
+        }
+
+        var item = consultarCatalogo.porServico(businessId, entry.getServiceId()).orElse(null);
+        if (item == null || item.profissionais().stream()
+                .noneMatch(p -> p.id().equals(entry.getProfessionalId()))) {
+            return new WaitlistClaim(Status.SERVICO_INDISPONIVEL, "", data, horario, null);
+        }
+
+        boolean livre = availabilityApplicationService.estaLivre(
+                businessId, entry.getServiceId(), entry.getProfessionalId(), data, horario);
+        if (!livre) {
+            waitlistApplicationService.reactivate(waitlistId, telefone);
+            return new WaitlistClaim(
+                    Status.HORARIO_INDISPONIVEL, item.nome(), data, horario, null);
+        }
+
+        String nome = customerProfileService.nomePreferido(telefone).orElse(null);
+        return new WaitlistClaim(Status.OK, item.nome(), data, horario, nome);
     }
 
     public Confirmacao confirmar(String commandBase,
