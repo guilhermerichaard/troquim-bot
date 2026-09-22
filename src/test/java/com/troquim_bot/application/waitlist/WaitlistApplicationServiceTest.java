@@ -141,12 +141,18 @@ class WaitlistApplicationServiceTest {
         public Optional<WaitlistEntry> findActiveRequest(BusinessId businessId,
                                                          String phoneE164,
                                                          ServiceId serviceId,
-                                                         ProfessionalId professionalId) {
+                                                         ProfessionalId professionalId,
+                                                         LocalDate requestedDate,
+                                                         LocalTime earliestTime,
+                                                         LocalTime latestTime) {
             return entries.stream()
                     .filter(entry -> entry.getBusinessId().equals(businessId))
                     .filter(entry -> entry.getPhoneE164().equals(phoneE164))
                     .filter(entry -> entry.getServiceId().equals(serviceId))
                     .filter(entry -> entry.getProfessionalId().equals(professionalId))
+                    .filter(entry -> java.util.Objects.equals(entry.getRequestedDate(), requestedDate))
+                    .filter(entry -> java.util.Objects.equals(entry.getEarliestTime(), earliestTime))
+                    .filter(entry -> java.util.Objects.equals(entry.getLatestTime(), latestTime))
                     .filter(entry -> entry.getStatus()
                             == com.troquim_bot.waitlist.WaitlistStatus.ACTIVE)
                     .findFirst();
