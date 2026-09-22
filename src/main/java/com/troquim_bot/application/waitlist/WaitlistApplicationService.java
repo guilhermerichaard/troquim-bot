@@ -52,6 +52,29 @@ public class WaitlistApplicationService {
                 requestedDate, earliestTime, latestTime));
     }
 
+    public java.util.Optional<WaitlistEntry> claim(java.util.UUID id, String phone) {
+        if (id == null || phone == null || phone.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        String e164;
+        try {
+            e164 = new PhoneNumber(phone).getE164();
+        } catch (IllegalArgumentException invalido) {
+            return java.util.Optional.empty();
+        }
+        return repository.findById(id)
+                .filter(entry -> entry.getStatus()
+                        == com.troquim_bot.waitlist.WaitlistStatus.NOTIFIED)
+                .filter(entry -> entry.getPhoneE164().equals(e164));
+    }
+
+    public void reactivate(java.util.UUID id, String phone) {
+        claim(id, phone).ifPresent(entry -> {
+            entry.reactivate();
+            repository.save(entry);
+        });
+    }
+
     public boolean slotReleased(BusinessId businessId,
                                 ServiceId serviceId,
                                 ProfessionalId professionalId,
@@ -69,7 +92,7 @@ public class WaitlistApplicationService {
         }
 
         for (WaitlistNotificationGateway gateway : notificationGateways) {
-            if (gateway.notifySlotAvailable(next.getPhoneE164(), serviceName, date, time)) {
+            if (gateway.notifySlotAvailable(next.getId(), next.getPhoneE164(), serviceName, date, time)) {
                 next.markNotified();
                 repository.save(next);
                 return true;
