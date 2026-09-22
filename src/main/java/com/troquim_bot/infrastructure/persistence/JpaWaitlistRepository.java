@@ -106,7 +106,10 @@ public class JpaWaitlistRepository implements WaitlistRepository {
     public Optional<WaitlistEntry> findActiveRequest(BusinessId businessId,
                                                      String phoneE164,
                                                      ServiceId serviceId,
-                                                     ProfessionalId professionalId) {
+                                                     ProfessionalId professionalId,
+                                                     LocalDate requestedDate,
+                                                     LocalTime earliestTime,
+                                                     LocalTime latestTime) {
         if (businessId == null || phoneE164 == null || serviceId == null || professionalId == null) {
             return Optional.empty();
         }
@@ -118,6 +121,9 @@ public class JpaWaitlistRepository implements WaitlistRepository {
                    AND phone_e164 = :phone
                    AND service_id = :service
                    AND professional_id = :professional
+                   AND requested_date IS NOT DISTINCT FROM CAST(:requestedDate AS date)
+                   AND earliest_time IS NOT DISTINCT FROM CAST(:earliest AS time)
+                   AND latest_time IS NOT DISTINCT FROM CAST(:latest AS time)
                    AND status = 'ACTIVE'
                  ORDER BY created_at
                  LIMIT 1
@@ -126,6 +132,9 @@ public class JpaWaitlistRepository implements WaitlistRepository {
                 .setParameter("phone", phoneE164)
                 .setParameter("service", serviceId.getValue())
                 .setParameter("professional", professionalId.getValue())
+                .setParameter("requestedDate", requestedDate)
+                .setParameter("earliest", earliestTime)
+                .setParameter("latest", latestTime)
                 .getResultList();
         return rows.stream().findFirst().map(this::map);
     }
