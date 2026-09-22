@@ -128,6 +128,14 @@ public class StrictMvpMenuService {
             return selecionarSlotTurbo(numero, texto);
         }
 
+        if (step == ConversationStep.AGUARDANDO_HORARIO && texto.startsWith("waitlist_join_")) {
+            return entrarNaEsperaTurbo(numero, texto);
+        }
+
+        if (texto.equals("waitlist_other")) {
+            return verOutrosHorariosTurbo(numero);
+        }
+
         Integer paginaHorarios = paginaDe(texto, "horarios_pagina_");
         if (paginaHorarios != null && step == ConversationStep.AGUARDANDO_HORARIO) {
             return menuHorarios(numero, paginaHorarios);
@@ -271,15 +279,12 @@ public class StrictMvpMenuService {
         if (interpretada.isEmpty()) {
             return Optional.empty();
         }
+        BookingIntent intent = interpretada.get();
 
         ConversationBookingGateway.Recomendacao recomendacao =
-                conversationBookingGateway.recomendar(numero, interpretada.get());
+                conversationBookingGateway.recomendar(numero, intent);
 
         if (!recomendacao.ok()) {
-            return Optional.empty();
-        }
-
-        if (recomendacao.slots().isEmpty()) {
             return Optional.empty();
         }
 
@@ -287,6 +292,28 @@ public class StrictMvpMenuService {
         ConversationState atual = conversationStateService.buscarPorNumero(numero);
         var draft = atual.criarNovoDraft();
         draft.setServico(recomendacao.servico());
+
+        if (recomendacao.slots().isEmpty()) {
+            if (intent.hasDayPreference()) {
+                draft.setDia(intent.dayQuery());
+                atual.setStep(ConversationStep.AGUARDANDO_HORARIO);
+            } else {
+                atual.setStep(ConversationStep.AGUARDANDO_DIA);
+            }
+            conversationStateService.persistir(atual);
+
+            String joinId = "waitlist_join_"
+                    + waitlistToken(intent.dayQuery()) + "_"
+                    + waitlistTimeToken(intent.earliestTime()) + "_"
+                    + waitlistTimeToken(intent.latestTime());
+
+            return Optional.of("Não achei vaga dentro do que você pediu para "
+                    + recomendacao.servico() + ".\n\n"
+                    + "[[choice:" + joinId + "|Entrar na espera]]\n"
+                    + "[[choice:waitlist_other|Ver outros horários]]\n"
+                    + CHOICE_BACK);
+        }
+
         atual.setStep(ConversationStep.AGUARDANDO_HORARIO);
         conversationStateService.persistir(atual);
 
@@ -307,6 +334,79 @@ public class StrictMvpMenuService {
         }
         resposta.append(CHOICE_BACK);
         return Optional.of(resposta.toString());
+    }
+
+    private String entrarNaEsperaTurbo(String numero, String texto) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        var draft = state.getDraftAtual();
+        if (draft == null || draft.getServico() == null || conversationBookingGateway == null) {
+            return menuPrincipal();
+        }
+
+        String payload = texto.substring("waitlist_join_".length());
+        String[] partes = payload.split("_", -1);
+        if (partes.length != 3) {
+            return verOutrosHorariosTurbo(numero);
+        }
+
+        String dia = "any".equals(partes[0]) ? "" : partes[0];
+        java.time.LocalTime inicio = parseWaitlistTime(partes[1]);
+        java.time.LocalTime fim = parseWaitlistTime(partes[2]);
+
+        boolean entrou = conversationBookingGateway.entrarNaEspera(
+                numero, draft.getServico(), dia, inicio, fim);
+        if (!entrou) {
+            return "Não consegui entrar na espera agora. Você pode escolher outro horário:\n\n"
+                    + verOutrosHorariosTurbo(numero);
+        }
+
+        conversationStateService.limparEstado(numero);
+        return "Fechado. Você entrou na espera de " + draft.getServico()
+                + ". Se surgir um horário compatível, eu te aviso.\n\n"
+                + menuAcoes();
+    }
+
+    private String verOutrosHorariosTurbo(String numero) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        var draft = state.getDraftAtual();
+        if (draft == null || draft.getServico() == null) {
+            return iniciarNovoAgendamento(numero);
+        }
+        if (draft.getDia() != null && !draft.getDia().isBlank()) {
+            state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+            conversationStateService.persistir(state);
+            return menuHorarios(numero);
+        }
+        state.setStep(ConversationStep.AGUARDANDO_DIA);
+        conversationStateService.persistir(state);
+        return menuDias();
+    }
+
+    private String waitlistToken(String value) {
+        if (value == null || value.isBlank()) {
+            return "any";
+        }
+        return normalizar(value).replaceAll("[^a-z0-9-]", "");
+    }
+
+    private String waitlistTimeToken(java.time.LocalTime time) {
+        if (time == null) {
+            return "none";
+        }
+        return String.format("%02d%02d", time.getHour(), time.getMinute());
+    }
+
+    private java.time.LocalTime parseWaitlistTime(String token) {
+        if (token == null || token.equals("none") || !token.matches("\\d{4}")) {
+            return null;
+        }
+        try {
+            return java.time.LocalTime.of(
+                    Integer.parseInt(token.substring(0, 2)),
+                    Integer.parseInt(token.substring(2, 4)));
+        } catch (RuntimeException invalido) {
+            return null;
+        }
     }
 
     private String selecionarSlotTurbo(String numero, String texto) {
