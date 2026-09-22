@@ -377,6 +377,38 @@ class StrictMvpMenuServiceTest {
     }
 
     @Test
+    void waitlistQuickReplyGlobalRetomaDiretoNaConfirmacaoComNomeSalvo() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+        java.util.UUID waitlistId = java.util.UUID.randomUUID();
+        LocalDate data = LocalDate.of(2026, 9, 25);
+        LocalTime horario = LocalTime.of(17, 0);
+
+        when(gateway.prepararResgateWaitlist(NUMERO, waitlistId, data, horario))
+                .thenReturn(new ConversationBookingGateway.WaitlistClaim(
+                        ConversationBookingGateway.Status.OK,
+                        "Manicure",
+                        data,
+                        horario,
+                        "Gui"));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+        String payload = "waitlist_claim_" + waitlistId + "_2026-09-25_1700";
+
+        String resposta = menu.processarMenu(
+                NUMERO, payload, states.buscarPorNumero(NUMERO));
+
+        assertTrue(resposta.contains("Vou confirmar seu agendamento"), resposta);
+        ConversationState salvo = states.buscarPorNumero(NUMERO);
+        assertEquals(ConversationStep.AGUARDANDO_CONFIRMACAO, salvo.getStep());
+        assertEquals("Manicure", salvo.getDraftAtual().getServico());
+        assertEquals("2026-09-25", salvo.getDraftAtual().getDia());
+        assertEquals("17h", salvo.getDraftAtual().getHorario());
+        assertEquals("Gui", salvo.getDraftAtual().getNome());
+    }
+
+    @Test
     void cancelamentoComMultiplosAgendamentosEhClicavelETemVoltar() {
         ConversationStateService states =
                 new ConversationStateService(new InMemoryConversationStateRepository());
