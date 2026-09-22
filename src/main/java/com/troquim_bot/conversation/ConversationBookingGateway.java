@@ -75,6 +75,20 @@ public class ConversationBookingGateway {
         }
     }
 
+    public record SlotSugerido(String servico, LocalDate data, LocalTime horario) {
+    }
+
+    public record Recomendacao(Status status, String servico, List<SlotSugerido> slots,
+                               boolean repetindoHistorico) {
+        public Recomendacao {
+            slots = slots == null ? List.of() : List.copyOf(slots);
+        }
+
+        public boolean ok() {
+            return status == Status.OK;
+        }
+    }
+
     public record Confirmacao(Status status, BookingResult resultado,
                               String servico, String dia, String horario) {
 
@@ -188,6 +202,96 @@ public class ConversationBookingGateway {
 
     public Status statusDoServico(String nomeInterpretado) {
         return resolverServico(nomeInterpretado).status();
+    }
+
+    /**
+     * Turbo Booking: converte uma preferência já interpretada em slots reais.
+     *
+     * A intenção nunca cria disponibilidade. Cada candidato vem exclusivamente do caso
+     * de uso canônico de disponibilidade e é apenas ordenado por preferência/compactação.
+     */
+    public Recomendacao recomendar(String telefone, BookingIntent intent) {
+        if (intent == null) {
+            return new Recomendacao(Status.SERVICO_INDISPONIVEL, "", List.of(), false);
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        ServicoResolvido servico = intent.sameAsUsual()
+                ? resolverServicoDoHistorico(businessId, telefone)
+                : resolverServico(intent.serviceQuery());
+
+        if (!servico.ok()) {
+            return new Recomendacao(servico.status(),
+                    servico.item() == null ? "" : servico.item().nome(),
+                    List.of(), intent.sameAsUsual());
+        }
+
+        List<LocalDate> datas;
+        if (intent.hasDayPreference()) {
+            Optional<LocalDate> data = resolverData(intent.dayQuery());
+            if (data.isEmpty()) {
+                return new Recomendacao(Status.DIA_INVALIDO, servico.item().nome(),
+                        List.of(), intent.sameAsUsual());
+            }
+            datas = List.of(data.get());
+        } else {
+            LocalDate hoje = relogio.hoje();
+            datas = availabilityApplicationService.datasComVaga(
+                    businessId, servico.item().id(), servico.profissional(), hoje, hoje.plusDays(6));
+        }
+
+        com.troquim_bot.availability.SlotRecommendationPolicy policy =
+                new com.troquim_bot.availability.SlotRecommendationPolicy();
+
+        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
+                new java.util.ArrayList<>();
+        for (LocalDate data : datas) {
+            for (LocalTime horario : availabilityApplicationService.horariosLivres(
+                    businessId, servico.item().id(), servico.profissional(), data)) {
+                if (!intent.accepts(horario)) {
+                    continue;
+                }
+                candidatos.add(new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
+                        data, horario, gapAdjacenteMinutos(businessId, servico.profissional(), data, horario)));
+            }
+        }
+
+        List<SlotSugerido> slots = policy.rank(candidatos, intent.targetTime(), 3).stream()
+                .map(candidato -> new SlotSugerido(
+                        servico.item().nome(), candidato.date(), candidato.time()))
+                .toList();
+
+        return new Recomendacao(Status.OK, servico.item().nome(), slots, intent.sameAsUsual());
+    }
+
+    private ServicoResolvido resolverServicoDoHistorico(BusinessId businessId, String telefone) {
+        return customerProfileService.localizarIdOficial(businessId, telefone)
+                .flatMap(customerId -> appointmentApplicationService
+                        .listarHistoricoPorCliente(customerId).stream()
+                        .filter(appointment -> appointment.pertenceAoTenant(businessId))
+                        .findFirst())
+                .flatMap(appointment -> serviceApplicationService.buscarPorId(appointment.getServiceId()))
+                .map(servico -> resolverServico(servico.getNome()))
+                .orElseGet(() -> new ServicoResolvido(Status.SERVICO_INDISPONIVEL, null, null));
+    }
+
+    private int gapAdjacenteMinutos(BusinessId businessId,
+                                    ProfessionalId profissional,
+                                    LocalDate data,
+                                    LocalTime horario) {
+        int melhor = Integer.MAX_VALUE;
+        for (Appointment appointment : appointmentApplicationService.listarAtivos(businessId)) {
+            if (!appointment.getProfessionalId().equals(profissional)
+                    || !appointment.getDate().equals(data)) {
+                continue;
+            }
+            long ateInicio = Math.abs(java.time.temporal.ChronoUnit.MINUTES.between(
+                    appointment.getEndTime(), horario));
+            long ateFim = Math.abs(java.time.temporal.ChronoUnit.MINUTES.between(
+                    horario, appointment.getStartTime()));
+            melhor = (int) Math.min(melhor, Math.min(ateInicio, ateFim));
+        }
+        return melhor == Integer.MAX_VALUE ? 24 * 60 : melhor;
     }
 
     public ConsultaHorarios consultarHorarios(String nomeInterpretado, String diaInformado) {
