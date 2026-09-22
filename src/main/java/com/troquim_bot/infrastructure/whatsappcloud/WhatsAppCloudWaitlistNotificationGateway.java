@@ -53,7 +53,7 @@ public class WhatsAppCloudWaitlistNotificationGateway implements WaitlistNotific
         Map<String, Object> payload = Map.of(
                 "messaging_product", "whatsapp",
                 "recipient_type", "individual",
-                "to", phoneE164,
+                "to", phoneE164.startsWith("+") ? phoneE164.substring(1) : phoneE164,
                 "type", "template",
                 "template", Map.of(
                         "name", template,
