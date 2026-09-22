@@ -107,8 +107,10 @@ public class OpenAiBookingIntentInterpreter implements BookingIntentInterpreter 
         }
 
         try {
-            Optional<BookingIntent> ai = interpretarComOpenAi(mensagem);
-            return ai.isPresent() ? ai : fallback.interpretar(mensagem);
+            AiInterpretation ai = interpretarComOpenAi(mensagem);
+            return ai.completed()
+                    ? ai.intent()
+                    : fallback.interpretar(mensagem);
         } catch (Exception error) {
             log.warn("AI booking intent fallback activated (type={}).",
                     error.getClass().getSimpleName());
@@ -116,7 +118,7 @@ public class OpenAiBookingIntentInterpreter implements BookingIntentInterpreter 
         }
     }
 
-    private Optional<BookingIntent> interpretarComOpenAi(String mensagem) throws Exception {
+    private AiInterpretation interpretarComOpenAi(String mensagem) throws Exception {
         String body = objectMapper.writeValueAsString(requestPayload(mensagem));
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -132,18 +134,18 @@ public class OpenAiBookingIntentInterpreter implements BookingIntentInterpreter 
 
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             log.warn("OpenAI booking intent returned HTTP {}.", response.statusCode());
-            return Optional.empty();
+            return AiInterpretation.failed();
         }
 
         JsonNode envelope = objectMapper.readTree(response.body());
         String structured = extractOutputText(envelope).orElse(null);
         if (structured == null || structured.isBlank()) {
-            return Optional.empty();
+            return AiInterpretation.failed();
         }
 
         JsonNode parsed = objectMapper.readTree(structured);
         if (!parsed.path("booking_intent").asBoolean(false)) {
-            return Optional.empty();
+            return AiInterpretation.completed(Optional.empty());
         }
 
         String service = parsed.path("service_query").asText("").trim();
@@ -154,16 +156,16 @@ public class OpenAiBookingIntentInterpreter implements BookingIntentInterpreter 
         boolean sameAsUsual = parsed.path("same_as_usual").asBoolean(false);
 
         if (earliest != null && latest != null && latest.isBefore(earliest)) {
-            return Optional.empty();
+            return AiInterpretation.failed();
         }
 
-        return Optional.of(new BookingIntent(
+        return AiInterpretation.completed(Optional.of(new BookingIntent(
                 service,
                 day,
                 earliest,
                 latest,
                 target,
-                sameAsUsual));
+                sameAsUsual)));
     }
 
     private Map<String, Object> requestPayload(String mensagem) {
@@ -266,5 +268,15 @@ public class OpenAiBookingIntentInterpreter implements BookingIntentInterpreter 
 
     private static int validTimeout(OpenAiBookingIntentProperties properties) {
         return Math.max(250, properties.getTimeoutMs());
+    }
+
+    private record AiInterpretation(boolean completed, Optional<BookingIntent> intent) {
+        static AiInterpretation completed(Optional<BookingIntent> intent) {
+            return new AiInterpretation(true, intent == null ? Optional.empty() : intent);
+        }
+
+        static AiInterpretation failed() {
+            return new AiInterpretation(false, Optional.empty());
+        }
     }
 }
