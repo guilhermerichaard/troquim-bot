@@ -124,6 +124,10 @@ public class StrictMvpMenuService {
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
 
+        if (texto.startsWith("waitlist_claim_")) {
+            return resgatarWaitlist(numero, texto);
+        }
+
         if (step == ConversationStep.AGUARDANDO_HORARIO && texto.startsWith("turbo_slot_")) {
             return selecionarSlotTurbo(numero, texto);
         }
@@ -409,6 +413,64 @@ public class StrictMvpMenuService {
         }
     }
 
+    private String resgatarWaitlist(String numero, String texto) {
+        if (conversationBookingGateway == null) {
+            return menuPrincipal();
+        }
+
+        String payload = texto.substring("waitlist_claim_".length());
+        int primeiro = payload.indexOf('_');
+        int segundo = payload.lastIndexOf('_');
+        if (primeiro <= 0 || segundo <= primeiro) {
+            return "Não consegui abrir essa vaga.\n\n" + menuAcoes();
+        }
+
+        try {
+            java.util.UUID waitlistId = java.util.UUID.fromString(payload.substring(0, primeiro));
+            java.time.LocalDate data = java.time.LocalDate.parse(
+                    payload.substring(primeiro + 1, segundo));
+            String hhmm = payload.substring(segundo + 1);
+            if (!hhmm.matches("\\d{4}")) {
+                return "Não consegui abrir essa vaga.\n\n" + menuAcoes();
+            }
+            java.time.LocalTime horario = java.time.LocalTime.of(
+                    Integer.parseInt(hhmm.substring(0, 2)),
+                    Integer.parseInt(hhmm.substring(2, 4)));
+
+            ConversationBookingGateway.WaitlistClaim claim =
+                    conversationBookingGateway.prepararResgateWaitlist(
+                            numero, waitlistId, data, horario);
+
+            if (claim.status() == ConversationBookingGateway.Status.HORARIO_INDISPONIVEL) {
+                conversationStateService.limparEstado(numero);
+                return "Essa vaga acabou de ser ocupada. Você continua na espera e eu te aviso "
+                        + "quando surgir outra compatível.\n\n" + menuAcoes();
+            }
+            if (!claim.ok()) {
+                return "Essa oferta não está mais disponível.\n\n" + menuAcoes();
+            }
+
+            conversationStateService.limparEstado(numero);
+            ConversationState atual = conversationStateService.buscarPorNumero(numero);
+            var draft = atual.criarNovoDraft();
+            draft.setServico(claim.servico());
+            draft.setDia(claim.data().toString());
+            draft.setHorario(ConversationBookingGateway.formatarHorario(claim.horario()));
+            if (claim.nomeCliente() != null && !claim.nomeCliente().isBlank()) {
+                atual.setNome(claim.nomeCliente());
+                draft.setNome(claim.nomeCliente());
+            }
+            conversationStateService.atualizarStep(atual);
+            conversationStateService.persistir(atual);
+
+            return atual.getStep() == ConversationStep.AGUARDANDO_CONFIRMACAO
+                    ? menuConfirmacao(numero)
+                    : menuNome(numero);
+        } catch (RuntimeException invalido) {
+            return "Não consegui abrir essa vaga.\n\n" + menuAcoes();
+        }
+    }
+
     private String selecionarSlotTurbo(String numero, String texto) {
         String payload = texto.substring("turbo_slot_".length());
         int separador = payload.lastIndexOf('_');
@@ -443,9 +505,11 @@ public class StrictMvpMenuService {
 
             draft.setDia(diaCanonico);
             draft.setHorario(horarioCanonico);
-            state.setStep(ConversationStep.AGUARDANDO_NOME);
+            conversationStateService.atualizarStep(state);
             conversationStateService.persistir(state);
-            return menuNome(numero);
+            return state.getStep() == ConversationStep.AGUARDANDO_CONFIRMACAO
+                    ? menuConfirmacao(numero)
+                    : menuNome(numero);
         } catch (RuntimeException invalido) {
             return menuHorarios(numero);
         }
