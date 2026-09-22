@@ -41,11 +41,9 @@ public class WaitlistApplicationService {
         String e164 = new PhoneNumber(phone).getE164();
 
         var existente = repository.findActiveRequest(
-                businessId, e164, serviceId, professionalId);
-        if (existente.isPresent()
-                && java.util.Objects.equals(existente.get().getRequestedDate(), requestedDate)
-                && java.util.Objects.equals(existente.get().getEarliestTime(), earliestTime)
-                && java.util.Objects.equals(existente.get().getLatestTime(), latestTime)) {
+                businessId, e164, serviceId, professionalId,
+                requestedDate, earliestTime, latestTime);
+        if (existente.isPresent()) {
             return existente.get();
         }
 
