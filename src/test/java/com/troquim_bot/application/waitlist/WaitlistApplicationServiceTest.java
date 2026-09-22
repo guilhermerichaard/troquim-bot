@@ -103,7 +103,8 @@ class WaitlistApplicationServiceTest {
         }
 
         @Override
-        public boolean notifySlotAvailable(String phoneE164,
+        public boolean notifySlotAvailable(UUID waitlistId,
+                                           String phoneE164,
                                            String serviceName,
                                            LocalDate date,
                                            LocalTime time) {
