@@ -19,6 +19,7 @@ import com.troquim_bot.support.OptionalBeans;
 import com.troquim_bot.support.InMemoryBookingIdempotencyStore;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -217,6 +218,99 @@ class StrictMvpMenuServiceTest {
         menu.processarMenu(NUMERO, "12", states.buscarPorNumero(NUMERO));
         assertEquals("11:45", states.buscarPorNumero(NUMERO).getDraftAtual().getHorario());
         assertEquals(ConversationStep.AGUARDANDO_NOME,
+                states.buscarPorNumero(NUMERO).getStep());
+    }
+
+    @Test
+    void nomeLivreMantemBotaoVoltarEVoltarRetornaAosHorarios() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.consultarHorarios("Manicure", "sabado"))
+                .thenReturn(new ConversationBookingGateway.ConsultaHorarios(
+                        ConversationBookingGateway.Status.OK, "Manicure", "sabado",
+                        List.of(LocalTime.of(9, 0), LocalTime.of(9, 15))));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+        ConversationState state = states.buscarPorNumero(NUMERO);
+        state.criarNovoDraft();
+        state.getDraftAtual().setServico("Manicure");
+        state.getDraftAtual().setDia("sabado");
+        state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+        states.persistir(state);
+
+        String nome = menu.processarMenu(NUMERO, "1", states.buscarPorNumero(NUMERO));
+        var nomePresentation = ConversationInteractivePresentation.from(nome).orElseThrow();
+
+        assertEquals(ConversationInteractivePresentation.Type.BUTTONS, nomePresentation.type());
+        assertEquals(1, nomePresentation.options().size());
+        assertEquals("nav_voltar", nomePresentation.options().get(0).id());
+        assertEquals(ConversationStep.AGUARDANDO_NOME, states.buscarPorNumero(NUMERO).getStep());
+
+        String voltou = menu.processarMenu(NUMERO, "voltar", states.buscarPorNumero(NUMERO));
+        assertEquals(ConversationStep.AGUARDANDO_HORARIO, states.buscarPorNumero(NUMERO).getStep());
+        assertTrue(states.buscarPorNumero(NUMERO).getDraftAtual().getHorario() == null);
+        assertTrue(voltou.contains("Horários disponíveis para sábado"), voltou);
+    }
+
+    @Test
+    void confirmacaoTemConfirmarCancelarEVoltarClicaveis() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.consultarHorarios("Manicure", "sabado"))
+                .thenReturn(new ConversationBookingGateway.ConsultaHorarios(
+                        ConversationBookingGateway.Status.OK, "Manicure", "sabado",
+                        List.of(LocalTime.of(9, 0))));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+        ConversationState state = states.buscarPorNumero(NUMERO);
+        state.setNome("Gui");
+        state.criarNovoDraft();
+        state.getDraftAtual().setServico("Manicure");
+        state.getDraftAtual().setDia("sabado");
+        state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+        states.persistir(state);
+
+        String confirmacao = menu.processarMenu(NUMERO, "1", states.buscarPorNumero(NUMERO));
+        var presentation = ConversationInteractivePresentation.from(confirmacao).orElseThrow();
+
+        assertEquals(ConversationInteractivePresentation.Type.BUTTONS, presentation.type());
+        assertEquals(3, presentation.options().size());
+        assertEquals("confirmar_sim", presentation.options().get(0).id());
+        assertEquals("confirmar_nao", presentation.options().get(1).id());
+        assertEquals("nav_voltar", presentation.options().get(2).id());
+        assertEquals(ConversationStep.AGUARDANDO_CONFIRMACAO,
+                states.buscarPorNumero(NUMERO).getStep());
+    }
+
+    @Test
+    void cancelamentoComMultiplosAgendamentosEhClicavelETemVoltar() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.listarAgendamentosAtivos(NUMERO)).thenReturn(List.of(
+                new ConversationBookingGateway.Agendamento(
+                        "Manicure", LocalDate.of(2026, 9, 23), LocalTime.of(9, 15), true),
+                new ConversationBookingGateway.Agendamento(
+                        "Escova", LocalDate.of(2026, 9, 24), LocalTime.of(10, 30), true),
+                new ConversationBookingGateway.Agendamento(
+                        "Sobrancelha", LocalDate.of(2026, 9, 25), LocalTime.of(14, 0), true)));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+
+        String resposta = menu.processarMenu(NUMERO, "3", states.buscarPorNumero(NUMERO));
+        var presentation = ConversationInteractivePresentation.from(resposta).orElseThrow();
+
+        assertEquals(ConversationInteractivePresentation.Type.LIST, presentation.type());
+        assertEquals(4, presentation.options().size());
+        assertEquals("1", presentation.options().get(0).id());
+        assertEquals("3", presentation.options().get(2).id());
+        assertEquals("nav_voltar", presentation.options().get(3).id());
+        assertEquals(ConversationStep.AGUARDANDO_CANCELAMENTO,
                 states.buscarPorNumero(NUMERO).getStep());
     }
 

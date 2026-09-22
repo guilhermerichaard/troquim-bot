@@ -132,7 +132,7 @@ class StrictMvpBookingConfirmationTest {
     }
 
     @Test
-    void horarioOcupadoNaoCriaDadosParciaisEMantemEstadoEmConfirmacao() {
+    void horarioOcupadoNaoCriaDadosParciaisEVoltaParaEscolhaDeHorario() {
         String primeiro = "5511900000003";
         percorrerAteConfirmacao(primeiro);
         enviar(primeiro, "1"); // ocupa sexta 13:00
@@ -153,8 +153,14 @@ class StrictMvpBookingConfirmationTest {
         assertEquals(1, appointmentApp.listarTodos().size(), "Não pode criar agendamento para o horário ocupado");
         assertEquals(1, customerRepository.findByBusinessId(TestTenants.PILOT).size(), "Cliente do horário ocupado não deve ser persistido");
 
-        // Estado do segundo cliente permanece em confirmação (não finaliza)
+        // O horário escolhido deixou de ser válido. O formulário preserva contexto,
+        // limpa somente o horário e volta para uma nova escolha clicável.
         ConversationState estadoSegundo = conversationStateService.buscarPorNumero(segundo);
-        assertEquals(ConversationStep.AGUARDANDO_CONFIRMACAO, estadoSegundo.getStep());
+        assertEquals(ConversationStep.AGUARDANDO_HORARIO, estadoSegundo.getStep());
+        assertTrue(estadoSegundo.getDraftAtual().getHorario() == null);
+        assertEquals("cabelo", estadoSegundo.getDraftAtual().getServico());
+        assertEquals(DIA, estadoSegundo.getDraftAtual().getDia());
+        assertEquals("Maria", estadoSegundo.getDraftAtual().getNome());
+        assertTrue(resposta.contains("Escolha outro horário"), resposta);
     }
 }
