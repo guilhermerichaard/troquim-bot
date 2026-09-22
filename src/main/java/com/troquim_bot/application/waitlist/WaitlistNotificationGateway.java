@@ -9,7 +9,8 @@ import java.time.LocalTime;
  */
 public interface WaitlistNotificationGateway {
 
-    boolean notifySlotAvailable(String phoneE164,
+    boolean notifySlotAvailable(java.util.UUID waitlistId,
+                                String phoneE164,
                                 String serviceName,
                                 LocalDate date,
                                 LocalTime time);
