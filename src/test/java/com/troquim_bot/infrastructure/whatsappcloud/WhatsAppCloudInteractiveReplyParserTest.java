@@ -42,6 +42,21 @@ class WhatsAppCloudInteractiveReplyParserTest {
         assertTrue(parsed.flowCompletions().isEmpty());
     }
 
+    @Test
+    void templateQuickReplyPreservaPayloadDaWaitlist() {
+        WhatsAppCloudMessageParser parser = parser();
+        String claim = "waitlist_claim_123e4567-e89b-12d3-a456-426614174000_2026-09-25_1700";
+
+        ParsedInboundPayload parsed = parser.parse(payload("""
+                "type":"button",
+                "button":{"payload":"%s","text":"Quero esse horário"}
+                """.formatted(claim)));
+
+        assertEquals(1, parsed.textMessages().size());
+        assertEquals(claim, parsed.textMessages().get(0).text());
+        assertTrue(parsed.flowCompletions().isEmpty());
+    }
+
     private WhatsAppCloudMessageParser parser() {
         WhatsAppCloudProperties properties = new WhatsAppCloudProperties();
         properties.setPhoneNumberId("test-phone-number-id");
