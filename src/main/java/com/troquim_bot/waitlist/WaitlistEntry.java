@@ -100,6 +100,14 @@ public class WaitlistEntry {
         notifiedAt = LocalDateTime.now();
     }
 
+    public void reactivate() {
+        if (status != WaitlistStatus.NOTIFIED) {
+            throw new IllegalStateException("Somente espera notificada pode ser reativada");
+        }
+        status = WaitlistStatus.ACTIVE;
+        notifiedAt = null;
+    }
+
     public UUID getId() { return id; }
     public BusinessId getBusinessId() { return businessId; }
     public String getPhoneE164() { return phoneE164; }
