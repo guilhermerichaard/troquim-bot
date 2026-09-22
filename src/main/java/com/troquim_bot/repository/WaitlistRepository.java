@@ -20,5 +20,8 @@ public interface WaitlistRepository {
     Optional<WaitlistEntry> findActiveRequest(BusinessId businessId,
                                               String phoneE164,
                                               ServiceId serviceId,
-                                              ProfessionalId professionalId);
+                                              ProfessionalId professionalId,
+                                              java.time.LocalDate requestedDate,
+                                              java.time.LocalTime earliestTime,
+                                              java.time.LocalTime latestTime);
 }
