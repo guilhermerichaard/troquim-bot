@@ -188,6 +188,10 @@ public class ConversationOrchestrator {
 
         String numero = message.numero();
 
+        if (message.profileName() != null && !message.profileName().isBlank()) {
+            conversationStateService.atualizarNomePerfil(numero, message.profileName());
+        }
+
         logger.info("remoteJid: {}", numero);
         logger.info("sender: {}", message.sender());
         logger.info("numero usado: {}", numero);
