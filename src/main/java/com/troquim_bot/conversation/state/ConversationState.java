@@ -10,6 +10,7 @@ public class ConversationState {
     private List<AppointmentDraft> drafts;
     private String ultimaPergunta;
     private String nome;
+    private String nomePerfil;
 
     public ConversationState(String numero) {
         this.numero = numero;
@@ -74,5 +75,13 @@ public class ConversationState {
 
     public void setNome(String nome) {
         this.nome = nome;
+    }
+
+    public String getNomePerfil() {
+        return nomePerfil;
+    }
+
+    public void setNomePerfil(String nomePerfil) {
+        this.nomePerfil = nomePerfil;
     }
 }
