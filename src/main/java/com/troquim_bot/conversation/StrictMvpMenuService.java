@@ -114,7 +114,7 @@ public class StrictMvpMenuService {
                 ConversationState resetState = conversationStateService.buscarPorNumero(numero);
                 resetState.setStep(ConversationStep.INICIO);
                 conversationStateService.persistir(resetState);
-                return menuPrincipal();
+                return menuPrincipal(numero);
             }
             if (action instanceof ConversationNavigationPolicy.Back) {
                 return voltarUmaEtapa(numero, state);
@@ -188,7 +188,7 @@ public class StrictMvpMenuService {
             if (texto.matches("^[123]$")) {
                 return processarEscolhaMenuPrincipal(numero, texto);
             }
-            return menuPrincipal();
+            return menuPrincipal(numero);
         }
 
         if (step == ConversationStep.AGUARDANDO_SERVICO) {
@@ -199,6 +199,9 @@ public class StrictMvpMenuService {
         }
         if (step == ConversationStep.AGUARDANDO_HORARIO) {
             return processarEscolhaHorario(numero, texto, mensagem);
+        }
+        if (step == ConversationStep.AGUARDANDO_ESCOLHA_NOME) {
+            return processarEscolhaNomePerfil(numero, texto);
         }
         if (step == ConversationStep.AGUARDANDO_NOME) {
             return processarEscolhaNome(numero, mensagem);
@@ -222,14 +225,14 @@ public class StrictMvpMenuService {
 
     private String voltarUmaEtapa(String numero, ConversationState state) {
         if (state == null) {
-            return menuPrincipal();
+            return menuPrincipal(numero);
         }
 
         var draft = state.getDraftAtual();
         switch (state.getStep()) {
             case AGUARDANDO_SERVICO, INICIO, FINALIZADO, AGUARDANDO_CANCELAMENTO -> {
                 conversationStateService.limparEstado(numero);
-                return menuPrincipal();
+                return menuPrincipal(numero);
             }
             case AGUARDANDO_DIA -> {
                 if (draft != null) {
@@ -249,7 +252,28 @@ public class StrictMvpMenuService {
                 conversationStateService.persistir(state);
                 return menuDias();
             }
-            case AGUARDANDO_NOME, AGUARDANDO_CONFIRMACAO -> {
+            case AGUARDANDO_ESCOLHA_NOME -> {
+                if (draft != null) {
+                    draft.setHorario(null);
+                }
+                state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+                conversationStateService.persistir(state);
+                return menuHorarios(numero);
+            }
+            case AGUARDANDO_NOME -> {
+                if (state.getNomePerfil() != null && !state.getNomePerfil().isBlank()) {
+                    state.setStep(ConversationStep.AGUARDANDO_ESCOLHA_NOME);
+                    conversationStateService.persistir(state);
+                    return menuNome(numero);
+                }
+                if (draft != null) {
+                    draft.setHorario(null);
+                }
+                state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+                conversationStateService.persistir(state);
+                return menuHorarios(numero);
+            }
+            case AGUARDANDO_CONFIRMACAO -> {
                 if (draft != null) {
                     draft.setHorario(null);
                 }
@@ -258,7 +282,7 @@ public class StrictMvpMenuService {
                 return menuHorarios(numero);
             }
         }
-        return menuPrincipal();
+        return menuPrincipal(numero);
     }
 
     private String processarEscolhaMenuPrincipal(String numero, String texto) {
@@ -271,7 +295,7 @@ public class StrictMvpMenuService {
         if (texto.contains("3") || texto.contains("cancelar") || texto.contains("apagar") || texto.contains("remover") || texto.contains("desmarcar")) {
             return cancelarAgendamento(numero);
         }
-        return menuPrincipal();
+        return menuPrincipal(numero);
     }
 
     private Optional<String> tentarTurbo(String numero, String mensagem) {
@@ -344,7 +368,7 @@ public class StrictMvpMenuService {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         var draft = state.getDraftAtual();
         if (draft == null || draft.getServico() == null || conversationBookingGateway == null) {
-            return menuPrincipal();
+            return menuPrincipal(numero);
         }
 
         String payload = texto.substring("waitlist_join_".length());
@@ -415,7 +439,7 @@ public class StrictMvpMenuService {
 
     private String resgatarWaitlist(String numero, String texto) {
         if (conversationBookingGateway == null) {
-            return menuPrincipal();
+            return menuPrincipal(numero);
         }
 
         String payload = texto.substring("waitlist_claim_".length());
@@ -488,7 +512,7 @@ public class StrictMvpMenuService {
             ConversationState state = conversationStateService.buscarPorNumero(numero);
             var draft = state.getDraftAtual();
             if (draft == null || draft.getServico() == null) {
-                return menuPrincipal();
+                return menuPrincipal(numero);
             }
 
             String diaCanonico = data.toString();
@@ -529,12 +553,18 @@ public class StrictMvpMenuService {
                 + " " + ConversationBookingGateway.formatarHorario(horario);
     }
 
-    private String menuPrincipal() {
-        return saudacaoDoNegocio.atual()
-                + "! No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n" +
-               "1) Agendar\n" +
-               "2) Meus agendamentos\n" +
-               "3) Cancelar";
+    private String menuPrincipal(String numero) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        String nomePerfil = primeiroNome(state.getNomePerfil());
+        String saudacao = saudacaoDoNegocio.atual();
+        String abertura = nomePerfil == null
+                ? saudacao + "!"
+                : "Olá " + nomePerfil + ", " + minusculaInicial(saudacao) + "!";
+        return abertura
+                + " No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n"
+                + "1) Agendar\n"
+                + "2) Meus agendamentos\n"
+                + "3) Cancelar";
     }
 
     private String iniciarNovoAgendamento(String numero) {
@@ -886,7 +916,40 @@ public class StrictMvpMenuService {
         if (nome != null && !nome.isBlank()) {
             return menuConfirmacao(numero);
         }
+
+        String nomePerfil = state.getNomePerfil();
+        if (nomePerfil != null && !nomePerfil.isBlank()) {
+            state.setStep(ConversationStep.AGUARDANDO_ESCOLHA_NOME);
+            conversationStateService.persistir(state);
+            return "Para salvar o agendamento, gostaria de usar seu nome do WhatsApp?\n\n"
+                    + "[[choice:nome_perfil_usar|Usar " + limitarNomeBotao(nomePerfil) + "]]\n"
+                    + "[[choice:nome_outro|Outro nome]]\n"
+                    + CHOICE_BACK;
+        }
+
+        state.setStep(ConversationStep.AGUARDANDO_NOME);
+        conversationStateService.persistir(state);
         return "Perfeito! Qual é o seu nome?\n\n" + CHOICE_BACK;
+    }
+
+    private String processarEscolhaNomePerfil(String numero, String texto) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        if ("nome_perfil_usar".equals(texto)) {
+            String nomePerfil = state.getNomePerfil();
+            if (nomePerfil == null || nomePerfil.isBlank()) {
+                state.setStep(ConversationStep.AGUARDANDO_NOME);
+                conversationStateService.persistir(state);
+                return "Qual nome você gostaria de usar?\n\n" + CHOICE_BACK;
+            }
+            conversationStateService.atualizarNome(numero, nomePerfil);
+            return menuConfirmacao(numero);
+        }
+        if ("nome_outro".equals(texto)) {
+            state.setStep(ConversationStep.AGUARDANDO_NOME);
+            conversationStateService.persistir(state);
+            return "Claro. Qual nome você gostaria de usar no agendamento?\n\n" + CHOICE_BACK;
+        }
+        return menuNome(numero);
     }
 
     private String processarEscolhaNome(String numero, String mensagem) {
@@ -896,6 +959,23 @@ public class StrictMvpMenuService {
         }
         conversationStateService.atualizarNome(numero, nome);
         return menuConfirmacao(numero);
+    }
+
+    private String primeiroNome(String nome) {
+        if (nome == null || nome.isBlank()) return null;
+        String trimmed = nome.trim();
+        int espaco = trimmed.indexOf(' ');
+        return espaco > 0 ? trimmed.substring(0, espaco) : trimmed;
+    }
+
+    private String minusculaInicial(String texto) {
+        if (texto == null || texto.isBlank()) return "";
+        return Character.toLowerCase(texto.charAt(0)) + texto.substring(1);
+    }
+
+    private String limitarNomeBotao(String nome) {
+        String trimmed = nome == null ? "" : nome.trim();
+        return trimmed.length() <= 14 ? trimmed : trimmed.substring(0, 13) + "…";
     }
 
     private String menuConfirmacao(String numero) {
@@ -920,7 +1000,7 @@ public class StrictMvpMenuService {
             ConversationState state = conversationStateService.buscarPorNumero(numero);
             var draft = state.getDraftAtual();
             if (draft == null || !draft.isCompleto()) {
-                return menuPrincipal();
+                return menuPrincipal(numero);
             }
             if (draft.isConfirmado()) {
                 return "Seu agendamento ja esta registrado.\n\n" +
