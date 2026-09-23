@@ -75,18 +75,39 @@ public class ProfessionalApplicationService {
     }
 
     public Optional<Professional> buscarPorId(ProfessionalId id) {
-        if (id == null) {
+        return buscarPorId(tenantAtual(), id);
+    }
+
+    /**
+     * Leitura tenant-explicit para superfícies autenticadas por sessão do owner.
+     */
+    public Optional<Professional> buscarPorId(BusinessId businessId, ProfessionalId id) {
+        if (businessId == null || id == null) {
             return Optional.empty();
         }
-        return professionalRepository.buscarPorId(tenantAtual(), id);
+        return professionalRepository.buscarPorId(businessId, id);
     }
 
     public List<Professional> buscarTodos() {
-        return professionalRepository.listarTodos(tenantAtual());
+        return buscarTodos(tenantAtual());
+    }
+
+    public List<Professional> buscarTodos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return professionalRepository.listarTodos(businessId);
     }
 
     public List<Professional> listarAtivos() {
-        return professionalRepository.listarAtivos(tenantAtual());
+        return listarAtivos(tenantAtual());
+    }
+
+    public List<Professional> listarAtivos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return professionalRepository.listarAtivos(businessId);
     }
 
     /** Profissionais habilitados para um serviço, pelo vínculo explícito por ID. */
