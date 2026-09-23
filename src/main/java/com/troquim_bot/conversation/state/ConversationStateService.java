@@ -166,7 +166,6 @@ public class ConversationStateService {
         }
         ConversationState state = buscarPorNumero(numero);
         state.setNomePerfil(nomePerfil.trim());
-        atualizarStep(state);
         persistir(state);
     }
 
