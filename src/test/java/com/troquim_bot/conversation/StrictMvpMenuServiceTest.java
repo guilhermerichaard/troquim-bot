@@ -436,6 +436,81 @@ class StrictMvpMenuServiceTest {
                 states.buscarPorNumero(NUMERO).getStep());
     }
 
+    @Test
+    void usaNomeDoPerfilComoSaudacaoESolicitaConfirmacaoAntesDeSalvar() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.consultarHorarios("Manicure", "sabado"))
+                .thenReturn(new ConversationBookingGateway.ConsultaHorarios(
+                        ConversationBookingGateway.Status.OK, "Manicure", "sabado",
+                        List.of(LocalTime.of(9, 0))));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+        ConversationState state = states.buscarPorNumero(NUMERO);
+        state.setNomePerfil("Gui");
+        states.persistir(state);
+
+        String saudacao = menu.processarMenu(NUMERO, "oi", states.buscarPorNumero(NUMERO));
+        assertTrue(saudacao.contains("Olá Gui"), saudacao);
+
+        state = states.buscarPorNumero(NUMERO);
+        state.criarNovoDraft();
+        state.getDraftAtual().setServico("Manicure");
+        state.getDraftAtual().setDia("sabado");
+        state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+        states.persistir(state);
+
+        String escolhaNome = menu.processarMenu(NUMERO, "1", states.buscarPorNumero(NUMERO));
+        var presentation = ConversationInteractivePresentation.from(escolhaNome).orElseThrow();
+
+        assertEquals(ConversationStep.AGUARDANDO_ESCOLHA_NOME,
+                states.buscarPorNumero(NUMERO).getStep());
+        assertEquals(3, presentation.options().size());
+        assertEquals("nome_perfil_usar", presentation.options().get(0).id());
+        assertEquals("nome_outro", presentation.options().get(1).id());
+        assertEquals("nav_voltar", presentation.options().get(2).id());
+
+        String confirmacao = menu.processarMenu(
+                NUMERO, "nome_perfil_usar", states.buscarPorNumero(NUMERO));
+
+        assertEquals("Gui", states.buscarPorNumero(NUMERO).getNome());
+        assertEquals("Gui", states.buscarPorNumero(NUMERO).getDraftAtual().getNome());
+        assertEquals(ConversationStep.AGUARDANDO_CONFIRMACAO,
+                states.buscarPorNumero(NUMERO).getStep());
+        assertTrue(confirmacao.contains("Manicure"), confirmacao);
+    }
+
+    @Test
+    void outroNomeMantemPerfilComoSugestaoMasSalvaNomeInformado() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+
+        ConversationState state = states.buscarPorNumero(NUMERO);
+        state.setNomePerfil("Gui");
+        state.criarNovoDraft();
+        state.getDraftAtual().setServico("Manicure");
+        state.getDraftAtual().setDia("sabado");
+        state.getDraftAtual().setHorario("9h");
+        state.setStep(ConversationStep.AGUARDANDO_ESCOLHA_NOME);
+        states.persistir(state);
+
+        String pergunta = menu.processarMenu(
+                NUMERO, "nome_outro", states.buscarPorNumero(NUMERO));
+        assertTrue(pergunta.contains("Qual nome"), pergunta);
+        assertEquals(ConversationStep.AGUARDANDO_NOME,
+                states.buscarPorNumero(NUMERO).getStep());
+
+        menu.processarMenu(NUMERO, "Julia", states.buscarPorNumero(NUMERO));
+
+        assertEquals("Gui", states.buscarPorNumero(NUMERO).getNomePerfil());
+        assertEquals("Julia", states.buscarPorNumero(NUMERO).getNome());
+        assertEquals("Julia", states.buscarPorNumero(NUMERO).getDraftAtual().getNome());
+    }
+
     private StrictMvpMenuService menuComGateway(ConversationStateService states,
                                                  ConversationBookingGateway gateway) {
         return new StrictMvpMenuService(
