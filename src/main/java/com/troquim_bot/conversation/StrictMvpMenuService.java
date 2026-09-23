@@ -1196,6 +1196,7 @@ public class StrictMvpMenuService {
         boolean emFormulario = step == ConversationStep.AGUARDANDO_SERVICO
                 || step == ConversationStep.AGUARDANDO_DIA
                 || step == ConversationStep.AGUARDANDO_HORARIO
+                || step == ConversationStep.AGUARDANDO_ESCOLHA_NOME
                 || step == ConversationStep.AGUARDANDO_NOME;
 
         if (!emFormulario) {
