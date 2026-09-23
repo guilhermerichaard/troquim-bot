@@ -9,6 +9,7 @@ import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.customer.CustomerApplicationService;
 import com.troquim_bot.application.professional.ProfessionalApplicationService;
 import com.troquim_bot.application.service.ServiceApplicationService;
+import com.troquim_bot.application.waitlist.WaitlistApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.business.BusinessId;
@@ -36,6 +37,7 @@ public class OwnerConsoleCommandService {
     private final CustomerApplicationService customers;
     private final ServiceApplicationService services;
     private final ProfessionalApplicationService professionals;
+    private final WaitlistApplicationService waitlist;
 
     public OwnerConsoleCommandService(AppointmentApplicationService appointments,
                                       AvailabilityApplicationService availability,
@@ -43,7 +45,8 @@ public class OwnerConsoleCommandService {
                                       ConsultarCatalogo catalogo,
                                       CustomerApplicationService customers,
                                       ServiceApplicationService services,
-                                      ProfessionalApplicationService professionals) {
+                                      ProfessionalApplicationService professionals,
+                                      WaitlistApplicationService waitlist) {
         this.appointments = appointments;
         this.availability = availability;
         this.confirmar = confirmar;
@@ -51,6 +54,7 @@ public class OwnerConsoleCommandService {
         this.customers = customers;
         this.services = services;
         this.professionals = professionals;
+        this.waitlist = waitlist;
     }
 
     @Transactional(readOnly = true)
@@ -117,10 +121,23 @@ public class OwnerConsoleCommandService {
                 : ActionResult.error(booking.mensagem() == null ? "Não foi possível criar o agendamento." : booking.mensagem());
     }
 
-    @Transactional
     public ActionResult cancelAppointment(AuthenticatedOwner owner, String appointmentId) {
         Appointment appointment = exigirAppointmentDoTenant(owner.businessId(), appointmentId);
+        String serviceName = services.buscarPorId(owner.businessId(), appointment.getServiceId())
+                .map(com.troquim_bot.service.Service::getNome)
+                .orElse("Serviço");
         appointments.cancelarAgendamento(appointment.getId());
+
+        // O cancelamento já foi persistido quando chegamos aqui. A waitlist é reação ao
+        // slot liberado; não participa da decisão de cancelar o Appointment.
+        waitlist.slotReleased(
+                owner.businessId(),
+                appointment.getServiceId(),
+                appointment.getProfessionalId(),
+                serviceName,
+                appointment.getDate(),
+                appointment.getStartTime());
+
         return ActionResult.ok("Agendamento cancelado.");
     }
 
