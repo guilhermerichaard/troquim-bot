@@ -7,13 +7,20 @@ type Customer={id:string;name:string;phone:string;status:string}
 type Pro={id:string;name:string}
 type Catalog={id:string;name:string;description?:string;durationMinutes:number;price:number|null;professionals:Pro[]}
 
+function localIso(d=new Date()){
+  const y=d.getFullYear()
+  const m=String(d.getMonth()+1).padStart(2,'0')
+  const day=String(d.getDate()).padStart(2,'0')
+  return `${y}-${m}-${day}`
+}
+
 export default function NovoPage(){
   const router=useRouter()
   const [catalog,setCatalog]=useState<Catalog[]>([])
   const [customers,setCustomers]=useState<Customer[]>([])
   const [serviceId,setServiceId]=useState('')
   const [professionalId,setProfessionalId]=useState('')
-  const [date,setDate]=useState(new Date().toISOString().slice(0,10))
+  const [date,setDate]=useState(localIso())
   const [slots,setSlots]=useState<string[]>([])
   const [time,setTime]=useState('')
   const [customerId,setCustomerId]=useState('')
@@ -54,7 +61,7 @@ export default function NovoPage(){
     <div className="formGrid">
       <div className="formField"><label>Serviço</label><div className="choiceGrid">{catalog.map(x=><button key={x.id} className={serviceId===x.id?'choiceCard selected':'choiceCard'} onClick={()=>setServiceId(x.id)}><strong>{x.name}</strong><div className="label">{x.durationMinutes} min{x.price!=null?` · ${x.price.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}`:''}</div></button>)}</div></div>
       {service&&<div className="formField"><label>Profissional</label><select value={professionalId} onChange={e=>setProfessionalId(e.target.value)}><option value="">Escolha</option>{service.professionals.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
-      {professionalId&&<div className="formField"><label>Data</label><input type="date" value={date} min={new Date().toISOString().slice(0,10)} onChange={e=>setDate(e.target.value)}/></div>}
+      {professionalId&&<div className="formField"><label>Data</label><input type="date" value={date} min={localIso()} onChange={e=>setDate(e.target.value)}/></div>}
       {professionalId&&<div className="formField"><label>Horário</label>{slots.length?<div className="actionRow">{slots.map(s=><button key={s} className={time===s?'touchButton primary':'touchButton secondary'} onClick={()=>setTime(s)}>{s.slice(0,5)}</button>)}</div>:<div className="inlineNotice">Sem horários livres nessa data.</div>}</div>}
       {time&&<div className="formField"><label>Cliente</label><select value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">Escolha o cliente</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name} · {c.phone}</option>)}</select></div>}
       <button className="touchButton primary" disabled={!ready||saving} onClick={submit}>{saving?'Agendando…':'Confirmar agendamento'}</button>
