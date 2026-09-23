@@ -77,6 +77,9 @@ public class OwnerConsoleQueryService {
                 a.getStartTime(),
                 a.getEndTime(),
                 a.getStatus().name(),
+                a.getCustomerId().getValue().toString(),
+                a.getServiceId().getValue().toString(),
+                a.getProfessionalId().getValue().toString(),
                 customers.buscarPorId(a.getCustomerId())
                         .filter(c -> c.getBusinessId().equals(businessId))
                         .map(c -> c.getName().getFullName())
@@ -148,6 +151,9 @@ public class OwnerConsoleQueryService {
             LocalTime startTime,
             LocalTime endTime,
             String status,
+            String customerId,
+            String serviceId,
+            String professionalId,
             String customerName,
             String serviceName,
             String professionalName) {}
