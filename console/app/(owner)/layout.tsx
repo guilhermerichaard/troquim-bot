@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { MobileNav } from '@/components/mobile-nav'
+import { OwnerAssistant } from '@/components/owner-assistant'
 import { troquimFetch } from '@/lib/troquim'
 
 type Overview = { businessName: string }
@@ -12,6 +13,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
   return <div className="shell">
     <Sidebar />
     <main className="main">{children}</main>
+    <OwnerAssistant />
     <MobileNav />
   </div>
 }
