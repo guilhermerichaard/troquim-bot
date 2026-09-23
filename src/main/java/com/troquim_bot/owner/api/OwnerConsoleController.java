@@ -28,8 +28,9 @@ public class OwnerConsoleController {
 
     @GetMapping("/overview")
     public ResponseEntity<?> overview(HttpServletRequest request) {
-        return owner(request).map(o -> ResponseEntity.ok(queries.overview(o)))
-                .orElseGet(() -> ResponseEntity.status(403).build());
+        var identity = owner(request);
+        if (identity.isEmpty()) return ResponseEntity.status(403).build();
+        return ResponseEntity.ok(queries.overview(identity.get()));
     }
 
     @GetMapping("/appointments")
@@ -52,20 +53,23 @@ public class OwnerConsoleController {
 
     @GetMapping("/customers")
     public ResponseEntity<?> customers(HttpServletRequest request) {
-        return owner(request).map(o -> ResponseEntity.ok(queries.customers(o)))
-                .orElseGet(() -> ResponseEntity.status(403).build());
+        var identity = owner(request);
+        if (identity.isEmpty()) return ResponseEntity.status(403).build();
+        return ResponseEntity.ok(queries.customers(identity.get()));
     }
 
     @GetMapping("/services")
     public ResponseEntity<?> services(HttpServletRequest request) {
-        return owner(request).map(o -> ResponseEntity.ok(queries.services(o)))
-                .orElseGet(() -> ResponseEntity.status(403).build());
+        var identity = owner(request);
+        if (identity.isEmpty()) return ResponseEntity.status(403).build();
+        return ResponseEntity.ok(queries.services(identity.get()));
     }
 
     @GetMapping("/professionals")
     public ResponseEntity<?> professionals(HttpServletRequest request) {
-        return owner(request).map(o -> ResponseEntity.ok(queries.professionals(o)))
-                .orElseGet(() -> ResponseEntity.status(403).build());
+        var identity = owner(request);
+        if (identity.isEmpty()) return ResponseEntity.status(403).build();
+        return ResponseEntity.ok(queries.professionals(identity.get()));
     }
 
     private java.util.Optional<AuthenticatedOwner> owner(HttpServletRequest request) {
