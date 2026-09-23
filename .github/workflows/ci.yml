@@ -39,6 +39,21 @@ jobs:
       - name: Run full verification
         run: ./mvnw -B -ntp clean verify
 
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install console dependencies
+        working-directory: console
+        run: npm install --no-audit --no-fund
+
+      - name: Build owner console
+        working-directory: console
+        env:
+          TROQUIM_BACKEND_URL: http://localhost:8080
+        run: npm run build
+
       - name: Upload test reports on failure
         if: failure()
         uses: actions/upload-artifact@v4

@@ -1,0 +1,17 @@
+services:
+  troquim-console:
+    build:
+      context: ./console
+      dockerfile: Dockerfile
+    container_name: troquim-console
+    restart: unless-stopped
+    environment:
+      TROQUIM_BACKEND_URL: http://troquim-bot:8080
+    ports:
+      - "127.0.0.1:3001:3000"
+    networks:
+      - troquim-internal
+
+networks:
+  troquim-internal:
+    external: true

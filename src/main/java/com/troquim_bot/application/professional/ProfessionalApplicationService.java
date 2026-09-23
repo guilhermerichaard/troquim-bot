@@ -56,6 +56,17 @@ public class ProfessionalApplicationService {
      */
     public Professional criarProfissional(String nome, Set<ServiceId> servicosHabilitados,
                                           Set<String> especialidades, String telefone) {
+        return criarProfissional(tenantAtual(), nome, servicosHabilitados, especialidades, telefone);
+    }
+
+    public Professional criarProfissional(BusinessId businessId,
+                                          String nome,
+                                          Set<ServiceId> servicosHabilitados,
+                                          Set<String> especialidades,
+                                          String telefone) {
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         if (nome == null || nome.trim().isEmpty()) {
             throw new IllegalArgumentException("Nome do profissional é obrigatório");
         }
@@ -65,7 +76,7 @@ public class ProfessionalApplicationService {
 
         Professional professional = new Professional(
                 ProfessionalId.generate(),
-                tenantAtual(),
+                businessId,
                 nome.trim(),
                 servicosHabilitados,
                 especialidades,
@@ -75,18 +86,39 @@ public class ProfessionalApplicationService {
     }
 
     public Optional<Professional> buscarPorId(ProfessionalId id) {
-        if (id == null) {
+        return buscarPorId(tenantAtual(), id);
+    }
+
+    /**
+     * Leitura tenant-explicit para superfícies autenticadas por sessão do owner.
+     */
+    public Optional<Professional> buscarPorId(BusinessId businessId, ProfessionalId id) {
+        if (businessId == null || id == null) {
             return Optional.empty();
         }
-        return professionalRepository.buscarPorId(tenantAtual(), id);
+        return professionalRepository.buscarPorId(businessId, id);
     }
 
     public List<Professional> buscarTodos() {
-        return professionalRepository.listarTodos(tenantAtual());
+        return buscarTodos(tenantAtual());
+    }
+
+    public List<Professional> buscarTodos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return professionalRepository.listarTodos(businessId);
     }
 
     public List<Professional> listarAtivos() {
-        return professionalRepository.listarAtivos(tenantAtual());
+        return listarAtivos(tenantAtual());
+    }
+
+    public List<Professional> listarAtivos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return professionalRepository.listarAtivos(businessId);
     }
 
     /** Profissionais habilitados para um serviço, pelo vínculo explícito por ID. */
@@ -99,7 +131,15 @@ public class ProfessionalApplicationService {
 
     public Professional atualizarProfissional(ProfessionalId id, String nome,
                                               Set<String> especialidades, String telefone) {
-        Professional professional = exigirProfissional(id);
+        return atualizarProfissional(tenantAtual(), id, nome, especialidades, telefone);
+    }
+
+    public Professional atualizarProfissional(BusinessId businessId,
+                                              ProfessionalId id,
+                                              String nome,
+                                              Set<String> especialidades,
+                                              String telefone) {
+        Professional professional = exigirProfissional(businessId, id);
         if (nome != null && !nome.trim().isEmpty()) {
             professional.atualizarNome(nome);
         }
@@ -114,38 +154,63 @@ public class ProfessionalApplicationService {
 
     /** Habilita o profissional para um serviço do MESMO negócio. */
     public Professional habilitarPara(ProfessionalId id, ServiceId servico) {
-        Professional professional = exigirProfissional(id);
+        return habilitarPara(tenantAtual(), id, servico);
+    }
+
+    public Professional habilitarPara(BusinessId businessId, ProfessionalId id, ServiceId servico) {
+        Professional professional = exigirProfissional(businessId, id);
         professional.habilitarPara(servico);
         return professionalRepository.salvar(professional);
     }
 
     public Professional desabilitarPara(ProfessionalId id, ServiceId servico) {
-        Professional professional = exigirProfissional(id);
+        return desabilitarPara(tenantAtual(), id, servico);
+    }
+
+    public Professional desabilitarPara(BusinessId businessId, ProfessionalId id, ServiceId servico) {
+        Professional professional = exigirProfissional(businessId, id);
         professional.desabilitarPara(servico);
         return professionalRepository.salvar(professional);
     }
 
     public Professional inativarProfissional(ProfessionalId id) {
-        Professional professional = exigirProfissional(id);
+        return inativarProfissional(tenantAtual(), id);
+    }
+
+    public Professional inativarProfissional(BusinessId businessId, ProfessionalId id) {
+        Professional professional = exigirProfissional(businessId, id);
         professional.desativar();
         return professionalRepository.salvar(professional);
     }
 
     public Professional ativarProfissional(ProfessionalId id) {
-        Professional professional = exigirProfissional(id);
+        return ativarProfissional(tenantAtual(), id);
+    }
+
+    public Professional ativarProfissional(BusinessId businessId, ProfessionalId id) {
+        Professional professional = exigirProfissional(businessId, id);
         professional.ativar();
         return professionalRepository.salvar(professional);
     }
 
     public boolean existe(ProfessionalId id) {
-        return id != null && professionalRepository.buscarPorId(tenantAtual(), id).isPresent();
+        return existe(tenantAtual(), id);
+    }
+
+    public boolean existe(BusinessId businessId, ProfessionalId id) {
+        return businessId != null && id != null
+                && professionalRepository.buscarPorId(businessId, id).isPresent();
     }
 
     public void deletarProfissional(ProfessionalId id) {
-        if (id == null) {
-            throw new IllegalArgumentException("ID do profissional é obrigatório");
+        deletarProfissional(tenantAtual(), id);
+    }
+
+    public void deletarProfissional(BusinessId businessId, ProfessionalId id) {
+        if (businessId == null || id == null) {
+            throw new IllegalArgumentException("BusinessId e ID do profissional são obrigatórios");
         }
-        professionalRepository.remover(tenantAtual(), id);
+        professionalRepository.remover(businessId, id);
     }
 
     // ==================== MÉTODOS PRIVADOS ====================
@@ -159,7 +224,14 @@ public class ProfessionalApplicationService {
     }
 
     private Professional exigirProfissional(ProfessionalId id) {
-        return professionalRepository.buscarPorId(tenantAtual(), id)
+        return exigirProfissional(tenantAtual(), id);
+    }
+
+    private Professional exigirProfissional(BusinessId businessId, ProfessionalId id) {
+        if (businessId == null || id == null) {
+            throw new IllegalArgumentException("BusinessId e ProfessionalId são obrigatórios");
+        }
+        return professionalRepository.buscarPorId(businessId, id)
                 .orElseThrow(() -> new IllegalArgumentException("Profissional não encontrado"));
     }
 }

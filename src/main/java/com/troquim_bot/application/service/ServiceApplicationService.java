@@ -47,19 +47,29 @@ public class ServiceApplicationService {
      */
     public com.troquim_bot.service.Service criarServico(String nome, String descricao,
                                                         int duracaoMinutos, Money preco) {
+        return criarServico(tenantAtual(), nome, descricao, duracaoMinutos, preco);
+    }
+
+    /**
+     * Criação tenant-explicit para superfícies cuja identidade já foi resolvida por sessão.
+     */
+    public com.troquim_bot.service.Service criarServico(BusinessId businessId,
+                                                        String nome, String descricao,
+                                                        int duracaoMinutos, Money preco) {
+        if (businessId == null) {
+            throw new IllegalArgumentException("BusinessId é obrigatório");
+        }
         if (nome == null || nome.trim().isEmpty()) {
             throw new IllegalArgumentException("Nome do serviço é obrigatório");
         }
 
-        // A intenção sobre preço fica explícita na fábrica escolhida — nada de passar
-        // null adiante e deixar o domínio adivinhar o significado.
         com.troquim_bot.service.Service service = preco == null
                 ? com.troquim_bot.service.Service.novoSemPreco(
-                        ServiceId.generate(), tenantAtual(), nome.trim(),
+                        ServiceId.generate(), businessId, nome.trim(),
                         descricao != null ? descricao.trim() : null,
                         ServiceDuration.ofMinutes(duracaoMinutos))
                 : com.troquim_bot.service.Service.novoComPreco(
-                        ServiceId.generate(), tenantAtual(), nome.trim(),
+                        ServiceId.generate(), businessId, nome.trim(),
                         descricao != null ? descricao.trim() : null,
                         ServiceDuration.ofMinutes(duracaoMinutos), preco);
 
@@ -67,74 +77,134 @@ public class ServiceApplicationService {
     }
 
     public Optional<com.troquim_bot.service.Service> buscarPorId(ServiceId id) {
-        if (id == null) {
+        return buscarPorId(tenantAtual(), id);
+    }
+
+    /**
+     * Leitura tenant-explicit para superfícies autenticadas por sessão, como o console
+     * do owner. Evita depender do TenantProvider piloto quando o businessId já foi
+     * resolvido de forma autoritativa pela sessão.
+     */
+    public Optional<com.troquim_bot.service.Service> buscarPorId(BusinessId businessId, ServiceId id) {
+        if (businessId == null || id == null) {
             return Optional.empty();
         }
-        return serviceRepository.buscarPorId(tenantAtual(), id);
+        return serviceRepository.buscarPorId(businessId, id);
     }
 
     public List<com.troquim_bot.service.Service> listarTodos() {
-        return serviceRepository.listarTodos(tenantAtual());
+        return listarTodos(tenantAtual());
+    }
+
+    public List<com.troquim_bot.service.Service> listarTodos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return serviceRepository.listarTodos(businessId);
     }
 
     /** Filtragem por status é do repositório, não uma segunda regra aqui. */
     public List<com.troquim_bot.service.Service> listarAtivos() {
-        return serviceRepository.listarAtivos(tenantAtual());
+        return listarAtivos(tenantAtual());
+    }
+
+    public List<com.troquim_bot.service.Service> listarAtivos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return serviceRepository.listarAtivos(businessId);
     }
 
     public com.troquim_bot.service.Service atualizarNome(ServiceId id, String novoNome) {
-        com.troquim_bot.service.Service service = exigirServico(id);
+        return atualizarNome(tenantAtual(), id, novoNome);
+    }
+
+    public com.troquim_bot.service.Service atualizarNome(BusinessId businessId, ServiceId id, String novoNome) {
+        com.troquim_bot.service.Service service = exigirServico(businessId, id);
         service.atualizarNome(novoNome);
         return serviceRepository.salvar(service);
     }
 
     public com.troquim_bot.service.Service atualizarDescricao(ServiceId id, String novaDescricao) {
-        com.troquim_bot.service.Service service = exigirServico(id);
+        return atualizarDescricao(tenantAtual(), id, novaDescricao);
+    }
+
+    public com.troquim_bot.service.Service atualizarDescricao(BusinessId businessId, ServiceId id, String novaDescricao) {
+        com.troquim_bot.service.Service service = exigirServico(businessId, id);
         service.atualizarDescricao(novaDescricao);
         return serviceRepository.salvar(service);
     }
 
     public com.troquim_bot.service.Service atualizarDuracao(ServiceId id, int duracaoMinutos) {
-        com.troquim_bot.service.Service service = exigirServico(id);
+        return atualizarDuracao(tenantAtual(), id, duracaoMinutos);
+    }
+
+    public com.troquim_bot.service.Service atualizarDuracao(BusinessId businessId, ServiceId id, int duracaoMinutos) {
+        com.troquim_bot.service.Service service = exigirServico(businessId, id);
         service.atualizarDuracao(ServiceDuration.ofMinutes(duracaoMinutos));
         return serviceRepository.salvar(service);
     }
 
     /** Define preço. Para remover, use {@link #removerPreco(ServiceId)}. */
     public com.troquim_bot.service.Service atualizarPreco(ServiceId id, Money novoPreco) {
-        com.troquim_bot.service.Service service = exigirServico(id);
+        return atualizarPreco(tenantAtual(), id, novoPreco);
+    }
+
+    public com.troquim_bot.service.Service atualizarPreco(BusinessId businessId, ServiceId id, Money novoPreco) {
+        com.troquim_bot.service.Service service = exigirServico(businessId, id);
         service.definirPreco(novoPreco);
         return serviceRepository.salvar(service);
     }
 
     /** Volta o serviço ao estado "não precificado". */
     public com.troquim_bot.service.Service removerPreco(ServiceId id) {
-        com.troquim_bot.service.Service service = exigirServico(id);
+        return removerPreco(tenantAtual(), id);
+    }
+
+    public com.troquim_bot.service.Service removerPreco(BusinessId businessId, ServiceId id) {
+        com.troquim_bot.service.Service service = exigirServico(businessId, id);
         service.removerPreco();
         return serviceRepository.salvar(service);
     }
 
     public com.troquim_bot.service.Service inativarServico(ServiceId id) {
-        com.troquim_bot.service.Service service = exigirServico(id);
+        return inativarServico(tenantAtual(), id);
+    }
+
+    public com.troquim_bot.service.Service inativarServico(BusinessId businessId, ServiceId id) {
+        com.troquim_bot.service.Service service = exigirServico(businessId, id);
         service.desativar();
         return serviceRepository.salvar(service);
     }
 
     public com.troquim_bot.service.Service ativarServico(ServiceId id) {
-        com.troquim_bot.service.Service service = exigirServico(id);
+        return ativarServico(tenantAtual(), id);
+    }
+
+    public com.troquim_bot.service.Service ativarServico(BusinessId businessId, ServiceId id) {
+        com.troquim_bot.service.Service service = exigirServico(businessId, id);
         service.ativar();
         return serviceRepository.salvar(service);
     }
 
     public boolean existe(ServiceId id) {
-        return id != null && serviceRepository.buscarPorId(tenantAtual(), id).isPresent();
+        return existe(tenantAtual(), id);
+    }
+
+    public boolean existe(BusinessId businessId, ServiceId id) {
+        return businessId != null && id != null
+                && serviceRepository.buscarPorId(businessId, id).isPresent();
     }
 
     public void deletarServico(ServiceId id) {
-        if (id == null) {
-            throw new IllegalArgumentException("ID do serviço é obrigatório");
+        deletarServico(tenantAtual(), id);
+    }
+
+    public void deletarServico(BusinessId businessId, ServiceId id) {
+        if (businessId == null || id == null) {
+            throw new IllegalArgumentException("BusinessId e ID do serviço são obrigatórios");
         }
-        serviceRepository.remover(tenantAtual(), id);
+        serviceRepository.remover(businessId, id);
     }
 
     // ==================== MÉTODOS PRIVADOS ====================
@@ -152,7 +222,14 @@ public class ServiceApplicationService {
      * por tenant, então esta mensagem não revela dado alheio.
      */
     private com.troquim_bot.service.Service exigirServico(ServiceId id) {
-        return serviceRepository.buscarPorId(tenantAtual(), id)
+        return exigirServico(tenantAtual(), id);
+    }
+
+    private com.troquim_bot.service.Service exigirServico(BusinessId businessId, ServiceId id) {
+        if (businessId == null || id == null) {
+            throw new IllegalArgumentException("BusinessId e ServiceId são obrigatórios");
+        }
+        return serviceRepository.buscarPorId(businessId, id)
                 .orElseThrow(() -> new IllegalArgumentException("Serviço não encontrado"));
     }
 }
