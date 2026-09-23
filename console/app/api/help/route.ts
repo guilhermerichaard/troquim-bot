@@ -1,10 +1,17 @@
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { ownerCookieName } from '@/lib/troquim'
 
 type RequestBody={message?:string;page?:string}
 
 const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
 
 export async function POST(request:Request){
+  const jar=await cookies()
+  if(!jar.get(ownerCookieName)?.value){
+    return NextResponse.json({answer:'Sua sessão expirou. Entre novamente no Troquim.'},{status:401})
+  }
+
   const body=await request.json().catch(()=>({})) as RequestBody
   const message=(body.message??'').trim()
   const page=(body.page??'').trim()
