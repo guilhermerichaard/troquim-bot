@@ -160,6 +160,16 @@ public class ConversationStateService {
         persistir(state);
     }
 
+    public void atualizarNomePerfil(String numero, String nomePerfil) {
+        if (nomePerfil == null || nomePerfil.isBlank()) {
+            return;
+        }
+        ConversationState state = buscarPorNumero(numero);
+        state.setNomePerfil(nomePerfil.trim());
+        atualizarStep(state);
+        persistir(state);
+    }
+
     public void atualizarNome(String numero, String nome) {
         ConversationState state = buscarPorNumero(numero);
         AppointmentDraft draft = state.getDraftAtual();
@@ -197,6 +207,7 @@ public class ConversationStateService {
             case AGUARDANDO_SERVICO -> intent == IntentType.AGENDAMENTO || contemServico(texto);
             case AGUARDANDO_DIA -> contemDia(texto);
             case AGUARDANDO_HORARIO -> contemHorario(mensagem);
+            case AGUARDANDO_ESCOLHA_NOME -> false;
             case AGUARDANDO_NOME -> extrairNomeResposta(mensagem).isPresent();
             case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO ->
                     intent == IntentType.AGENDAMENTO && contemDadosAgendamento(texto, mensagem);
@@ -214,6 +225,7 @@ public class ConversationStateService {
             case AGUARDANDO_SERVICO -> Optional.of("Claro. Qual serviço você gostaria de agendar?");
             case AGUARDANDO_DIA -> Optional.of("Perfeito. Para qual dia você gostaria?");
             case AGUARDANDO_HORARIO -> Optional.of(montarPerguntaHorario(state));
+            case AGUARDANDO_ESCOLHA_NOME -> Optional.of("Quer usar o nome do seu WhatsApp ou informar outro?");
             case AGUARDANDO_NOME -> Optional.of("Perfeito. Como você prefere que eu te chame?");
             case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO -> Optional.of(montarRespostaPosAgendamento(state, mensagem));
             default -> Optional.empty();
@@ -557,6 +569,8 @@ public class ConversationStateService {
             state.setStep(ConversationStep.AGUARDANDO_DIA);
         } else if (estaVazio(draftAtual.getHorario())) {
             state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+        } else if (estaVazio(draftAtual.getNome()) && !estaVazio(state.getNomePerfil())) {
+            state.setStep(ConversationStep.AGUARDANDO_ESCOLHA_NOME);
         } else if (estaVazio(draftAtual.getNome())) {
             state.setStep(ConversationStep.AGUARDANDO_NOME);
         } else {
@@ -571,6 +585,7 @@ public class ConversationStateService {
             case AGUARDANDO_SERVICO -> "Qual serviço você gostaria de agendar?";
             case AGUARDANDO_DIA -> "Para qual dia você gostaria?";
             case AGUARDANDO_HORARIO -> montarPerguntaHorario(state);
+            case AGUARDANDO_ESCOLHA_NOME -> "Quer usar o nome do seu WhatsApp ou informar outro?";
             case AGUARDANDO_NOME -> "Como você prefere que eu te chame?";
             case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO -> "Confirmar que a solicitação foi recebida e será validada.";
             default -> "";
@@ -582,6 +597,7 @@ public class ConversationStateService {
             case AGUARDANDO_SERVICO -> "Me fala qual serviço você quer agendar.";
             case AGUARDANDO_DIA -> "Me fala para qual dia você gostaria.";
             case AGUARDANDO_HORARIO -> "Me fala o horário que você prefere.";
+            case AGUARDANDO_ESCOLHA_NOME -> "Escolha se quer usar o nome do WhatsApp ou informar outro.";
             case AGUARDANDO_NOME -> "Me fala como você prefere que eu te chame.";
             case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO -> montarConfirmacao(state);
             default -> "Me fala como posso ajudar.";
@@ -690,6 +706,7 @@ public class ConversationStateService {
             case AGUARDANDO_SERVICO -> "serviço desejado";
             case AGUARDANDO_DIA -> "dia desejado";
             case AGUARDANDO_HORARIO -> "horário desejado";
+            case AGUARDANDO_ESCOLHA_NOME -> "escolha do nome";
             case AGUARDANDO_NOME -> "nome da cliente";
             case AGUARDANDO_CONFIRMACAO, AGUARDANDO_CANCELAMENTO, FINALIZADO -> "confirmar solicitação";
         };
