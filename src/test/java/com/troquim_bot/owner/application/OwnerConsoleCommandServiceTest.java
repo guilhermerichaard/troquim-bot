@@ -12,7 +12,7 @@ import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.availability.AvailabilityId;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.customer.CustomerId;
-import com.troquim_bot.owner.OwnerUserId;
+import com.troquim_bot.owner.domain.OwnerUserId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.service.ServiceId;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,7 +66,7 @@ class OwnerConsoleCommandServiceTest {
 
         when(appointments.buscarPorId(id)).thenReturn(Optional.of(foreign));
 
-        AuthenticatedOwner owner = new AuthenticatedOwner(OwnerUserId.generate(), ownerBusiness);
+        AuthenticatedOwner owner = new AuthenticatedOwner(OwnerUserId.from(java.util.UUID.randomUUID()), ownerBusiness);
 
         assertThrows(IllegalArgumentException.class,
                 () -> commands.cancelAppointment(owner, id.getValue().toString()));
@@ -78,7 +78,7 @@ class OwnerConsoleCommandServiceTest {
     void updateServiceUsaTenantDaSessaoEmTodasAsMutacoes() {
         BusinessId business = BusinessId.from(java.util.UUID.randomUUID());
         ServiceId serviceId = ServiceId.generate();
-        AuthenticatedOwner owner = new AuthenticatedOwner(OwnerUserId.generate(), business);
+        AuthenticatedOwner owner = new AuthenticatedOwner(OwnerUserId.from(java.util.UUID.randomUUID()), business);
 
         var command = new OwnerConsoleCommandService.ServiceCommand(
                 "Corte", "Corte masculino", 45, 55.0);
