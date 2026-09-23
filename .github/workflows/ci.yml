@@ -23,6 +23,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Reject unresolved merge markers
+        run: |
+          if grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=target -E '^(<<<<<<<|=======|>>>>>>>)' .; then
+            echo "Unresolved merge conflict markers found."
+            exit 1
+          fi
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
