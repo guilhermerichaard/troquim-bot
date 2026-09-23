@@ -110,8 +110,7 @@ public class StrictMvpMenuService {
         if (navigationAction.isPresent()) {
             var action = navigationAction.get();
             if (action instanceof ConversationNavigationPolicy.ResetToMenu) {
-                conversationStateService.limparEstado(numero);
-                ConversationState resetState = conversationStateService.buscarPorNumero(numero);
+                ConversationState resetState = reiniciarFluxoPreservandoPerfil(numero);
                 resetState.setStep(ConversationStep.INICIO);
                 conversationStateService.persistir(resetState);
                 return menuPrincipal(numero);
@@ -316,8 +315,7 @@ public class StrictMvpMenuService {
             return Optional.empty();
         }
 
-        conversationStateService.limparEstado(numero);
-        ConversationState atual = conversationStateService.buscarPorNumero(numero);
+        ConversationState atual = reiniciarFluxoPreservandoPerfil(numero);
         var draft = atual.criarNovoDraft();
         draft.setServico(recomendacao.servico());
 
@@ -568,8 +566,7 @@ public class StrictMvpMenuService {
     }
 
     private String iniciarNovoAgendamento(String numero) {
-        conversationStateService.limparEstado(numero);
-        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        ConversationState state = reiniciarFluxoPreservandoPerfil(numero);
         state.criarNovoDraft();
         state.setStep(ConversationStep.AGUARDANDO_SERVICO);
         conversationStateService.atualizarStep(state);
@@ -586,6 +583,19 @@ public class StrictMvpMenuService {
         }
 
         return menuServicos();
+    }
+
+    private ConversationState reiniciarFluxoPreservandoPerfil(String numero) {
+        ConversationState anterior = conversationStateService.buscarPorNumero(numero);
+        String nomePerfil = anterior.getNomePerfil();
+
+        conversationStateService.limparEstado(numero);
+        ConversationState novo = conversationStateService.buscarPorNumero(numero);
+        if (nomePerfil != null && !nomePerfil.isBlank()) {
+            novo.setNomePerfil(nomePerfil);
+        }
+        conversationStateService.persistir(novo);
+        return novo;
     }
 
     private String menuServicos() {
