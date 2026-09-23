@@ -17,6 +17,7 @@ public class ConversationStateSnapshot {
     private List<DraftSnapshot> drafts;
     private String ultimaPergunta;
     private String nome;
+    private String nomePerfil;
 
     /**
      * Construtor padrão para Jackson.
@@ -24,11 +25,12 @@ public class ConversationStateSnapshot {
     public ConversationStateSnapshot() {}
 
     public ConversationStateSnapshot(String step, List<DraftSnapshot> drafts,
-                                     String ultimaPergunta, String nome) {
+                                     String ultimaPergunta, String nome, String nomePerfil) {
         this.step = step;
         this.drafts = drafts;
         this.ultimaPergunta = ultimaPergunta;
         this.nome = nome;
+        this.nomePerfil = nomePerfil;
     }
 
     public static ConversationStateSnapshot fromDomain(ConversationState state) {
@@ -40,7 +42,8 @@ public class ConversationStateSnapshot {
                 state.getStep().name(),
                 draftSnapshots,
                 state.getUltimaPergunta(),
-                state.getNome()
+                state.getNome(),
+                state.getNomePerfil()
         );
     }
 
@@ -62,6 +65,7 @@ public class ConversationStateSnapshot {
 
         state.setUltimaPergunta(ultimaPergunta);
         state.setNome(nome);
+        state.setNomePerfil(nomePerfil);
 
         return state;
     }
@@ -79,6 +83,9 @@ public class ConversationStateSnapshot {
 
     public String getNome() { return nome; }
     public void setNome(String nome) { this.nome = nome; }
+
+    public String getNomePerfil() { return nomePerfil; }
+    public void setNomePerfil(String nomePerfil) { this.nomePerfil = nomePerfil; }
 
     /**
      * Snapshot serializável do AppointmentDraft.

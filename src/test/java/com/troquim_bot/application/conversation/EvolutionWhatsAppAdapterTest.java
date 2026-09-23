@@ -22,6 +22,7 @@ class EvolutionWhatsAppAdapterTest {
               "event": "messages.upsert",
               "sender": "5511999999999",
               "data": {
+                "pushName": "Gui",
                 "key": {
                   "id": "message-1",
                   "remoteJid": "5511999999999@s.whatsapp.net",
@@ -39,6 +40,7 @@ class EvolutionWhatsAppAdapterTest {
         assertEquals("5511999999999", message.get().numero());
         assertEquals("5511999999999", message.get().sender());
         assertEquals("Oi", message.get().mensagem());
+        assertEquals("Gui", message.get().profileName());
     }
 
     @Test

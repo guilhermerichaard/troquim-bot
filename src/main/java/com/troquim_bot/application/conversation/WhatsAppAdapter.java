@@ -33,6 +33,10 @@ public interface WhatsAppAdapter {
         enviarMensagem(numero, texto);
     }
 
-    record IncomingMessage(String messageId, String numero, String sender, String mensagem) {
+    record IncomingMessage(String messageId, String numero, String sender, String mensagem,
+                           String profileName) {
+        public IncomingMessage(String messageId, String numero, String sender, String mensagem) {
+            this(messageId, numero, sender, mensagem, null);
+        }
     }
 }
