@@ -67,19 +67,42 @@ public class ServiceApplicationService {
     }
 
     public Optional<com.troquim_bot.service.Service> buscarPorId(ServiceId id) {
-        if (id == null) {
+        return buscarPorId(tenantAtual(), id);
+    }
+
+    /**
+     * Leitura tenant-explicit para superfícies autenticadas por sessão, como o console
+     * do owner. Evita depender do TenantProvider piloto quando o businessId já foi
+     * resolvido de forma autoritativa pela sessão.
+     */
+    public Optional<com.troquim_bot.service.Service> buscarPorId(BusinessId businessId, ServiceId id) {
+        if (businessId == null || id == null) {
             return Optional.empty();
         }
-        return serviceRepository.buscarPorId(tenantAtual(), id);
+        return serviceRepository.buscarPorId(businessId, id);
     }
 
     public List<com.troquim_bot.service.Service> listarTodos() {
-        return serviceRepository.listarTodos(tenantAtual());
+        return listarTodos(tenantAtual());
+    }
+
+    public List<com.troquim_bot.service.Service> listarTodos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return serviceRepository.listarTodos(businessId);
     }
 
     /** Filtragem por status é do repositório, não uma segunda regra aqui. */
     public List<com.troquim_bot.service.Service> listarAtivos() {
-        return serviceRepository.listarAtivos(tenantAtual());
+        return listarAtivos(tenantAtual());
+    }
+
+    public List<com.troquim_bot.service.Service> listarAtivos(BusinessId businessId) {
+        if (businessId == null) {
+            return List.of();
+        }
+        return serviceRepository.listarAtivos(businessId);
     }
 
     public com.troquim_bot.service.Service atualizarNome(ServiceId id, String novoNome) {
