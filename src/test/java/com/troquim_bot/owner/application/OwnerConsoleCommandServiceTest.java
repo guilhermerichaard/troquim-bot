@@ -7,6 +7,7 @@ import com.troquim_bot.application.catalog.ConsultarCatalogo;
 import com.troquim_bot.application.customer.CustomerApplicationService;
 import com.troquim_bot.application.professional.ProfessionalApplicationService;
 import com.troquim_bot.application.service.ServiceApplicationService;
+import com.troquim_bot.application.waitlist.WaitlistApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentId;
 import com.troquim_bot.availability.AvailabilityId;
@@ -44,7 +45,8 @@ class OwnerConsoleCommandServiceTest {
                 mock(ConsultarCatalogo.class),
                 mock(CustomerApplicationService.class),
                 services,
-                professionals);
+                professionals,
+                mock(WaitlistApplicationService.class));
     }
 
     @Test
