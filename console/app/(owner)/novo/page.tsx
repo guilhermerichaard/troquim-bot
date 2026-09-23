@@ -24,6 +24,9 @@ export default function NovoPage(){
   const [slots,setSlots]=useState<string[]>([])
   const [time,setTime]=useState('')
   const [customerId,setCustomerId]=useState('')
+  const [creatingCustomer,setCreatingCustomer]=useState(false)
+  const [customerName,setCustomerName]=useState('')
+  const [customerPhone,setCustomerPhone]=useState('')
   const [error,setError]=useState('')
   const [saving,setSaving]=useState(false)
 
@@ -40,6 +43,21 @@ export default function NovoPage(){
       .then(async r=>{if(!r.ok) throw new Error(); return r.json()})
       .then(setSlots).catch(()=>setSlots([]))
   },[serviceId,professionalId,date])
+
+  async function createCustomer(){
+    setSaving(true);setError('')
+    try{
+      const r=await fetch('/api/app/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:customerName,phone:customerPhone,notes:null})})
+      const body=await r.json().catch(()=>({}))
+      if(!r.ok) throw new Error(body.error||'Não foi possível criar o cliente.')
+      const refreshed=await fetch('/api/app/customers',{cache:'no-store'}).then(x=>x.json())
+      setCustomers(refreshed.filter((x:Customer)=>x.status==='ATIVO'))
+      setCustomerId(body.id)
+      setCreatingCustomer(false)
+      setCustomerName('')
+      setCustomerPhone('')
+    }catch(e){setError(e instanceof Error?e.message:'Não foi possível criar o cliente.')}finally{setSaving(false)}
+  }
 
   async function submit(){
     setSaving(true);setError('')
@@ -63,7 +81,8 @@ export default function NovoPage(){
       {service&&<div className="formField"><label>Profissional</label><select value={professionalId} onChange={e=>setProfessionalId(e.target.value)}><option value="">Escolha</option>{service.professionals.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
       {professionalId&&<div className="formField"><label>Data</label><input type="date" value={date} min={localIso()} onChange={e=>setDate(e.target.value)}/></div>}
       {professionalId&&<div className="formField"><label>Horário</label>{slots.length?<div className="actionRow">{slots.map(s=><button key={s} className={time===s?'touchButton primary':'touchButton secondary'} onClick={()=>setTime(s)}>{s.slice(0,5)}</button>)}</div>:<div className="inlineNotice">Sem horários livres nessa data.</div>}</div>}
-      {time&&<div className="formField"><label>Cliente</label><select value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">Escolha o cliente</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name} · {c.phone}</option>)}</select></div>}
+      {time&&<div className="formField"><label>Cliente</label><select value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">Escolha o cliente</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name} · {c.phone}</option>)}</select><button className="touchButton secondary" onClick={()=>setCreatingCustomer(v=>!v)}>{creatingCustomer?'Cancelar cadastro':'+ Novo cliente'}</button></div>}
+      {time&&creatingCustomer&&<div className="card formGrid"><div className="formField"><label>Nome</label><input value={customerName} onChange={e=>setCustomerName(e.target.value)}/></div><div className="formField"><label>WhatsApp / telefone</label><input inputMode="tel" value={customerPhone} onChange={e=>setCustomerPhone(e.target.value)} placeholder="+55 11 99999-9999"/></div><button className="touchButton primary" disabled={!customerName||!customerPhone||saving} onClick={createCustomer}>{saving?'Salvando…':'Salvar cliente e continuar'}</button></div>}
       <button className="touchButton primary" disabled={!ready||saving} onClick={submit}>{saving?'Agendando…':'Confirmar agendamento'}</button>
     </div>
   </div>
