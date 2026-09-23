@@ -43,6 +43,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
 
         String messageId = root.path("data").path("key").path("id").asText();
         String sender = rawSender(root.path("sender").asText());
+        String profileName = profileName(root);
         JsonNode messageNode = root.path("data").path("message");
         String mensagem = extrairMensagemOuRespostaRapida(messageNode);
 
@@ -62,7 +63,7 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
             return Optional.empty();
         }
 
-        return Optional.of(new IncomingMessage(messageId, numero, sender, mensagem));
+        return Optional.of(new IncomingMessage(messageId, numero, sender, mensagem, profileName));
     }
 
     @Override
@@ -279,5 +280,25 @@ public class EvolutionWhatsAppAdapter implements WhatsAppAdapter {
 
     private String rawSender(String sender) {
         return sender == null ? null : WhatsAppContactResolver.normalizeForOutgoing(sender);
+    }
+
+    /**
+     * O nome exibido pelo contato vem do pushName da Evolution. Mantemos esse dado
+     * separado do numero/sender: ele e uma sugestao de identidade para UX, nunca uma
+     * chave de autorizacao nem a identidade canonica do cliente.
+     */
+    private String profileName(JsonNode root) {
+        String value = root.path("data").path("pushName").asText(null);
+        if (value == null || value.isBlank()) {
+            value = root.path("pushName").asText(null);
+        }
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim().replaceAll("\\s+", " ");
+        if (trimmed.isBlank()) {
+            return null;
+        }
+        return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80);
     }
 }
