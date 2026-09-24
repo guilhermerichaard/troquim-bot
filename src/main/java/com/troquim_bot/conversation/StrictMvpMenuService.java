@@ -123,6 +123,13 @@ public class StrictMvpMenuService {
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
 
+        if (texto.startsWith("upsell_add_")) {
+            return processarUpsell(numero, texto);
+        }
+        if (texto.equals("upsell_skip")) {
+            return "Sem problema. Seu agendamento principal continua confirmado.\n\n" + menuAcoes();
+        }
+
         if (texto.startsWith("reminder_confirm_")) {
             return processarConfirmacaoLembrete(numero, texto);
         }
@@ -373,6 +380,54 @@ public class StrictMvpMenuService {
         }
         resposta.append(CHOICE_BACK);
         return Optional.of(resposta.toString());
+    }
+
+    private String mensagemUpsell(ConversationBookingGateway.UpsellOffer offer) {
+        String hhmm = String.format("%02d%02d", offer.time().getHour(), offer.time().getMinute());
+        String id = "upsell_add_" + offer.serviceId() + "_" + offer.professionalId()
+                + "_" + offer.date() + "_" + hhmm;
+        String price = offer.price() == null
+                ? ""
+                : " por R$ " + String.format(java.util.Locale.of("pt", "BR"), "%.2f", offer.price());
+        return "Agendamento confirmado com sucesso!\n\n"
+                + "Quer aproveitar o mesmo atendimento e adicionar "
+                + offer.serviceName() + price + "?\n\n"
+                + "[[choice:" + id + "|" + tituloUpsell(offer.serviceName()) + "]]\n"
+                + "[[choice:upsell_skip|Agora não]]";
+    }
+
+    private String tituloUpsell(String serviceName) {
+        String title = "Adicionar " + (serviceName == null ? "adicional" : serviceName.trim());
+        return title.length() <= 20 ? title : title.substring(0, 19) + "…";
+    }
+
+    private String processarUpsell(String numero, String texto) {
+        if (conversationBookingGateway == null) {
+            return menuPrincipal(numero);
+        }
+        String payload = texto.substring("upsell_add_".length());
+        String[] parts = payload.split("_", -1);
+        if (parts.length != 4) {
+            return "Não consegui abrir esse adicional.\n\n" + menuAcoes();
+        }
+        try {
+            String serviceId = parts[0];
+            String professionalId = parts[1];
+            java.time.LocalDate date = java.time.LocalDate.parse(parts[2]);
+            String hhmm = parts[3];
+            if (!hhmm.matches("\\d{4}")) {
+                return "Não consegui abrir esse adicional.\n\n" + menuAcoes();
+            }
+            java.time.LocalTime time = java.time.LocalTime.of(
+                    Integer.parseInt(hhmm.substring(0, 2)),
+                    Integer.parseInt(hhmm.substring(2, 4)));
+
+            var result = conversationBookingGateway.confirmarUpsell(
+                    numero, serviceId, professionalId, date, time);
+            return result.message() + "\n\n" + menuAcoes();
+        } catch (RuntimeException invalid) {
+            return "Não consegui abrir esse adicional.\n\n" + menuAcoes();
+        }
     }
 
     private String processarConfirmacaoLembrete(String numero, String texto) {
@@ -1184,14 +1239,18 @@ public class StrictMvpMenuService {
                     return "Nao consegui confirmar essa escolha. Abra a agenda novamente e selecione uma opcao disponivel.";
                 }
 
+                Optional<ConversationBookingGateway.UpsellOffer> offer =
+                        conversationBookingGateway.recomendarUpsell(
+                                draft.getServico(), draft.getDia(), draft.getHorario());
+
                 draft.setConfirmado(true);
                 state.setStep(ConversationStep.FINALIZADO);
                 conversationStateService.persistir(state);
-                return "Agendamento confirmado com sucesso!\n\n" +
-                       "Deseja fazer algo mais?\n\n" +
-                       "1) Agendar\n" +
-                       "2) Meus agendamentos\n" +
-                       "3) Cancelar";
+
+                if (offer.isPresent()) {
+                    return mensagemUpsell(offer.get());
+                }
+                return "Agendamento confirmado com sucesso!\n\n" + menuAcoes();
             }
 
             BookingResult resultado;
