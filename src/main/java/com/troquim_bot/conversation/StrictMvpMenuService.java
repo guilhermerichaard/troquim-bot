@@ -174,8 +174,7 @@ public class StrictMvpMenuService {
             return menuCancelamentos(numero, paginaCancelamentos);
         }
 
-        if ((step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO)
-                && !texto.matches("^[123]$")) {
+        if (podeInterpretarNovaIntencao(step, texto)) {
             Optional<String> turbo = tentarTurbo(numero, mensagem);
             if (turbo.isPresent()) {
                 return turbo.get();
@@ -315,6 +314,17 @@ public class StrictMvpMenuService {
             return cancelarAgendamento(numero);
         }
         return menuPrincipal(numero);
+    }
+
+    private boolean podeInterpretarNovaIntencao(ConversationStep step, String texto) {
+        if (texto == null || texto.isBlank() || texto.matches("^[123]$")) {
+            return false;
+        }
+        return step == ConversationStep.INICIO
+                || step == ConversationStep.FINALIZADO
+                || step == ConversationStep.AGUARDANDO_SERVICO
+                || step == ConversationStep.AGUARDANDO_DIA
+                || step == ConversationStep.AGUARDANDO_HORARIO;
     }
 
     private Optional<String> tentarTurbo(String numero, String mensagem) {
