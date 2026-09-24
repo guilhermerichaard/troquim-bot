@@ -27,7 +27,8 @@ EC2 production
       +--> temporary PostgreSQL restore
       +--> temporary application boot + Flyway validation
       +--> canonical deploy-prod-release.sh
-      +--> local/public health + final Flyway validation
+      +--> versioned owner/public-booking console deploy
+      +--> backend + console health + final Flyway validation
 ```
 
 No private SSH key or long-lived AWS access key belongs in GitHub.
@@ -59,7 +60,7 @@ Before production migration, it always:
 5. requires health UP;
 6. requires the expected final Flyway version and zero failed migrations.
 
-Only after those gates pass is `scripts/deploy-prod-release.sh` called.
+Only after those gates pass is `scripts/deploy-prod-release.sh` called. After the backend is healthy, `scripts/deploy-console-release.sh` publishes the Next.js owner/public-booking console using the same release tag and requires `http://127.0.0.1:3001/login` to answer before the workflow can succeed.
 
 ## One-time AWS setup
 
