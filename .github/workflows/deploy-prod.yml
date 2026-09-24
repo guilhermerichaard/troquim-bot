@@ -1,0 +1,120 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: troquim-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.config.outputs.enabled }}
+      release_sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - name: Resolve immutable release SHA
+        id: release
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check AWS deployment configuration
+        id: config
+        shell: bash
+        env:
+          AUTO_DEPLOY_ENABLED: ${{ vars.PROD_AUTO_DEPLOY_ENABLED }}
+          ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          INSTANCE_ID: ${{ vars.PROD_EC2_INSTANCE_ID }}
+        run: |
+          if [[ "${AUTO_DEPLOY_ENABLED}" == "true" && -n "${ROLE_ARN}" && -n "${INSTANCE_ID}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Automatic production deployment is disarmed. Set PROD_AUTO_DEPLOY_ENABLED=true only after AWS OIDC/SSM are ready, with AWS_DEPLOY_ROLE_ARN and PROD_EC2_INSTANCE_ID configured."
+          fi
+
+  deploy:
+    needs: configuration
+    if: >-
+      needs.configuration.outputs.enabled == 'true' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push'
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Configure short-lived AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: troquim-production-deploy
+          aws-region: sa-east-1
+
+      - name: Deploy exact CI-verified commit through SSM
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ needs.configuration.outputs.release_sha }}
+          INSTANCE_ID: ${{ vars.PROD_EC2_INSTANCE_ID }}
+        run: |
+          set -Eeuo pipefail
+
+          [[ "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Invalid release SHA: ${RELEASE_SHA}"
+            exit 2
+          }
+
+          REMOTE_SCRIPT="https://raw.githubusercontent.com/guilhermerichaard/troquim-bot/${RELEASE_SHA}/scripts/deploy-prod-automatic.sh"
+          REMOTE_COMMAND="set -Eeuo pipefail; curl -fsSL '${REMOTE_SCRIPT}' -o /tmp/troquim-deploy.sh; chmod +x /tmp/troquim-deploy.sh; /tmp/troquim-deploy.sh '${RELEASE_SHA}'"
+
+          jq -n --arg command "${REMOTE_COMMAND}" '{commands:[$command]}' > /tmp/ssm-parameters.json
+
+          COMMAND_ID="$(
+            aws ssm send-command               --region sa-east-1               --instance-ids "${INSTANCE_ID}"               --document-name "AWS-RunShellScript"               --comment "Troquim production deploy ${RELEASE_SHA}"               --timeout-seconds 3600               --parameters file:///tmp/ssm-parameters.json               --query 'Command.CommandId'               --output text
+          )"
+
+          echo "SSM command: ${COMMAND_ID}"
+
+          STATUS="Pending"
+          for _ in $(seq 1 240); do
+            STATUS="$(
+              aws ssm get-command-invocation                 --region sa-east-1                 --command-id "${COMMAND_ID}"                 --instance-id "${INSTANCE_ID}"                 --query 'Status'                 --output text 2>/dev/null || echo Pending
+            )"
+
+            case "${STATUS}" in
+              Success|Failed|Cancelled|TimedOut|Cancelling)
+                break
+                ;;
+            esac
+            sleep 10
+          done
+
+          echo "Final SSM status: ${STATUS}"
+          echo "----- remote stdout -----"
+          aws ssm get-command-invocation             --region sa-east-1             --command-id "${COMMAND_ID}"             --instance-id "${INSTANCE_ID}"             --query 'StandardOutputContent'             --output text || true
+
+          echo "----- remote stderr -----"
+          aws ssm get-command-invocation             --region sa-east-1             --command-id "${COMMAND_ID}"             --instance-id "${INSTANCE_ID}"             --query 'StandardErrorContent'             --output text || true
+
+          [[ "${STATUS}" == "Success" ]] || {
+            echo "::error::Production deployment failed with SSM status ${STATUS}"
+            exit 1
+          }
