@@ -143,7 +143,7 @@ echo "=== PREFLIGHT TEMPORARY APP ==="
 docker inspect "${BOT}" --format '{{range .Config.Env}}{{println .}}{{end}}' > "${TMP_ENV}"
 chmod 600 "${TMP_ENV}"
 
-docker run -d   --name "${TMP_APP}"   --network "${NETWORK}"   --env-file "${TMP_ENV}"   -e SPRING_DATASOURCE_URL="jdbc:postgresql://${TMP_PG}:5432/${PGDB}"   -e SPRING_DATASOURCE_USERNAME="${PGUSER}"   -e SPRING_DATASOURCE_PASSWORD="${PGPASS}"   -e TROQUIM_FLYWAY_BASELINE_ON_MIGRATE=false   -p "127.0.0.1:${TMP_PORT}:8080"   "troquim-bot:${TAG}" >/dev/null
+docker run -d   --name "${TMP_APP}"   --network "${NETWORK}"   --env-file "${TMP_ENV}"   -e SPRING_DATASOURCE_URL="jdbc:postgresql://${TMP_PG}:5432/${PGDB}"   -e SPRING_DATASOURCE_USERNAME="${PGUSER}"   -e SPRING_DATASOURCE_PASSWORD="${PGPASS}"   -e TROQUIM_FLYWAY_BASELINE_ON_MIGRATE=false   -e TROQUIM_WHATSAPP_CLOUD_ENABLED=false   -e TROQUIM_WHATSAPP_FLOW_ENABLED=false   -e WHATSAPP_FLOW_ENABLED=false   -e TROQUIM_REMINDER_SCHEDULER_ENABLED=false   -e TROQUIM_AI_BOOKING_INTENT_ENABLED=false   -p "127.0.0.1:${TMP_PORT}:8080"   "troquim-bot:${TAG}" >/dev/null
 
 UP=0
 for _ in $(seq 1 60); do
