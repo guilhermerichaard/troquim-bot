@@ -99,6 +99,14 @@ public class ConversationOrchestrator {
     }
 
     public String processarMensagem(String numero, String mensagem) {
+        return processarMensagem(numero, mensagem, null);
+    }
+
+    public String processarMensagem(String numero, String mensagem, String profileName) {
+        if (profileName != null && !profileName.isBlank()) {
+            conversationStateService.atualizarNomePerfil(numero, profileName);
+        }
+
         // STRICT_MVP: intercepta antes da pipeline para garantir que o menu guiado
         // tenha prioridade sobre GREETING e outros flows que finalizam o contexto
         if (strictMvpMenuService.isStrictMvpEnabled()) {
