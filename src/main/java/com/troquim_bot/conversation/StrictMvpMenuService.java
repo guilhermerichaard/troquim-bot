@@ -975,8 +975,7 @@ public class StrictMvpMenuService {
             }
 
             if (escolhido == null || !consulta.horarios().contains(escolhido)) {
-                return "Esse horário não está disponível. Escolha outro horário:\n\n"
-                        + menuHorarios(numero);
+                return menuAlternativasConflito(numero, mensagemOriginal);
             }
 
             conversationStateService.atualizarHorario(
@@ -1015,6 +1014,46 @@ public class StrictMvpMenuService {
         }
         conversationStateService.atualizarHorario(numero, horario);
         return menuNome(numero);
+    }
+
+    private String menuAlternativasConflito(String numero, String horarioSolicitado) {
+        if (conversationBookingGateway == null) {
+            return "Esse horário não está disponível. Escolha outro horário:\n\n"
+                    + menuHorarios(numero);
+        }
+
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        var draft = state.getDraftAtual();
+        if (draft == null || draft.getServico() == null || draft.getDia() == null) {
+            return menuHorarios(numero);
+        }
+
+        var alternativas = conversationBookingGateway.alternativasParaConflito(
+                draft.getServico(), draft.getDia(), horarioSolicitado);
+        if (!alternativas.ok() || alternativas.slots().isEmpty()) {
+            return "Esse horário não está disponível. Veja os horários livres:\n\n"
+                    + menuHorarios(numero);
+        }
+
+        StringBuilder response = new StringBuilder(
+                "Esse horário conflita com a agenda do profissional. "
+                        + "Separei os horários livres mais próximos:\n\n");
+        for (var slot : alternativas.slots()) {
+            String id = "turbo_slot_" + slot.data() + "_"
+                    + String.format("%02d%02d", slot.horario().getHour(), slot.horario().getMinute());
+            response.append("[[choice:").append(id).append("|")
+                    .append(rotuloSlotTurbo(slot.data(), slot.horario())).append("]]\n");
+        }
+
+        timeInputParser.parse(horarioSolicitado).ifPresent(target -> {
+            String time = String.format("%02d%02d", target.getHour(), target.getMinute());
+            response.append("[[choice:waitlist_join_")
+                    .append(waitlistToken(draft.getDia())).append("_")
+                    .append(time).append("_").append(time)
+                    .append("|Entrar na espera desse horário]]\n");
+        });
+        response.append(CHOICE_BACK);
+        return response.toString();
     }
 
     private String menuNome(String numero) {
@@ -1135,11 +1174,11 @@ public class StrictMvpMenuService {
                     return MENSAGEM_FALHA_TECNICA;
                 }
                 if (confirmacao.status() == ConversationBookingGateway.Status.HORARIO_INDISPONIVEL) {
+                    String horarioConflito = draft.getHorario();
                     draft.setHorario(null);
                     state.setStep(ConversationStep.AGUARDANDO_HORARIO);
                     conversationStateService.persistir(state);
-                    return "Esse horário não está disponível. Escolha outro horário:\n\n"
-                            + menuHorarios(numero);
+                    return menuAlternativasConflito(numero, horarioConflito);
                 }
                 if (!confirmacao.confirmada()) {
                     return "Nao consegui confirmar essa escolha. Abra a agenda novamente e selecione uma opcao disponivel.";
