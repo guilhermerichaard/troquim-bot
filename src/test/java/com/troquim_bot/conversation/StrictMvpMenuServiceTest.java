@@ -336,6 +336,42 @@ class StrictMvpMenuServiceTest {
     }
 
     @Test
+    void fraseNaturalReorientaFluxoMesmoQuandoEstavaAguardandoHorario() {
+        ConversationStateService states =
+                new ConversationStateService(new InMemoryConversationStateRepository());
+        ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
+
+        when(gateway.recomendar(eq(NUMERO), any(BookingIntent.class)))
+                .thenReturn(new ConversationBookingGateway.Recomendacao(
+                        ConversationBookingGateway.Status.OK,
+                        "Escova",
+                        List.of(new ConversationBookingGateway.SlotSugerido(
+                                "Escova", LocalDate.of(2026, 9, 29), LocalTime.of(10, 30))),
+                        false));
+
+        StrictMvpMenuService menu = menuComGateway(states, gateway);
+
+        ConversationState state = states.buscarPorNumero(NUMERO);
+        state.criarNovoDraft();
+        state.getDraftAtual().setServico("Escova");
+        state.getDraftAtual().setDia("terca");
+        state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+        states.persistir(state);
+
+        String resposta = menu.processarMenu(
+                NUMERO,
+                "Quero fazer escova terça de manhã",
+                states.buscarPorNumero(NUMERO));
+
+        assertTrue(resposta.contains("Achei estes horários para Escova"), resposta);
+        var presentation = ConversationInteractivePresentation.from(resposta).orElseThrow();
+        assertEquals("turbo_slot_2026-09-29_1030", presentation.options().get(0).id());
+        assertEquals(ConversationStep.AGUARDANDO_HORARIO,
+                states.buscarPorNumero(NUMERO).getStep());
+        assertEquals("Escova", states.buscarPorNumero(NUMERO).getDraftAtual().getServico());
+    }
+
+    @Test
     void turboSemVagaOfereceWaitlistClicavelEConfirmaEntrada() {
         ConversationStateService states =
                 new ConversationStateService(new InMemoryConversationStateRepository());

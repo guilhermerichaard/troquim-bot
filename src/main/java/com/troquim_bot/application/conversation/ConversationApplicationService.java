@@ -91,6 +91,10 @@ public class ConversationApplicationService {
         return conversationOrchestrator.processarMensagem(numero, mensagem);
     }
 
+    public String processarMensagem(String numero, String mensagem, String profileName) {
+        return conversationOrchestrator.processarMensagem(numero, mensagem, profileName);
+    }
+
     public void receberWebhookWhatsApp(String payload) throws Exception {
         conversationOrchestrator.receberWebhookWhatsApp(payload);
     }

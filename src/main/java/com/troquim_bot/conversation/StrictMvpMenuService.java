@@ -174,9 +174,8 @@ public class StrictMvpMenuService {
             return menuCancelamentos(numero, paginaCancelamentos);
         }
 
-        if ((step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO)
-                && !texto.matches("^[123]$")) {
-            Optional<String> turbo = tentarTurbo(numero, mensagem);
+        if (podeInterpretarNovaIntencao(step, texto)) {
+            Optional<String> turbo = tentarTurbo(numero, mensagem, step);
             if (turbo.isPresent()) {
                 return turbo.get();
             }
@@ -317,7 +316,18 @@ public class StrictMvpMenuService {
         return menuPrincipal(numero);
     }
 
-    private Optional<String> tentarTurbo(String numero, String mensagem) {
+    private boolean podeInterpretarNovaIntencao(ConversationStep step, String texto) {
+        if (texto == null || texto.isBlank() || texto.matches("^[123]$")) {
+            return false;
+        }
+        return step == ConversationStep.INICIO
+                || step == ConversationStep.FINALIZADO
+                || step == ConversationStep.AGUARDANDO_SERVICO
+                || step == ConversationStep.AGUARDANDO_DIA
+                || step == ConversationStep.AGUARDANDO_HORARIO;
+    }
+
+    private Optional<String> tentarTurbo(String numero, String mensagem, ConversationStep step) {
         if (conversationBookingGateway == null || bookingIntentInterpreter == null) {
             return Optional.empty();
         }
@@ -327,6 +337,15 @@ public class StrictMvpMenuService {
             return Optional.empty();
         }
         BookingIntent intent = interpretada.get();
+
+        boolean fluxoJaEmAndamento = step != ConversationStep.INICIO
+                && step != ConversationStep.FINALIZADO;
+        if (fluxoJaEmAndamento
+                && !intent.hasDayPreference()
+                && !intent.hasTimePreference()
+                && !intent.sameAsUsual()) {
+            return Optional.empty();
+        }
 
         ConversationBookingGateway.Recomendacao recomendacao =
                 conversationBookingGateway.recomendar(numero, intent);
