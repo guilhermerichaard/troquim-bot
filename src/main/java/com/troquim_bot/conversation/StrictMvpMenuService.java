@@ -123,6 +123,19 @@ public class StrictMvpMenuService {
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
 
+        if (texto.startsWith("reminder_confirm_")) {
+            return processarConfirmacaoLembrete(numero, texto);
+        }
+        if (texto.startsWith("reminder_cancel_")) {
+            return processarCancelamentoLembrete(numero, texto);
+        }
+        if (texto.startsWith("reminder_reschedule_")) {
+            return abrirReagendamentoLembrete(numero, texto);
+        }
+        if (texto.startsWith("reminder_move_")) {
+            return concluirReagendamentoLembrete(numero, texto);
+        }
+
         if (texto.startsWith("waitlist_claim_")) {
             return resgatarWaitlist(numero, texto);
         }
@@ -360,6 +373,90 @@ public class StrictMvpMenuService {
         }
         resposta.append(CHOICE_BACK);
         return Optional.of(resposta.toString());
+    }
+
+    private String processarConfirmacaoLembrete(String numero, String texto) {
+        java.util.UUID appointmentId = uuidSuffix(texto, "reminder_confirm_");
+        if (appointmentId == null || conversationBookingGateway == null) {
+            return "Não consegui identificar esse agendamento.\n\n" + menuAcoes();
+        }
+        var result = conversationBookingGateway.confirmarLembrete(numero, appointmentId);
+        return result.message() + "\n\n" + menuAcoes();
+    }
+
+    private String processarCancelamentoLembrete(String numero, String texto) {
+        java.util.UUID appointmentId = uuidSuffix(texto, "reminder_cancel_");
+        if (appointmentId == null || conversationBookingGateway == null) {
+            return "Não consegui identificar esse agendamento.\n\n" + menuAcoes();
+        }
+        var result = conversationBookingGateway.cancelarPorLembrete(numero, appointmentId);
+        return result.message() + "\n\n" + menuAcoes();
+    }
+
+    private String abrirReagendamentoLembrete(String numero, String texto) {
+        java.util.UUID appointmentId = uuidSuffix(texto, "reminder_reschedule_");
+        if (appointmentId == null || conversationBookingGateway == null) {
+            return "Não consegui identificar esse agendamento.\n\n" + menuAcoes();
+        }
+
+        var options = conversationBookingGateway.opcoesReagendamento(numero, appointmentId);
+        if (!options.ok() || options.slots().isEmpty()) {
+            return "Não encontrei outro horário livre agora. Seu agendamento atual continua preservado.\n\n"
+                    + menuAcoes();
+        }
+
+        StringBuilder response = new StringBuilder(
+                "Encontrei estes horários próximos para " + options.serviceName() + ":\n\n");
+        for (var slot : options.slots()) {
+            String id = "reminder_move_" + appointmentId + "_" + slot.data() + "_"
+                    + String.format("%02d%02d", slot.horario().getHour(), slot.horario().getMinute());
+            response.append("[[choice:").append(id).append("|")
+                    .append(rotuloSlotTurbo(slot.data(), slot.horario())).append("]]\n");
+        }
+        response.append(CHOICE_BACK);
+        return response.toString();
+    }
+
+    private String concluirReagendamentoLembrete(String numero, String texto) {
+        if (conversationBookingGateway == null) {
+            return menuPrincipal(numero);
+        }
+        String payload = texto.substring("reminder_move_".length());
+        int first = payload.indexOf('_');
+        int last = payload.lastIndexOf('_');
+        if (first <= 0 || last <= first) {
+            return "Não consegui abrir esse horário.\n\n" + menuAcoes();
+        }
+        try {
+            java.util.UUID appointmentId = java.util.UUID.fromString(payload.substring(0, first));
+            java.time.LocalDate date = java.time.LocalDate.parse(payload.substring(first + 1, last));
+            String hhmm = payload.substring(last + 1);
+            if (!hhmm.matches("\\d{4}")) {
+                return "Não consegui abrir esse horário.\n\n" + menuAcoes();
+            }
+            java.time.LocalTime time = java.time.LocalTime.of(
+                    Integer.parseInt(hhmm.substring(0, 2)),
+                    Integer.parseInt(hhmm.substring(2, 4)));
+            var result = conversationBookingGateway.reagendarPorLembrete(
+                    numero, appointmentId, date, time);
+            if (result.status()
+                    == ConversationBookingGateway.ReminderActionStatus.HORARIO_INDISPONIVEL) {
+                return result.message() + "\n\n"
+                        + abrirReagendamentoLembrete(numero, "reminder_reschedule_" + appointmentId);
+            }
+            return result.message() + "\n\n" + menuAcoes();
+        } catch (RuntimeException invalid) {
+            return "Não consegui abrir esse horário.\n\n" + menuAcoes();
+        }
+    }
+
+    private java.util.UUID uuidSuffix(String texto, String prefixo) {
+        if (texto == null || !texto.startsWith(prefixo)) return null;
+        try {
+            return java.util.UUID.fromString(texto.substring(prefixo.length()));
+        } catch (RuntimeException invalid) {
+            return null;
+        }
     }
 
     private String entrarNaEsperaTurbo(String numero, String texto) {
