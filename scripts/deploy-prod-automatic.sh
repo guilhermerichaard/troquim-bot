@@ -88,7 +88,21 @@ echo "Flyway: ${BEFORE} -> ${TARGET}"
 if [[ "${CURRENT_IMAGE}" == "troquim-bot:${TAG}" && "${BEFORE}" == "${TARGET}" ]]; then
   curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null
   curl -fsS https://api.troquim.app/actuator/health >/dev/null
-  echo "Release ${TAG} is already deployed and healthy."
+
+  CURRENT_CONSOLE_IMAGE="$(docker inspect troquim-console --format '{{.Config.Image}}' 2>/dev/null || true)"
+  if [[ "${CURRENT_CONSOLE_IMAGE}" == "troquim-console:${TAG}" ]] &&
+     curl -fsS http://127.0.0.1:3001/login >/dev/null 2>&1; then
+    echo "Release ${TAG} is already fully deployed and healthy."
+    exit 0
+  fi
+
+  echo "Backend ${TAG} is already healthy; recovering console only."
+  chmod +x "${RELEASE_DIR}/scripts/deploy-console-release.sh"
+  "${RELEASE_DIR}/scripts/deploy-console-release.sh" "${TAG}"
+  RECOVERED_CONSOLE_IMAGE="$(docker inspect troquim-console --format '{{.Config.Image}}')"
+  [[ "${RECOVERED_CONSOLE_IMAGE}" == "troquim-console:${TAG}" ]] ||
+    fail "console-only recovery produced unexpected image: ${RECOVERED_CONSOLE_IMAGE}"
+  echo "Release ${TAG} console recovery succeeded."
   exit 0
 fi
 
