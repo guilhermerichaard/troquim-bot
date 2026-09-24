@@ -44,6 +44,12 @@ public class WhatsAppCloudProperties {
     /** Idioma exato do template aprovado. */
     private String waitlistTemplateLanguage = "pt_BR";
 
+    /** Template utilitário aprovado para lembrete de agendamento. */
+    private String reminderTemplateName;
+
+    /** Idioma exato do template de lembrete. */
+    private String reminderTemplateLanguage = "pt_BR";
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -122,5 +128,21 @@ public class WhatsAppCloudProperties {
 
     public void setWaitlistTemplateLanguage(String waitlistTemplateLanguage) {
         this.waitlistTemplateLanguage = waitlistTemplateLanguage;
+    }
+
+    public String getReminderTemplateName() {
+        return reminderTemplateName;
+    }
+
+    public void setReminderTemplateName(String reminderTemplateName) {
+        this.reminderTemplateName = reminderTemplateName;
+    }
+
+    public String getReminderTemplateLanguage() {
+        return reminderTemplateLanguage;
+    }
+
+    public void setReminderTemplateLanguage(String reminderTemplateLanguage) {
+        this.reminderTemplateLanguage = reminderTemplateLanguage;
     }
 }

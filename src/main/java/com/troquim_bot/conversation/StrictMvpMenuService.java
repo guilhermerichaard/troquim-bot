@@ -123,6 +123,26 @@ public class StrictMvpMenuService {
         String texto = normalizar(mensagem);
         ConversationStep step = state.getStep();
 
+        if (texto.startsWith("upsell_add_")) {
+            return processarUpsell(numero, texto);
+        }
+        if (texto.equals("upsell_skip")) {
+            return "Sem problema. Seu agendamento principal continua confirmado.\n\n" + menuAcoes();
+        }
+
+        if (texto.startsWith("reminder_confirm_")) {
+            return processarConfirmacaoLembrete(numero, texto);
+        }
+        if (texto.startsWith("reminder_cancel_")) {
+            return processarCancelamentoLembrete(numero, texto);
+        }
+        if (texto.startsWith("reminder_reschedule_")) {
+            return abrirReagendamentoLembrete(numero, texto);
+        }
+        if (texto.startsWith("reminder_move_")) {
+            return concluirReagendamentoLembrete(numero, texto);
+        }
+
         if (texto.startsWith("waitlist_claim_")) {
             return resgatarWaitlist(numero, texto);
         }
@@ -360,6 +380,138 @@ public class StrictMvpMenuService {
         }
         resposta.append(CHOICE_BACK);
         return Optional.of(resposta.toString());
+    }
+
+    private String mensagemUpsell(ConversationBookingGateway.UpsellOffer offer) {
+        String hhmm = String.format("%02d%02d", offer.time().getHour(), offer.time().getMinute());
+        String id = "upsell_add_" + offer.serviceId() + "_" + offer.professionalId()
+                + "_" + offer.date() + "_" + hhmm;
+        String price = offer.price() == null
+                ? ""
+                : " por R$ " + String.format(java.util.Locale.of("pt", "BR"), "%.2f", offer.price());
+        return "Agendamento confirmado com sucesso!\n\n"
+                + "Quer aproveitar o mesmo atendimento e adicionar "
+                + offer.serviceName() + price + "?\n\n"
+                + "[[choice:" + id + "|" + tituloUpsell(offer.serviceName()) + "]]\n"
+                + "[[choice:upsell_skip|Agora não]]";
+    }
+
+    private String tituloUpsell(String serviceName) {
+        String title = "Adicionar " + (serviceName == null ? "adicional" : serviceName.trim());
+        return title.length() <= 20 ? title : title.substring(0, 19) + "…";
+    }
+
+    private String processarUpsell(String numero, String texto) {
+        if (conversationBookingGateway == null) {
+            return menuPrincipal(numero);
+        }
+        String payload = texto.substring("upsell_add_".length());
+        String[] parts = payload.split("_", -1);
+        if (parts.length != 4) {
+            return "Não consegui abrir esse adicional.\n\n" + menuAcoes();
+        }
+        try {
+            String serviceId = parts[0];
+            String professionalId = parts[1];
+            java.time.LocalDate date = java.time.LocalDate.parse(parts[2]);
+            String hhmm = parts[3];
+            if (!hhmm.matches("\\d{4}")) {
+                return "Não consegui abrir esse adicional.\n\n" + menuAcoes();
+            }
+            java.time.LocalTime time = java.time.LocalTime.of(
+                    Integer.parseInt(hhmm.substring(0, 2)),
+                    Integer.parseInt(hhmm.substring(2, 4)));
+
+            var result = conversationBookingGateway.confirmarUpsell(
+                    numero, serviceId, professionalId, date, time);
+            return result.message() + "\n\n" + menuAcoes();
+        } catch (RuntimeException invalid) {
+            return "Não consegui abrir esse adicional.\n\n" + menuAcoes();
+        }
+    }
+
+    private String processarConfirmacaoLembrete(String numero, String texto) {
+        java.util.UUID appointmentId = uuidSuffix(texto, "reminder_confirm_");
+        if (appointmentId == null || conversationBookingGateway == null) {
+            return "Não consegui identificar esse agendamento.\n\n" + menuAcoes();
+        }
+        var result = conversationBookingGateway.confirmarLembrete(numero, appointmentId);
+        return result.message() + "\n\n" + menuAcoes();
+    }
+
+    private String processarCancelamentoLembrete(String numero, String texto) {
+        java.util.UUID appointmentId = uuidSuffix(texto, "reminder_cancel_");
+        if (appointmentId == null || conversationBookingGateway == null) {
+            return "Não consegui identificar esse agendamento.\n\n" + menuAcoes();
+        }
+        var result = conversationBookingGateway.cancelarPorLembrete(numero, appointmentId);
+        return result.message() + "\n\n" + menuAcoes();
+    }
+
+    private String abrirReagendamentoLembrete(String numero, String texto) {
+        java.util.UUID appointmentId = uuidSuffix(texto, "reminder_reschedule_");
+        if (appointmentId == null || conversationBookingGateway == null) {
+            return "Não consegui identificar esse agendamento.\n\n" + menuAcoes();
+        }
+
+        var options = conversationBookingGateway.opcoesReagendamento(numero, appointmentId);
+        if (!options.ok() || options.slots().isEmpty()) {
+            return "Não encontrei outro horário livre agora. Seu agendamento atual continua preservado.\n\n"
+                    + menuAcoes();
+        }
+
+        StringBuilder response = new StringBuilder(
+                "Encontrei estes horários próximos para " + options.serviceName() + ":\n\n");
+        for (var slot : options.slots()) {
+            String id = "reminder_move_" + appointmentId + "_" + slot.data() + "_"
+                    + String.format("%02d%02d", slot.horario().getHour(), slot.horario().getMinute());
+            response.append("[[choice:").append(id).append("|")
+                    .append(rotuloSlotTurbo(slot.data(), slot.horario())).append("]]\n");
+        }
+        response.append(CHOICE_BACK);
+        return response.toString();
+    }
+
+    private String concluirReagendamentoLembrete(String numero, String texto) {
+        if (conversationBookingGateway == null) {
+            return menuPrincipal(numero);
+        }
+        String payload = texto.substring("reminder_move_".length());
+        int first = payload.indexOf('_');
+        int last = payload.lastIndexOf('_');
+        if (first <= 0 || last <= first) {
+            return "Não consegui abrir esse horário.\n\n" + menuAcoes();
+        }
+        try {
+            java.util.UUID appointmentId = java.util.UUID.fromString(payload.substring(0, first));
+            java.time.LocalDate date = java.time.LocalDate.parse(payload.substring(first + 1, last));
+            String hhmm = payload.substring(last + 1);
+            if (!hhmm.matches("\\d{4}")) {
+                return "Não consegui abrir esse horário.\n\n" + menuAcoes();
+            }
+            java.time.LocalTime time = java.time.LocalTime.of(
+                    Integer.parseInt(hhmm.substring(0, 2)),
+                    Integer.parseInt(hhmm.substring(2, 4)));
+            var result = conversationBookingGateway.reagendarPorLembrete(
+                    numero, appointmentId, date, time);
+            if (result.status()
+                    == ConversationBookingGateway.ReminderActionStatus.HORARIO_INDISPONIVEL) {
+                return result.message() + "\n\n"
+                        + abrirReagendamentoLembrete(numero, "reminder_reschedule_" + appointmentId);
+            }
+            return result.message() + "\n\n" + menuAcoes();
+        } catch (RuntimeException invalid) {
+            return "Não consegui abrir esse horário.\n\n" + menuAcoes();
+        }
+    }
+
+    private java.util.UUID uuidSuffix(String texto, String prefixo) {
+        if (texto == null || !texto.startsWith(prefixo)) return null;
+        try {
+            return java.util.UUID.fromString(texto.substring(prefixo.length()));
+        } catch (RuntimeException invalid) {
+            return null;
+        }
     }
 
     private String entrarNaEsperaTurbo(String numero, String texto) {
@@ -878,8 +1030,7 @@ public class StrictMvpMenuService {
             }
 
             if (escolhido == null || !consulta.horarios().contains(escolhido)) {
-                return "Esse horário não está disponível. Escolha outro horário:\n\n"
-                        + menuHorarios(numero);
+                return menuAlternativasConflito(numero, mensagemOriginal);
             }
 
             conversationStateService.atualizarHorario(
@@ -918,6 +1069,46 @@ public class StrictMvpMenuService {
         }
         conversationStateService.atualizarHorario(numero, horario);
         return menuNome(numero);
+    }
+
+    private String menuAlternativasConflito(String numero, String horarioSolicitado) {
+        if (conversationBookingGateway == null) {
+            return "Esse horário não está disponível. Escolha outro horário:\n\n"
+                    + menuHorarios(numero);
+        }
+
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        var draft = state.getDraftAtual();
+        if (draft == null || draft.getServico() == null || draft.getDia() == null) {
+            return menuHorarios(numero);
+        }
+
+        var alternativas = conversationBookingGateway.alternativasParaConflito(
+                draft.getServico(), draft.getDia(), horarioSolicitado);
+        if (!alternativas.ok() || alternativas.slots().isEmpty()) {
+            return "Esse horário não está disponível. Veja os horários livres:\n\n"
+                    + menuHorarios(numero);
+        }
+
+        StringBuilder response = new StringBuilder(
+                "Esse horário não está disponível porque conflita com a agenda do profissional. "
+                        + "Separei os horários livres mais próximos:\n\n");
+        for (var slot : alternativas.slots()) {
+            String id = "turbo_slot_" + slot.data() + "_"
+                    + String.format("%02d%02d", slot.horario().getHour(), slot.horario().getMinute());
+            response.append("[[choice:").append(id).append("|")
+                    .append(rotuloSlotTurbo(slot.data(), slot.horario())).append("]]\n");
+        }
+
+        timeInputParser.parse(horarioSolicitado).ifPresent(target -> {
+            String time = String.format("%02d%02d", target.getHour(), target.getMinute());
+            response.append("[[choice:waitlist_join_")
+                    .append(waitlistToken(draft.getDia())).append("_")
+                    .append(time).append("_").append(time)
+                    .append("|Entrar na espera desse horário]]\n");
+        });
+        response.append(CHOICE_BACK);
+        return response.toString();
     }
 
     private String menuNome(String numero) {
@@ -1038,24 +1229,28 @@ public class StrictMvpMenuService {
                     return MENSAGEM_FALHA_TECNICA;
                 }
                 if (confirmacao.status() == ConversationBookingGateway.Status.HORARIO_INDISPONIVEL) {
+                    String horarioConflito = draft.getHorario();
                     draft.setHorario(null);
                     state.setStep(ConversationStep.AGUARDANDO_HORARIO);
                     conversationStateService.persistir(state);
-                    return "Esse horário não está disponível. Escolha outro horário:\n\n"
-                            + menuHorarios(numero);
+                    return menuAlternativasConflito(numero, horarioConflito);
                 }
                 if (!confirmacao.confirmada()) {
                     return "Nao consegui confirmar essa escolha. Abra a agenda novamente e selecione uma opcao disponivel.";
                 }
 
+                Optional<ConversationBookingGateway.UpsellOffer> offer =
+                        conversationBookingGateway.recomendarUpsell(
+                                draft.getServico(), draft.getDia(), draft.getHorario());
+
                 draft.setConfirmado(true);
                 state.setStep(ConversationStep.FINALIZADO);
                 conversationStateService.persistir(state);
-                return "Agendamento confirmado com sucesso!\n\n" +
-                       "Deseja fazer algo mais?\n\n" +
-                       "1) Agendar\n" +
-                       "2) Meus agendamentos\n" +
-                       "3) Cancelar";
+
+                if (offer.isPresent()) {
+                    return mensagemUpsell(offer.get());
+                }
+                return "Agendamento confirmado com sucesso!\n\n" + menuAcoes();
             }
 
             BookingResult resultado;

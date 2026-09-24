@@ -8,6 +8,7 @@ export default function MaisPage(){
     <div className="mobileMenuCards">
       <Link className="menuCard" href="/servicos"><strong>Serviços</strong><span>Preço, duração e disponibilidade</span></Link>
       <Link className="menuCard" href="/equipe"><strong>Equipe</strong><span>Profissionais e serviços habilitados</span></Link>
+      <Link className="menuCard" href="/automacoes"><strong>Automações</strong><span>Lembretes, cancelamento e upsell</span></Link>
     </div>
   </div>
 }
