@@ -79,7 +79,8 @@ public class WhatsAppCloudMessageParser implements InboundMessageParser {
                     continue;
                 }
                 for (JsonNode message : value.path("messages")) {
-                    toTextMessage(message).ifPresent(textMessages::add);
+                    String profileName = profileNameFor(value, message);
+                    toTextMessage(message, profileName).ifPresent(textMessages::add);
                     toFlowCompletion(message).ifPresent(flowCompletions::add);
                 }
                 // value.statuses[] é intencionalmente ignorado (status-only → sem ação).
@@ -131,7 +132,8 @@ public class WhatsAppCloudMessageParser implements InboundMessageParser {
         return configured.equals(incoming);
     }
 
-    private java.util.Optional<InboundTextMessage> toTextMessage(JsonNode message) {
+    private java.util.Optional<InboundTextMessage> toTextMessage(JsonNode message,
+                                                                  String profileName) {
         String type = message.path("type").asText();
         String body;
 
@@ -160,7 +162,25 @@ public class WhatsAppCloudMessageParser implements InboundMessageParser {
             return java.util.Optional.empty();
         }
         long timestamp = parseEpoch(textOrNull(message.path("timestamp")));
-        return java.util.Optional.of(new InboundTextMessage(PROVIDER, id, from, body, timestamp));
+        return java.util.Optional.of(new InboundTextMessage(
+                PROVIDER, id, from, body, timestamp, profileName));
+    }
+
+    private String profileNameFor(JsonNode value, JsonNode message) {
+        String from = textOrNull(message.path("from"));
+        if (from == null || from.isBlank()) {
+            return null;
+        }
+        for (JsonNode contact : value.path("contacts")) {
+            String waId = textOrNull(contact.path("wa_id"));
+            if (from.equals(waId)) {
+                String profileName = textOrNull(contact.path("profile").path("name"));
+                return profileName == null || profileName.isBlank()
+                        ? null
+                        : profileName.trim();
+            }
+        }
+        return null;
     }
 
     private static String textOrNull(JsonNode node) {
