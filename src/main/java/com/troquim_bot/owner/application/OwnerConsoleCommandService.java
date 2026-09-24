@@ -1,6 +1,7 @@
 package com.troquim_bot.owner.application;
 
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.appointment.AppointmentRescheduleApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.booking.BookingCommandKey;
 import com.troquim_bot.application.booking.BookingResult;
@@ -18,6 +19,7 @@ import com.troquim_bot.customer.Customer;
 import com.troquim_bot.customer.CustomerId;
 import com.troquim_bot.professional.ProfessionalId;
 import com.troquim_bot.service.ServiceId;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +40,7 @@ public class OwnerConsoleCommandService {
     private final ServiceApplicationService services;
     private final ProfessionalApplicationService professionals;
     private final WaitlistApplicationService waitlist;
+    private final AppointmentRescheduleApplicationService rescheduler;
 
     public OwnerConsoleCommandService(AppointmentApplicationService appointments,
                                       AvailabilityApplicationService availability,
@@ -47,6 +50,20 @@ public class OwnerConsoleCommandService {
                                       ServiceApplicationService services,
                                       ProfessionalApplicationService professionals,
                                       WaitlistApplicationService waitlist) {
+        this(appointments, availability, confirmar, catalogo, customers, services, professionals,
+                waitlist, new AppointmentRescheduleApplicationService(appointments, confirmar, customers));
+    }
+
+    @Autowired
+    public OwnerConsoleCommandService(AppointmentApplicationService appointments,
+                                      AvailabilityApplicationService availability,
+                                      ConfirmarAgendamentoDoCatalogo confirmar,
+                                      ConsultarCatalogo catalogo,
+                                      CustomerApplicationService customers,
+                                      ServiceApplicationService services,
+                                      ProfessionalApplicationService professionals,
+                                      WaitlistApplicationService waitlist,
+                                      AppointmentRescheduleApplicationService rescheduler) {
         this.appointments = appointments;
         this.availability = availability;
         this.confirmar = confirmar;
@@ -55,6 +72,7 @@ public class OwnerConsoleCommandService {
         this.services = services;
         this.professionals = professionals;
         this.waitlist = waitlist;
+        this.rescheduler = rescheduler;
     }
 
     @Transactional(readOnly = true)
@@ -141,50 +159,19 @@ public class OwnerConsoleCommandService {
         return ActionResult.ok("Agendamento cancelado.");
     }
 
-    /**
-     * Reagendamento atômico: cancela o antigo e cria o novo na MESMA transação.
-     * Se a nova confirmação não concluir, lança para provocar rollback da cancelamento.
-     */
     @Transactional
     public ActionResult reschedule(AuthenticatedOwner owner, String appointmentId, Reschedule command) {
-        Appointment antigo = exigirAppointmentDoTenant(owner.businessId(), appointmentId);
-        Customer customer = exigirCustomerDoTenant(owner.businessId(),
-                antigo.getCustomerId().getValue().toString());
-
-        services.buscarPorId(owner.businessId(), antigo.getServiceId())
-                .orElseThrow(() -> new IllegalArgumentException("Serviço do agendamento não está mais disponível"));
-        professionals.buscarPorId(owner.businessId(), antigo.getProfessionalId())
-                .orElseThrow(() -> new IllegalArgumentException("Profissional do agendamento não está mais disponível"));
-
-        appointments.cancelarAgendamento(antigo.getId());
-
-        BookingCommandKey key = BookingCommandKey.deChaveExclusiva(
-                owner.businessId(),
-                command.idempotencyKey(),
-                customer.getPhone().getValue(),
-                antigo.getServiceId(),
-                antigo.getProfessionalId(),
-                command.date(),
-                command.time());
-
-        var result = confirmar.confirmar(new ConfirmarAgendamentoDoCatalogo.Pedido(
-                owner.businessId(),
-                antigo.getServiceId(),
-                antigo.getProfessionalId(),
-                customer.getPhone().getValue(),
-                customer.getName().getFullName(),
-                command.date(),
-                command.time(),
-                key));
-
-        BookingResult booking = result.agendamento().orElse(null);
-        if (result.foiRecusado() || booking == null || !booking.isConfirmado()) {
-            throw new RescheduleRejectedException(
-                    booking != null && booking.mensagem() != null
-                            ? booking.mensagem()
-                            : "Novo horário indisponível. O agendamento original foi preservado.");
+        try {
+            var result = rescheduler.reschedule(
+                    owner.businessId(),
+                    AppointmentId.from(UUID.fromString(appointmentId)),
+                    command.date(),
+                    command.time(),
+                    command.idempotencyKey());
+            return ActionResult.ok(result.message());
+        } catch (AppointmentRescheduleApplicationService.RescheduleRejectedException rejected) {
+            throw new RescheduleRejectedException(rejected.getMessage());
         }
-        return ActionResult.ok("Agendamento reagendado.");
     }
 
     @Transactional
