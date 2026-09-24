@@ -309,6 +309,42 @@ public class ConversationBookingGateway {
         return new Recomendacao(Status.OK, servico.item().nome(), slots, intent.sameAsUsual());
     }
 
+    public Recomendacao alternativasParaConflito(String nomeInterpretado,
+                                                   String diaInformado,
+                                                   String horarioInformado) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        if (!servico.ok()) {
+            return new Recomendacao(servico.status(),
+                    servico.item() == null ? "" : servico.item().nome(), List.of(), false);
+        }
+
+        Optional<LocalDate> data = resolverData(diaInformado);
+        Optional<LocalTime> alvo = timeInputParser.parse(horarioInformado);
+        if (data.isEmpty() || alvo.isEmpty()) {
+            return new Recomendacao(Status.HORARIO_INVALIDO, servico.item().nome(), List.of(), false);
+        }
+
+        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
+                availabilityApplicationService.horariosLivres(
+                                businessId, servico.item().id(), servico.profissional(), data.get())
+                        .stream()
+                        .map(time -> new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
+                                data.get(), time, gapAdjacenteMinutos(
+                                        businessId, servico.profissional(), data.get(), time,
+                                        servico.item().duracao())))
+                        .toList();
+
+        List<SlotSugerido> slots = new com.troquim_bot.availability.SlotRecommendationPolicy()
+                .rank(candidatos, alvo.get(), 3)
+                .stream()
+                .map(candidate -> new SlotSugerido(
+                        servico.item().nome(), candidate.date(), candidate.time()))
+                .toList();
+
+        return new Recomendacao(Status.OK, servico.item().nome(), slots, false);
+    }
+
     private ServicoResolvido resolverServicoDoHistorico(BusinessId businessId, String telefone) {
         return customerProfileService.localizarIdOficial(businessId, telefone)
                 .flatMap(customerId -> appointmentApplicationService
