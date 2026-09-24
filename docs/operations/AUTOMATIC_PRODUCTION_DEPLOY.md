@@ -56,7 +56,7 @@ Before production migration, it always:
 1. builds the exact Git SHA;
 2. creates and validates a fresh database dump;
 3. restores that dump into temporary PostgreSQL;
-4. boots the new image against the temporary copy;
+4. boots the new image against the temporary copy with WhatsApp, reminders and AI side effects explicitly disabled;
 5. requires health UP;
 6. requires the expected final Flyway version and zero failed migrations.
 
