@@ -39,7 +39,7 @@ class InboundMessagingSprint1Test {
         AtomicInteger maxConcurrent = new AtomicInteger();
 
         ConversationApplicationService conv = mock(ConversationApplicationService.class);
-        when(conv.processarMensagem(anyString(), anyString())).thenAnswer(inv -> {
+        when(conv.processarMensagem(anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class))).thenAnswer(inv -> {
             int c = inFlight.incrementAndGet();
             maxConcurrent.accumulateAndGet(c, Math::max);
             Thread.sleep(200);   // alarga a janela para tornar a corrida observável
@@ -100,7 +100,7 @@ class InboundMessagingSprint1Test {
     @DisplayName("2b. DataIntegrityViolationException do dominio PROPAGA (nao e' engolida como duplicata)")
     void divDoDominioPropaga() {
         ConversationApplicationService conv = mock(ConversationApplicationService.class);
-        when(conv.processarMensagem(anyString(), anyString()))
+        when(conv.processarMensagem(anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class)))
                 .thenThrow(new DataIntegrityViolationException("constraint de dominio (ex: Customer unico)"));
         RecordingGateway gateway = new RecordingGateway();
 
@@ -117,7 +117,7 @@ class InboundMessagingSprint1Test {
     @DisplayName("3. falha de outbound retorna OUTBOUND_UNAVAILABLE (nao-2xx → Meta reentrega)")
     void falhaDeOutboundRetornaNao2xx() {
         ConversationApplicationService conv = mock(ConversationApplicationService.class);
-        when(conv.processarMensagem(anyString(), anyString())).thenReturn("resposta");
+        when(conv.processarMensagem(anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class))).thenReturn("resposta");
         RecordingGateway gateway = new RecordingGateway();
         gateway.failNext = true;   // sendText lança
 
@@ -131,7 +131,7 @@ class InboundMessagingSprint1Test {
     @DisplayName("4. menu canonico usa botoes no outbound Cloud")
     void menuCanonicoUsaBotoesNoCloud() {
         ConversationApplicationService conv = mock(ConversationApplicationService.class);
-        when(conv.processarMensagem(anyString(), anyString())).thenReturn(
+        when(conv.processarMensagem(anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class))).thenReturn(
                 "Ola! Escolha uma opcao:\n\n"
                 + "1) Agendar\n"
                 + "2) Meus agendamentos\n"
