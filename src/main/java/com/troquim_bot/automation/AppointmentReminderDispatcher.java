@@ -4,12 +4,14 @@ import com.troquim_bot.application.customer.CustomerApplicationService;
 import com.troquim_bot.application.professional.ProfessionalApplicationService;
 import com.troquim_bot.application.service.ServiceApplicationService;
 import com.troquim_bot.availability.RelogioDoNegocio;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
 @Service
+@ConditionalOnProperty(name="troquim.automation.reminders.scheduler-enabled", havingValue="true")
 public class AppointmentReminderDispatcher {
     private final ReminderCandidateRepository candidates;
     private final ReminderReceiptRepository receipts;
