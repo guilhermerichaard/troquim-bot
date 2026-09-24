@@ -8,9 +8,11 @@ CREATE TABLE service_upsell_rules (
     CONSTRAINT fk_service_upsell_rules_business
         FOREIGN KEY (business_id) REFERENCES businesses(id),
     CONSTRAINT fk_service_upsell_rules_base
-        FOREIGN KEY (base_service_id) REFERENCES services(id),
+        FOREIGN KEY (business_id, base_service_id)
+        REFERENCES services(business_id, id),
     CONSTRAINT fk_service_upsell_rules_addon
-        FOREIGN KEY (addon_service_id) REFERENCES services(id),
+        FOREIGN KEY (business_id, addon_service_id)
+        REFERENCES services(business_id, id),
     CONSTRAINT ck_service_upsell_rules_distinct
         CHECK (base_service_id <> addon_service_id)
 );
