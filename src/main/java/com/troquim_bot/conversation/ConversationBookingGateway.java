@@ -1,6 +1,7 @@
 package com.troquim_bot.conversation;
 
 import com.troquim_bot.application.appointment.AppointmentApplicationService;
+import com.troquim_bot.application.appointment.AppointmentRescheduleApplicationService;
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.booking.BookingCommandKey;
 import com.troquim_bot.application.booking.BookingResult;
@@ -12,6 +13,7 @@ import com.troquim_bot.application.waitlist.WaitlistApplicationService;
 import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.RelogioDoNegocio;
+import com.troquim_bot.automation.BookingAutomationPolicyRepository;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.customer.CustomerProfileService;
@@ -109,6 +111,27 @@ public class ConversationBookingGateway {
         }
     }
 
+    public enum ReminderActionStatus {
+        OK,
+        NAO_ENCONTRADO,
+        CANCELAMENTO_BLOQUEADO,
+        HORARIO_INDISPONIVEL,
+        FALHA_TECNICA
+    }
+
+    public record ReminderActionResult(ReminderActionStatus status, String message) {
+        public boolean ok() { return status == ReminderActionStatus.OK; }
+    }
+
+    public record ReminderRescheduleOptions(ReminderActionStatus status,
+                                            String serviceName,
+                                            List<SlotSugerido> slots) {
+        public ReminderRescheduleOptions {
+            slots = slots == null ? List.of() : List.copyOf(slots);
+        }
+        public boolean ok() { return status == ReminderActionStatus.OK; }
+    }
+
     private record ServicoResolvido(Status status,
                                     ConsultarCatalogo.ItemDeCatalogo item,
                                     ProfessionalId profissional) {
@@ -128,6 +151,8 @@ public class ConversationBookingGateway {
     private final ConfirmarAgendamentoDoCatalogo confirmarAgendamento;
     private final RelogioDoNegocio relogio;
     private final WaitlistApplicationService waitlistApplicationService;
+    private final BookingAutomationPolicyRepository automationPolicies;
+    private final AppointmentRescheduleApplicationService rescheduler;
     private final TimeInputParser timeInputParser;
 
     public ConversationBookingGateway(TenantProvider tenantProvider,
@@ -139,7 +164,9 @@ public class ConversationBookingGateway {
                                       ServiceInterpretationLearningStore interpretationLearningStore,
                                       ConfirmarAgendamentoDoCatalogo confirmarAgendamento,
                                       RelogioDoNegocio relogio,
-                                      WaitlistApplicationService waitlistApplicationService) {
+                                      WaitlistApplicationService waitlistApplicationService,
+                                      BookingAutomationPolicyRepository automationPolicies,
+                                      AppointmentRescheduleApplicationService rescheduler) {
         this.tenantProvider = tenantProvider;
         this.consultarCatalogo = consultarCatalogo;
         this.availabilityApplicationService = availabilityApplicationService;
@@ -150,6 +177,8 @@ public class ConversationBookingGateway {
         this.confirmarAgendamento = confirmarAgendamento;
         this.relogio = relogio;
         this.waitlistApplicationService = waitlistApplicationService;
+        this.automationPolicies = automationPolicies;
+        this.rescheduler = rescheduler;
         this.timeInputParser = new TimeInputParser();
     }
 
@@ -563,6 +592,128 @@ public class ConversationBookingGateway {
                 appointment.getDate(),
                 appointment.getStartTime(),
                 appointment.getStatus() == AppointmentStatus.CONFIRMADO);
+    }
+
+    public ReminderActionResult confirmarLembrete(String telefone, java.util.UUID appointmentId) {
+        Appointment appointment = reminderAppointment(telefone, appointmentId).orElse(null);
+        if (appointment == null) {
+            return new ReminderActionResult(ReminderActionStatus.NAO_ENCONTRADO,
+                    "Esse agendamento não está mais ativo.");
+        }
+        if (appointment.getStatus() == AppointmentStatus.PENDENTE) {
+            appointmentApplicationService.confirmarAgendamento(appointment.getId());
+        }
+        return new ReminderActionResult(ReminderActionStatus.OK,
+                "Presença confirmada. Te esperamos no horário combinado.");
+    }
+
+    public ReminderActionResult cancelarPorLembrete(String telefone, java.util.UUID appointmentId) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        Appointment appointment = reminderAppointment(telefone, appointmentId).orElse(null);
+        if (appointment == null) {
+            return new ReminderActionResult(ReminderActionStatus.NAO_ENCONTRADO,
+                    "Esse agendamento não está mais ativo.");
+        }
+
+        var policy = automationPolicies.get(businessId);
+        java.time.LocalDateTime agora = java.time.LocalDateTime.of(relogio.hoje(), relogio.agora());
+        java.time.LocalDateTime inicio = java.time.LocalDateTime.of(
+                appointment.getDate(), appointment.getStartTime());
+        if (!policy.podeCancelar(inicio, agora)) {
+            return new ReminderActionResult(ReminderActionStatus.CANCELAMENTO_BLOQUEADO,
+                    "Esse agendamento já está dentro do prazo mínimo de cancelamento do negócio. "
+                            + "Fale com o estabelecimento para alterar.");
+        }
+
+        String serviceName = serviceApplicationService.buscarPorId(appointment.getServiceId())
+                .map(com.troquim_bot.service.Service::getNome)
+                .orElse("Serviço");
+        appointmentApplicationService.cancelarAgendamento(appointment.getId());
+        if (waitlistApplicationService != null) {
+            waitlistApplicationService.slotReleased(
+                    businessId,
+                    appointment.getServiceId(),
+                    appointment.getProfessionalId(),
+                    serviceName,
+                    appointment.getDate(),
+                    appointment.getStartTime());
+        }
+        return new ReminderActionResult(ReminderActionStatus.OK,
+                "Agendamento cancelado. O horário foi liberado.");
+    }
+
+    public ReminderRescheduleOptions opcoesReagendamento(String telefone,
+                                                          java.util.UUID appointmentId) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        Appointment appointment = reminderAppointment(telefone, appointmentId).orElse(null);
+        if (appointment == null) {
+            return new ReminderRescheduleOptions(
+                    ReminderActionStatus.NAO_ENCONTRADO, "", List.of());
+        }
+
+        var item = consultarCatalogo.porServico(businessId, appointment.getServiceId()).orElse(null);
+        if (item == null || item.profissionais().stream()
+                .noneMatch(p -> p.id().equals(appointment.getProfessionalId()))) {
+            return new ReminderRescheduleOptions(
+                    ReminderActionStatus.HORARIO_INDISPONIVEL, "", List.of());
+        }
+
+        java.util.ArrayList<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidates =
+                new java.util.ArrayList<>();
+        LocalDate start = relogio.hoje();
+        for (int day = 0; day < 7; day++) {
+            LocalDate date = start.plusDays(day);
+            for (LocalTime time : availabilityApplicationService.horariosLivres(
+                    businessId, appointment.getServiceId(), appointment.getProfessionalId(), date)) {
+                candidates.add(new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
+                        date, time, gapAdjacenteMinutos(
+                                businessId, appointment.getProfessionalId(), date, time, item.duracao())));
+            }
+        }
+
+        var ranked = new com.troquim_bot.availability.SlotRecommendationPolicy()
+                .rank(candidates, appointment.getStartTime(), 3)
+                .stream()
+                .map(candidate -> new SlotSugerido(
+                        item.nome(), candidate.date(), candidate.time()))
+                .toList();
+
+        return new ReminderRescheduleOptions(
+                ranked.isEmpty() ? ReminderActionStatus.HORARIO_INDISPONIVEL : ReminderActionStatus.OK,
+                item.nome(),
+                ranked);
+    }
+
+    public ReminderActionResult reagendarPorLembrete(String telefone,
+                                                      java.util.UUID appointmentId,
+                                                      LocalDate date,
+                                                      LocalTime time) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        Appointment appointment = reminderAppointment(telefone, appointmentId).orElse(null);
+        if (appointment == null) {
+            return new ReminderActionResult(ReminderActionStatus.NAO_ENCONTRADO,
+                    "Esse agendamento não está mais ativo.");
+        }
+        try {
+            String key = "reminder-reschedule-" + appointmentId + "-" + date + "-" + time;
+            rescheduler.reschedule(businessId, appointment.getId(), date, time, key);
+            return new ReminderActionResult(ReminderActionStatus.OK,
+                    "Agendamento reagendado com sucesso.");
+        } catch (AppointmentRescheduleApplicationService.RescheduleRejectedException rejected) {
+            return new ReminderActionResult(ReminderActionStatus.HORARIO_INDISPONIVEL,
+                    rejected.getMessage());
+        } catch (RuntimeException failure) {
+            return new ReminderActionResult(ReminderActionStatus.FALHA_TECNICA,
+                    "Não consegui reagendar agora. Seu horário original foi preservado.");
+        }
+    }
+
+    private Optional<Appointment> reminderAppointment(String telefone, java.util.UUID appointmentId) {
+        if (appointmentId == null) return Optional.empty();
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        return agendamentosAtivosDoCliente(businessId, telefone).stream()
+                .filter(a -> a.getId().getValue().equals(appointmentId))
+                .findFirst();
     }
 
     public boolean horarioPertenceAOferta(String nomeInterpretado, String diaInformado,
