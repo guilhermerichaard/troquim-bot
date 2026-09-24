@@ -24,4 +24,7 @@ public interface SpringDataAppointmentRepository extends JpaRepository<Appointme
             UUID businessId, UUID professionalId, LocalDate date);
 
     List<AppointmentJpaEntity> findByBusinessId(UUID businessId);
+
+    List<AppointmentJpaEntity> findByDateBetweenAndStatusIn(
+            LocalDate from, LocalDate to, List<String> statuses);
 }
