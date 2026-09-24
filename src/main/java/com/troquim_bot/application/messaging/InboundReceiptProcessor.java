@@ -92,7 +92,7 @@ public class InboundReceiptProcessor {
         }
 
         String response = conversationApplicationService.processarMensagem(
-                message.fromPhone(), message.text());
+                message.fromPhone(), message.text(), message.profileName());
 
         // Persiste a resposta (ainda PENDING) atomicamente com o avanço da conversa.
         receiptStore.completeProcessing(message.provider(), message.externalMessageId(), response);
