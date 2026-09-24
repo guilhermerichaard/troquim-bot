@@ -14,6 +14,7 @@ import com.troquim_bot.appointment.Appointment;
 import com.troquim_bot.appointment.AppointmentStatus;
 import com.troquim_bot.availability.RelogioDoNegocio;
 import com.troquim_bot.automation.BookingAutomationPolicyRepository;
+import com.troquim_bot.automation.UpsellApplicationService;
 import com.troquim_bot.business.BusinessId;
 import com.troquim_bot.business.TenantProvider;
 import com.troquim_bot.customer.CustomerProfileService;
@@ -132,6 +133,14 @@ public class ConversationBookingGateway {
         public boolean ok() { return status == ReminderActionStatus.OK; }
     }
 
+    public record UpsellOffer(String serviceId,
+                              String serviceName,
+                              Double price,
+                              String professionalId,
+                              LocalDate date,
+                              LocalTime time) {
+    }
+
     private record ServicoResolvido(Status status,
                                     ConsultarCatalogo.ItemDeCatalogo item,
                                     ProfessionalId profissional) {
@@ -153,6 +162,7 @@ public class ConversationBookingGateway {
     private final WaitlistApplicationService waitlistApplicationService;
     private final BookingAutomationPolicyRepository automationPolicies;
     private final AppointmentRescheduleApplicationService rescheduler;
+    private final UpsellApplicationService upsells;
     private final TimeInputParser timeInputParser;
 
     public ConversationBookingGateway(TenantProvider tenantProvider,
@@ -166,7 +176,8 @@ public class ConversationBookingGateway {
                                       RelogioDoNegocio relogio,
                                       WaitlistApplicationService waitlistApplicationService,
                                       BookingAutomationPolicyRepository automationPolicies,
-                                      AppointmentRescheduleApplicationService rescheduler) {
+                                      AppointmentRescheduleApplicationService rescheduler,
+                                      UpsellApplicationService upsells) {
         this.tenantProvider = tenantProvider;
         this.consultarCatalogo = consultarCatalogo;
         this.availabilityApplicationService = availabilityApplicationService;
@@ -179,6 +190,7 @@ public class ConversationBookingGateway {
         this.waitlistApplicationService = waitlistApplicationService;
         this.automationPolicies = automationPolicies;
         this.rescheduler = rescheduler;
+        this.upsells = upsells;
         this.timeInputParser = new TimeInputParser();
     }
 
@@ -628,6 +640,80 @@ public class ConversationBookingGateway {
                 appointment.getDate(),
                 appointment.getStartTime(),
                 appointment.getStatus() == AppointmentStatus.CONFIRMADO);
+    }
+
+    public Optional<UpsellOffer> recomendarUpsell(String nomeServicoBase,
+                                                      String diaInformado,
+                                                      String horarioInformado) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        ServicoResolvido base = resolverServico(nomeServicoBase);
+        Optional<LocalDate> data = resolverData(diaInformado);
+        Optional<LocalTime> horario = timeInputParser.parse(horarioInformado);
+        if (!base.ok() || data.isEmpty() || horario.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return upsells.recommend(
+                        businessId,
+                        base.item().id(),
+                        base.profissional(),
+                        data.get(),
+                        horario.get())
+                .map(offer -> new UpsellOffer(
+                        offer.serviceId().getValue().toString(),
+                        offer.serviceName(),
+                        offer.price(),
+                        offer.professionalId().getValue().toString(),
+                        offer.date(),
+                        offer.startTime()));
+    }
+
+    public ReminderActionResult confirmarUpsell(String telefone,
+                                                 String serviceId,
+                                                 String professionalId,
+                                                 LocalDate date,
+                                                 LocalTime time) {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        try {
+            ServiceId service = ServiceId.from(java.util.UUID.fromString(serviceId));
+            ProfessionalId professional =
+                    ProfessionalId.from(java.util.UUID.fromString(professionalId));
+            String nome = customerProfileService.nomePreferido(telefone).orElse("Cliente");
+            String raw = telefone + "|" + serviceId + "|" + professionalId + "|" + date + "|" + time;
+            String idem = "upsell-" + java.util.UUID.nameUUIDFromBytes(
+                    raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            BookingCommandKey key = BookingCommandKey.deChaveExclusiva(
+                    businessId, idem, telefone, service, professional, date, time);
+
+            var result = confirmarAgendamento.confirmar(
+                    new ConfirmarAgendamentoDoCatalogo.Pedido(
+                            businessId, service, professional, telefone, nome, date, time, key));
+
+            BookingResult booking = result.agendamento().orElse(null);
+            if (result.foiRecusado() || booking == null) {
+                return new ReminderActionResult(
+                        ReminderActionStatus.HORARIO_INDISPONIVEL,
+                        "Esse adicional não está mais disponível nesse horário.");
+            }
+            if (booking.isConfirmado()) {
+                return new ReminderActionResult(
+                        ReminderActionStatus.OK,
+                        "Adicional incluído no seu atendimento.");
+            }
+            if (booking.isConflito()) {
+                return new ReminderActionResult(
+                        ReminderActionStatus.HORARIO_INDISPONIVEL,
+                        "Esse adicional não cabe mais nesse horário.");
+            }
+            return new ReminderActionResult(
+                    ReminderActionStatus.FALHA_TECNICA,
+                    "Não consegui incluir o adicional agora.");
+        } catch (RuntimeException failure) {
+            return new ReminderActionResult(
+                    ReminderActionStatus.FALHA_TECNICA,
+                    "Não consegui incluir o adicional agora.");
+        }
     }
 
     public ReminderActionResult confirmarLembrete(String telefone, java.util.UUID appointmentId) {
