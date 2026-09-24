@@ -3,6 +3,7 @@ services:
     build:
       context: ./console
       dockerfile: Dockerfile
+    image: ${TROQUIM_CONSOLE_IMAGE:-troquim-console:dev}
     container_name: troquim-console
     restart: unless-stopped
     environment:
