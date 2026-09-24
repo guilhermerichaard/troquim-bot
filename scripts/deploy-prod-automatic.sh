@@ -160,10 +160,14 @@ docker rm -f "${TMP_APP}" >/dev/null
 docker rm -f "${TMP_PG}" >/dev/null
 rm -f "${TMP_ENV}" "${TMP_DUMP}"
 
-echo "=== CANONICAL PRODUCTION DEPLOY ==="
+echo "=== CANONICAL BACKEND PRODUCTION DEPLOY ==="
 chmod +x "${RELEASE_DIR}/scripts/deploy-prod-release.sh"
 cd "${RELEASE_DIR}"
 ./scripts/deploy-prod-release.sh "${TAG}" "${BEFORE}" "${TARGET}"
+
+echo "=== CANONICAL CONSOLE PRODUCTION DEPLOY ==="
+chmod +x "${RELEASE_DIR}/scripts/deploy-console-release.sh"
+./scripts/deploy-console-release.sh "${TAG}"
 
 FINAL_IMAGE="$(docker inspect "${BOT}" --format '{{.Config.Image}}')"
 FINAL_FLYWAY="$(docker exec "${PG}" psql -U "${PGUSER}" -d "${PGDB}" -Atc   "select version from flyway_schema_history where success=true order by installed_rank desc limit 1;")"
@@ -171,14 +175,18 @@ FAILED="$(docker exec "${PG}" psql -U "${PGUSER}" -d "${PGDB}" -Atc   "select co
 
 curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null
 curl -fsS https://api.troquim.app/actuator/health >/dev/null
+curl -fsS http://127.0.0.1:3001/login >/dev/null
+CONSOLE_IMAGE="$(docker inspect troquim-console --format '{{.Config.Image}}')"
 
 [[ "${FINAL_IMAGE}" == "troquim-bot:${TAG}" ]] || fail "unexpected final image: ${FINAL_IMAGE}"
 [[ "${FINAL_FLYWAY}" == "${TARGET}" ]] || fail "unexpected final Flyway: ${FINAL_FLYWAY}"
 [[ "${FAILED}" == "0" ]] || fail "production has ${FAILED} failed migration(s)"
+[[ "${CONSOLE_IMAGE}" == "troquim-console:${TAG}" ]] || fail "unexpected final console image: ${CONSOLE_IMAGE}"
 
 echo "========================================="
 echo "AUTOMATIC DEPLOY SUCCEEDED"
 echo "release=${TAG}"
 echo "commit=${SHA}"
 echo "flyway=${FINAL_FLYWAY}"
+echo "console=${CONSOLE_IMAGE}"
 echo "========================================="
