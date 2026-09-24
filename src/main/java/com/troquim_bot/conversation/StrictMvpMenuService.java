@@ -175,7 +175,7 @@ public class StrictMvpMenuService {
         }
 
         if (podeInterpretarNovaIntencao(step, texto)) {
-            Optional<String> turbo = tentarTurbo(numero, mensagem);
+            Optional<String> turbo = tentarTurbo(numero, mensagem, step);
             if (turbo.isPresent()) {
                 return turbo.get();
             }
@@ -327,7 +327,7 @@ public class StrictMvpMenuService {
                 || step == ConversationStep.AGUARDANDO_HORARIO;
     }
 
-    private Optional<String> tentarTurbo(String numero, String mensagem) {
+    private Optional<String> tentarTurbo(String numero, String mensagem, ConversationStep step) {
         if (conversationBookingGateway == null || bookingIntentInterpreter == null) {
             return Optional.empty();
         }
@@ -337,6 +337,15 @@ public class StrictMvpMenuService {
             return Optional.empty();
         }
         BookingIntent intent = interpretada.get();
+
+        boolean fluxoJaEmAndamento = step != ConversationStep.INICIO
+                && step != ConversationStep.FINALIZADO;
+        if (fluxoJaEmAndamento
+                && !intent.hasDayPreference()
+                && !intent.hasTimePreference()
+                && !intent.sameAsUsual()) {
+            return Optional.empty();
+        }
 
         ConversationBookingGateway.Recomendacao recomendacao =
                 conversationBookingGateway.recomendar(numero, intent);
