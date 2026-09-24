@@ -1091,7 +1091,7 @@ public class StrictMvpMenuService {
         }
 
         StringBuilder response = new StringBuilder(
-                "Esse horário conflita com a agenda do profissional. "
+                "Esse horário não está disponível porque conflita com a agenda do profissional. "
                         + "Separei os horários livres mais próximos:\n\n");
         for (var slot : alternativas.slots()) {
             String id = "turbo_slot_" + slot.data() + "_"
