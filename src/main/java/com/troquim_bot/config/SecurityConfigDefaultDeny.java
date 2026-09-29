@@ -104,7 +104,8 @@ public class SecurityConfigDefaultDeny {
                         "/api/v1/owner/login", "/api/v1/owner/logout",
                         "/api/v1/owner/otp/request", "/api/v1/owner/otp/verify")
                     .permitAll();
-                auth.requestMatchers(HttpMethod.GET, "/api/v1/owner/otp/status")
+                auth.requestMatchers(HttpMethod.GET,
+                        "/api/v1/owner/otp/status", "/api/v1/owner/passkey/status")
                     .permitAll();
                 // WebAuthn: registro exige owner já autenticado; autenticação é pública,
                 // mas assinatura, challenge, RP ID e origin são verificados pelo WebAuthn.
