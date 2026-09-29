@@ -63,12 +63,23 @@ public class OwnerAuthService {
             return Optional.empty();
         }
 
+        return emitirSessao(owner.get());
+    }
+
+    /** Emite a mesma sessão canônica depois que qualquer método prova a identidade. */
+    @Transactional
+    public Optional<String> emitirSessao(OwnerUser owner) {
+        if (owner == null || !owner.podeAutenticar()) return Optional.empty();
+        Optional<OwnerUser> atual = ownerUserRepository.buscarPorId(owner.getId())
+                .filter(OwnerUser::podeAutenticar)
+                .filter(o -> o.pertenceAoTenant(owner.getBusinessId()));
+        if (atual.isEmpty()) return Optional.empty();
+
         String tokenClaro = novoToken();
         LocalDateTime agora = LocalDateTime.now();
         sessionStore.criar(new OwnerSession(
-                hash(tokenClaro), owner.get().getId(), owner.get().getBusinessId(),
+                hash(tokenClaro), owner.getId(), owner.getBusinessId(),
                 agora, agora.plusHours(SESSAO_TTL_HORAS)));
-
         log.info("Dono autenticado, sessao criada");
         return Optional.of(tokenClaro);
     }
