@@ -31,6 +31,7 @@ public class OwnerAuthService {
     private final OwnerUserRepository ownerUserRepository;
     private final OwnerSessionStore sessionStore;
     private final PasswordHasher passwordHasher;
+    private final String hashParaContaInexistente;
     private final SecureRandom random = new SecureRandom();
 
     public OwnerAuthService(OwnerUserRepository ownerUserRepository, OwnerSessionStore sessionStore,
@@ -38,6 +39,7 @@ public class OwnerAuthService {
         this.ownerUserRepository = ownerUserRepository;
         this.sessionStore = sessionStore;
         this.passwordHasher = passwordHasher;
+        this.hashParaContaInexistente = passwordHasher.hash(novoToken());
     }
 
     /**
@@ -52,8 +54,11 @@ public class OwnerAuthService {
             return Optional.empty();
         }
         Optional<OwnerUser> owner = ownerUserRepository.buscarPorEmail(email.trim().toLowerCase());
-        if (owner.isEmpty() || !owner.get().podeAutenticar()
-                || !passwordHasher.confere(senhaClara, owner.get().getSenhaHash())) {
+        // Executa o mesmo trabalho de hashing também para conta ausente/inativa.
+        // A resposta genérica sozinha não evita enumeração por diferença de tempo.
+        boolean senhaValida = passwordHasher.confere(senhaClara,
+                owner.map(OwnerUser::getSenhaHash).orElse(hashParaContaInexistente));
+        if (owner.isEmpty() || !owner.get().podeAutenticar() || !senhaValida) {
             log.info("Autenticacao de dono recusada");
             return Optional.empty();
         }
@@ -76,6 +81,10 @@ public class OwnerAuthService {
         }
         return sessionStore.buscarPorTokenHash(hash(tokenClaro))
                 .filter(s -> s.utilizavel(LocalDateTime.now()))
+                .filter(s -> ownerUserRepository.buscarPorId(s.ownerId())
+                        .filter(OwnerUser::podeAutenticar)
+                        .filter(owner -> owner.pertenceAoTenant(s.businessId()))
+                        .isPresent())
                 .map(OwnerSession::comoIdentidade);
     }
 
@@ -87,6 +96,39 @@ public class OwnerAuthService {
         }
         sessionStore.revogarPorTokenHash(hash(tokenClaro));
     }
+
+    @Transactional(readOnly = true)
+    public java.util.List<SessionView> listarSessoes(AuthenticatedOwner owner, String tokenAtual) {
+        String atual = tokenAtual == null ? "" : hash(tokenAtual);
+        return sessionStore.listarDoDono(owner.ownerId(), owner.businessId()).stream()
+                .filter(s -> s.utilizavel(LocalDateTime.now()))
+                .sorted(java.util.Comparator.comparing(OwnerSession::criadaEm).reversed())
+                .map(s -> new SessionView(idPublico(s), s.criadaEm(), s.expiraEm(),
+                        s.tokenHash().equals(atual))).toList();
+    }
+
+    @Transactional
+    public void encerrarOutrasSessoes(AuthenticatedOwner owner, String tokenAtual) {
+        if (tokenAtual == null || tokenAtual.isBlank()) throw new IllegalArgumentException("Sessão atual obrigatória");
+        String atual = hash(tokenAtual);
+        sessionStore.listarDoDono(owner.ownerId(), owner.businessId()).stream()
+                .filter(s -> !s.tokenHash().equals(atual))
+                .forEach(s -> sessionStore.revogarPorTokenHash(s.tokenHash()));
+    }
+
+    @Transactional
+    public void encerrarSessao(AuthenticatedOwner owner, String idPublico) {
+        sessionStore.listarDoDono(owner.ownerId(), owner.businessId()).stream()
+                .filter(s -> idPublico(s).equals(idPublico))
+                .forEach(s -> sessionStore.revogarPorTokenHash(s.tokenHash()));
+    }
+
+    // Não expõe nem o token nem sua chave de persistência ao navegador.
+    private static String idPublico(OwnerSession s) {
+        return hash("owner-session-view:" + s.tokenHash()).replace('+', '-').replace('/', '_').replace("=", "");
+    }
+
+    public record SessionView(String id, LocalDateTime createdAt, LocalDateTime expiresAt, boolean current) {}
 
     private String novoToken() {
         byte[] bytes = new byte[TOKEN_BYTES];

@@ -37,4 +37,11 @@ public class JpaOwnerSessionStore implements OwnerSessionStore {
     public void revogarPorTokenHash(String tokenHash) {
         if (tokenHash != null) repository.deleteById(tokenHash);
     }
+
+    @Override
+    public java.util.List<OwnerSession> listarDoDono(OwnerUserId ownerId, BusinessId businessId) {
+        return repository.findAllByOwnerIdAndBusinessId(ownerId.getValue(), businessId.getValue())
+                .stream().map(e -> new OwnerSession(e.getTokenHash(), OwnerUserId.from(e.getOwnerId()),
+                        BusinessId.from(e.getBusinessId()), e.getCriadaEm(), e.getExpiraEm())).toList();
+    }
 }

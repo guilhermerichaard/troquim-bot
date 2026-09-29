@@ -6,6 +6,7 @@ export default function MaisPage(){
     <h1 className="title">Mais</h1>
     <p className="subtitle">Configure o negócio sem precisar de computador.</p>
     <div className="mobileMenuCards">
+      <Link className="menuCard" href="/seguranca"><strong>Segurança</strong><span>Sessões e acessos à sua conta</span></Link>
       <Link className="menuCard" href="/servicos"><strong>Serviços</strong><span>Preço, duração e disponibilidade</span></Link>
       <Link className="menuCard" href="/equipe"><strong>Equipe</strong><span>Profissionais e serviços habilitados</span></Link>
       <Link className="menuCard" href="/automacoes"><strong>Automações</strong><span>Lembretes, cancelamento e upsell</span></Link>

@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { ownerBackendUrl, ownerCookieName } from '@/lib/troquim'
+import { rejectCrossOrigin } from '@/lib/csrf'
 
 export async function POST(request: Request) {
+  const rejected = rejectCrossOrigin(request)
+  if (rejected) return rejected
   const body = await request.text()
   const backend = await fetch(`${ownerBackendUrl()}/api/v1/owner/login`, {
     method: 'POST',

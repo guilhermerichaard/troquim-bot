@@ -40,6 +40,11 @@ public class SecurityConfigDefaultDeny {
         boolean devProfile = environment.acceptsProfiles(Profiles.of("dev"));
 
         http
+            .addFilterBefore(new com.troquim_bot.owner.api.OwnerBrowserOriginFilter(
+                    java.util.Arrays.stream(environment.getProperty("troquim.owner.browser-origins",
+                            "https://app.troquim.app,https://api.troquim.app").split(","))
+                            .map(String::trim).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet())),
+                    UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(bearerTokenFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(ownerSessionCookieFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> {

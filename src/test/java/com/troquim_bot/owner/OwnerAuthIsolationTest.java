@@ -3,6 +3,7 @@ package com.troquim_bot.owner;
 import com.troquim_bot.owner.application.AuthenticatedOwner;
 import com.troquim_bot.owner.application.OwnerAuthService;
 import com.troquim_bot.owner.domain.OwnerUser;
+import com.troquim_bot.owner.domain.OwnerUserStatus;
 import com.troquim_bot.owner.infrastructure.BCryptPasswordHasher;
 import com.troquim_bot.owner.support.InMemoryOwnerSessionStore;
 import com.troquim_bot.owner.support.InMemoryOwnerUserRepository;
@@ -128,4 +129,83 @@ class OwnerAuthIsolationTest {
         assertTrue(sessions.buscarPorTokenHash(token).isEmpty(),
                 "O valor em claro do token nao pode ser a chave de armazenamento");
     }
+
+    @Test
+    void sessaoExistenteRecusadaAposDesativacaoDoDono() {
+        criarDono("dono@teste.com", "senha-correta-1", TestTenants.PILOT);
+        var owner = users.buscarPorEmail("dono@teste.com").orElseThrow();
+        String token = auth.autenticar(owner.getEmail(), "senha-correta-1").orElseThrow();
+        users.salvar(new OwnerUser(owner.getId(), owner.getBusinessId(), owner.getEmail(),
+                owner.getSenhaHash(), OwnerUserStatus.SUSPENSO));
+
+        assertTrue(auth.resolver(token).isEmpty());
+        assertTrue(auth.autenticar(owner.getEmail(), "senha-correta-1").isEmpty());
+    }
+
+    @Test
+    void sessaoAntigaNaoSobreviveAMudancaDeTenant() {
+        criarDono("dono@teste.com", "senha-correta-1", TestTenants.PILOT);
+        var owner = users.buscarPorEmail("dono@teste.com").orElseThrow();
+        String token = auth.autenticar(owner.getEmail(), "senha-correta-1").orElseThrow();
+        users.salvar(new OwnerUser(owner.getId(), TestTenants.OUTRO, owner.getEmail(),
+                owner.getSenhaHash(), OwnerUserStatus.ATIVO));
+
+        assertTrue(auth.resolver(token).isEmpty());
+        String novoToken = auth.autenticar(owner.getEmail(), "senha-correta-1").orElseThrow();
+        assertEquals(TestTenants.OUTRO, auth.resolver(novoToken).orElseThrow().businessId());
+    }
+
+    @Test
+    void emailAusenteTambemExecutaVerificacaoDaSenha() {
+        var checked = new java.util.concurrent.atomic.AtomicInteger();
+        var hasherContado = new com.troquim_bot.owner.application.PasswordHasher() {
+            public String hash(String value) { return hasher.hash(value); }
+            public boolean confere(String value, String hash) {
+                checked.incrementAndGet();
+                return hasher.confere(value, hash);
+            }
+        };
+        var service = new OwnerAuthService(users, sessions, hasherContado);
+
+        assertTrue(service.autenticar("ausente@teste.com", "senha-incorreta").isEmpty());
+        assertEquals(1, checked.get());
+        assertEquals(0, sessions.total());
+    }
+    @Test
+    void revogarOutrasSessoesPreservaAtualEOutrosDonos() {
+        criarDono("dono-a@teste.com", "senha-a", TestTenants.PILOT);
+        criarDono("dono-b@teste.com", "senha-b", TestTenants.OUTRO);
+        String atual = auth.autenticar("dono-a@teste.com", "senha-a").orElseThrow();
+        String antiga = auth.autenticar("dono-a@teste.com", "senha-a").orElseThrow();
+        String outro = auth.autenticar("dono-b@teste.com", "senha-b").orElseThrow();
+        var owner = auth.resolver(atual).orElseThrow();
+        var views = auth.listarSessoes(owner, atual);
+        assertEquals(2, views.size());
+        assertEquals(1, views.stream().filter(OwnerAuthService.SessionView::current).count());
+        views.forEach(v -> {
+            assertTrue(sessions.buscarPorTokenHash(v.id()).isEmpty());
+            assertTrue(auth.resolver(v.id()).isEmpty());
+        });
+        auth.encerrarOutrasSessoes(owner, atual);
+        assertTrue(auth.resolver(atual).isPresent());
+        assertTrue(auth.resolver(antiga).isEmpty());
+        assertTrue(auth.resolver(outro).isPresent());
+    }
+
+    @Test
+    void revogarSessaoPorIdPublicoNaoAtravessaDonoOuTenant() {
+        criarDono("a@teste.com", "senha-a", TestTenants.PILOT);
+        criarDono("b@teste.com", "senha-b", TestTenants.PILOT);
+        String a = auth.autenticar("a@teste.com", "senha-a").orElseThrow();
+        String b = auth.autenticar("b@teste.com", "senha-b").orElseThrow();
+        var ownerA = auth.resolver(a).orElseThrow();
+        var ownerB = auth.resolver(b).orElseThrow();
+        String idB = auth.listarSessoes(ownerB, b).getFirst().id();
+        auth.encerrarSessao(ownerA, idB);
+        assertTrue(auth.resolver(b).isPresent());
+        auth.encerrarSessao(ownerB, idB);
+        assertTrue(auth.resolver(b).isEmpty());
+        assertTrue(auth.resolver(a).isPresent());
+    }
+
 }

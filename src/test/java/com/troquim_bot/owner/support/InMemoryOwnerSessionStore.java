@@ -27,4 +27,12 @@ public class InMemoryOwnerSessionStore implements OwnerSessionStore {
     }
 
     public int total() { return byHash.size(); }
+
+    @Override
+    public java.util.List<OwnerSession> listarDoDono(
+            com.troquim_bot.owner.domain.OwnerUserId ownerId,
+            com.troquim_bot.business.BusinessId businessId) {
+        return byHash.values().stream().filter(s -> s.ownerId().equals(ownerId)
+                && s.businessId().equals(businessId)).toList();
+    }
 }

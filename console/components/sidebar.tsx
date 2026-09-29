@@ -2,22 +2,31 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, Home, Scissors, Users, UserRound, LogOut } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { CalendarDays, Home, Scissors, Users, LogOut, Settings } from 'lucide-react'
 
 const items = [
   { href: '/', label: 'Hoje', icon: Home },
   { href: '/agenda', label: 'Agenda', icon: CalendarDays },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/servicos', label: 'Serviços', icon: Scissors },
-  { href: '/equipe', label: 'Equipe', icon: UserRound },
+  { href: '/mais', label: 'Mais', icon: Settings },
 ]
 
 export function Sidebar() {
   const router = useRouter()
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const pending = useRef(false)
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
-    router.refresh()
+    if (pending.current) return
+    pending.current = true; setBusy(true); setError('')
+    try {
+      const response = await fetch('/api/auth/logout', { method: 'POST' })
+      if (!response.ok) throw new Error()
+      router.push('/login'); router.refresh()
+    } catch { setError('Não foi possível sair. Tente novamente.') }
+    finally { pending.current = false; setBusy(false) }
   }
 
   return <aside className="sidebar">
@@ -28,7 +37,8 @@ export function Sidebar() {
       ))}
     </nav>
     <div style={{marginTop:'auto'}} className="nav">
-      <button onClick={logout} style={{border:0,background:'transparent',cursor:'pointer'}}><LogOut size={17}/><span>Sair</span></button>
+      {error && <p role="alert">{error}</p>}
+      <button disabled={busy} onClick={logout} style={{border:0,background:'transparent',cursor:'pointer'}}><LogOut size={17}/><span>{busy ? 'Saindo…' : 'Sair'}</span></button>
     </div>
   </aside>
 }
