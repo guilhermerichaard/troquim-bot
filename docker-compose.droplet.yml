@@ -52,6 +52,10 @@ services:
       TROQUIM_OWNER_OTP_TTL_MINUTES: ${TROQUIM_OWNER_OTP_TTL_MINUTES:-5}
       TROQUIM_OWNER_OTP_MAX_ATTEMPTS: ${TROQUIM_OWNER_OTP_MAX_ATTEMPTS:-5}
       TROQUIM_OWNER_OTP_MAX_REQUESTS_PER_10_MINUTES: ${TROQUIM_OWNER_OTP_MAX_REQUESTS_PER_10_MINUTES:-3}
+      TROQUIM_OWNER_PASSKEY_ENABLED: ${TROQUIM_OWNER_PASSKEY_ENABLED:-false}
+      TROQUIM_OWNER_PASSKEY_RP_ID: ${TROQUIM_OWNER_PASSKEY_RP_ID:-app.troquim.app}
+      TROQUIM_OWNER_PASSKEY_RP_NAME: ${TROQUIM_OWNER_PASSKEY_RP_NAME:-Troquim}
+      TROQUIM_OWNER_PASSKEY_ALLOWED_ORIGINS: ${TROQUIM_OWNER_PASSKEY_ALLOWED_ORIGINS:-https://app.troquim.app}
       # WhatsApp Flow (Meta) — Data Endpoint de agendamento. Mesma regra da Cloud API:
       # desligado por padrão, valores reais só no /opt/troquim/.env (nunca commitado), aqui
       # só a passagem. A chave privada é PEM PKCS#8 (\n escapado numa linha).
