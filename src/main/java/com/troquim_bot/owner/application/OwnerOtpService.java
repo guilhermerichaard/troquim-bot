@@ -48,9 +48,10 @@ public class OwnerOtpService {
         String phone = normalizePhone(phoneRaw);
         UUID publicChallenge = UUID.randomUUID();
         String code = novoCodigo();
+        if (!disponivel()) return publicChallenge;
         String phoneHash = mac("phone:" + phone);
         Optional<OwnerPhoneCredential> credential = credentials.buscarPorTelefone(phone);
-        if (!disponivel() || credential.isEmpty()) {
+        if (credential.isEmpty()) {
             mac(publicChallenge + ":" + code);
             return publicChallenge;
         }
