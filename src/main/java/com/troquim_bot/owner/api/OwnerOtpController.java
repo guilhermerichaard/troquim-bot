@@ -32,11 +32,15 @@ public class OwnerOtpController {
     @PostMapping("/verify")
     public ResponseEntity<?> verify(@RequestBody(required=false) Verify body){
         if(body==null || body.challengeId()==null || body.code()==null) return ResponseEntity.badRequest().build();
-        return otp.verificarLogin(body.challengeId(),body.code())
-                .map(token->ResponseEntity.ok()
-                        .header(HttpHeaders.SET_COOKIE,OwnerSessionCookie.create(token,OwnerSessionCookie.MAX_AGE_SECONDS).toString())
-                        .body(Map.of("ok",true)))
-                .orElseGet(()->ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error","Código inválido ou expirado.")));
+        var token=otp.verificarLogin(body.challengeId(),body.code());
+        if(token.isEmpty()){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error","Código inválido ou expirado."));
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE,
+                        OwnerSessionCookie.create(token.get(),OwnerSessionCookie.MAX_AGE_SECONDS).toString())
+                .body(Map.of("ok",true));
     }
 
     public record Request(String phone){}
