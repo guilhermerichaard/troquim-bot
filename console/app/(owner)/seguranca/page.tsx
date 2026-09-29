@@ -1,11 +1,14 @@
 'use client'
 
 import { FormEvent, useEffect, useRef, useState } from 'react'
+import { createPasskey, passkeysSupported } from '@/lib/passkeys'
 
 type Session = { id: string; createdAt: string; expiresAt: string; current: boolean }
 type WhatsAppState = { enabled: boolean; phone: string }
+type Passkey = { id: string; label: string; createdAt: string; lastUsedAt: string }
 
 const label = (value: string) => {
+  if (!value) return '—'
   const [date, time] = value.split('T')
   return `${date.split('-').reverse().join('/')} às ${time.slice(0, 5)}`
 }
@@ -13,6 +16,8 @@ const label = (value: string) => {
 export default function SecurityPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [whatsapp, setWhatsapp] = useState<WhatsAppState>({ enabled: false, phone: '' })
+  const [passkeyEnabled, setPasskeyEnabled] = useState(false)
+  const [passkeys, setPasskeys] = useState<Passkey[]>([])
   const [challengeId, setChallengeId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -27,8 +32,15 @@ export default function SecurityPage() {
     Promise.all([
       fetch('/api/app/security/sessions', { cache: 'no-store', signal: controller.signal }).then(async r => { if (!r.ok) throw new Error(); return r.json() }),
       fetch('/api/app/security/whatsapp', { cache: 'no-store', signal: controller.signal }).then(async r => { if (!r.ok) throw new Error(); return r.json() }),
-    ]).then(([sessionData, whatsappData]) => {
-      if (!controller.signal.aborted) { setSessions(sessionData); setWhatsapp(whatsappData) }
+      fetch('/api/auth/passkey/status', { cache: 'no-store', signal: controller.signal }).then(async r => r.ok ? r.json() : { enabled: false }),
+      fetch('/api/app/security/passkeys', { cache: 'no-store', signal: controller.signal }).then(async r => r.ok ? r.json() : []),
+    ]).then(([sessionData, whatsappData, passkeyStatus, passkeyData]) => {
+      if (!controller.signal.aborted) {
+        setSessions(sessionData)
+        setWhatsapp(whatsappData)
+        setPasskeyEnabled(Boolean(passkeyStatus.enabled) && passkeysSupported())
+        setPasskeys(passkeyData)
+      }
     }).catch(() => {
       if (!controller.signal.aborted) setError('Não foi possível consultar as configurações de segurança.')
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
@@ -43,6 +55,39 @@ export default function SecurityPage() {
       if (!r.ok) throw new Error()
       setRevision(x => x + 1)
     } catch { setError('Não foi possível encerrar as sessões. Tente novamente.') }
+    finally { pending.current = false; setBusy(false) }
+  }
+
+  async function registerPasskey() {
+    if (pending.current) return
+    pending.current = true; setBusy(true); setError(''); setNotice('')
+    try {
+      const optionsResponse = await fetch('/api/app/passkeys/register/options', { method: 'POST' })
+      if (!optionsResponse.ok) throw new Error()
+      const options = await optionsResponse.json()
+      const payload = await createPasskey(options, 'Este dispositivo')
+      const register = await fetch('/api/app/passkeys/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      })
+      if (!register.ok) throw new Error()
+      setNotice('Entrada rápida ativada neste dispositivo.')
+      setRevision(x => x + 1)
+    } catch {
+      setError('Não foi possível criar a entrada rápida neste dispositivo.')
+    } finally {
+      pending.current = false; setBusy(false)
+    }
+  }
+
+  async function removePasskey(id: string) {
+    if (pending.current || !confirm('Remover esta entrada rápida?')) return
+    pending.current = true; setBusy(true); setError(''); setNotice('')
+    try {
+      const r = await fetch(`/api/app/security/passkeys/${id}`, { method: 'DELETE' })
+      if (!r.ok && r.status !== 204) throw new Error()
+      setNotice('Entrada rápida removida.')
+      setRevision(x => x + 1)
+    } catch { setError('Não foi possível remover esta entrada rápida.') }
     finally { pending.current = false; setBusy(false) }
   }
 
@@ -87,6 +132,20 @@ export default function SecurityPage() {
     {notice && <div className="inlineNotice" role="status">{notice}</div>}
 
     {loading ? <div role="status" className="card">Consultando segurança…</div> : <>
+      <section className="settingCard" style={{ marginBottom: 20 }}>
+        <div className="sectionHead">
+          <div><strong>Entrada rápida</strong><div className="label">Use Face ID, digital ou PIN do dispositivo sem digitar senha.</div></div>
+          {passkeyEnabled && <button className="touchButton primary" disabled={busy} onClick={registerPasskey}>{busy ? 'Abrindo…' : 'Ativar neste dispositivo'}</button>}
+        </div>
+        {!passkeyEnabled ? <div className="inlineNotice">Disponível quando app.troquim.app estiver como domínio canônico.</div> :
+          <div className="settingsGrid" style={{ marginTop: 16 }}>
+            {passkeys.length === 0 ? <div className="label">Nenhuma entrada rápida cadastrada.</div> : passkeys.map(item => <article className="settingCard" key={item.id}>
+              <div className="sectionHead"><strong>{item.label || 'Passkey'}</strong><button className="touchButton secondary" disabled={busy} onClick={() => removePasskey(item.id)}>Remover</button></div>
+              <div className="label">Criada em {label(item.createdAt)}<br/>Último uso: {label(item.lastUsedAt)}</div>
+            </article>)}
+          </div>}
+      </section>
+
       <section className="settingCard" style={{ marginBottom: 20 }}>
         <div className="sectionHead"><div><strong>Entrar com WhatsApp</strong><div className="label">{whatsapp.phone ? `Número verificado: ${whatsapp.phone}` : 'Vincule seu número pessoal para receber códigos de acesso.'}</div></div></div>
         {!whatsapp.enabled ? <div className="inlineNotice">Disponível depois que o template de autenticação do WhatsApp estiver aprovado e ativado.</div> :
