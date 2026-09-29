@@ -84,6 +84,20 @@ public class OwnerAuthService {
         return Optional.of(tokenClaro);
     }
 
+    /** Emite a sessão canônica a partir do identificador provado por WebAuthn. */
+    @Transactional
+    public Optional<String> emitirSessaoPorOwnerId(String ownerId) {
+        if (ownerId == null || ownerId.isBlank()) return Optional.empty();
+        try {
+            var id = com.troquim_bot.owner.domain.OwnerUserId.from(java.util.UUID.fromString(ownerId));
+            return ownerUserRepository.buscarPorId(id)
+                    .filter(OwnerUser::podeAutenticar)
+                    .flatMap(this::emitirSessao);
+        } catch (IllegalArgumentException invalidId) {
+            return Optional.empty();
+        }
+    }
+
     /** Resolve a identidade autenticada a partir do token em claro do cookie. */
     @Transactional(readOnly = true)
     public Optional<AuthenticatedOwner> resolver(String tokenClaro) {

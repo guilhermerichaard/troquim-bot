@@ -23,13 +23,19 @@ public class SecurityConfigDefaultDeny {
     private final String adminApiKey;
     private final Environment environment;
     private final com.troquim_bot.owner.application.OwnerAuthService ownerAuthService;
+    private final com.troquim_bot.owner.application.OwnerUserRepository ownerUserRepository;
+    private final com.troquim_bot.owner.application.OwnerPasskeyProperties passkeyProperties;
 
     public SecurityConfigDefaultDeny(@Qualifier("adminApiKey") String adminApiKey,
                                      Environment environment,
-                                     com.troquim_bot.owner.application.OwnerAuthService ownerAuthService) {
+                                     com.troquim_bot.owner.application.OwnerAuthService ownerAuthService,
+                                     com.troquim_bot.owner.application.OwnerUserRepository ownerUserRepository,
+                                     com.troquim_bot.owner.application.OwnerPasskeyProperties passkeyProperties) {
         this.adminApiKey = adminApiKey;
         this.environment = environment;
         this.ownerAuthService = ownerAuthService;
+        this.ownerUserRepository = ownerUserRepository;
+        this.passkeyProperties = passkeyProperties;
     }
 
     @Bean
@@ -98,7 +104,16 @@ public class SecurityConfigDefaultDeny {
                         "/api/v1/owner/login", "/api/v1/owner/logout",
                         "/api/v1/owner/otp/request", "/api/v1/owner/otp/verify")
                     .permitAll();
-                auth.requestMatchers(HttpMethod.GET, "/api/v1/owner/otp/status")
+                auth.requestMatchers(HttpMethod.GET,
+                        "/api/v1/owner/otp/status", "/api/v1/owner/passkey/status")
+                    .permitAll();
+                // WebAuthn: registro exige owner já autenticado; autenticação é pública,
+                // mas assinatura, challenge, RP ID e origin são verificados pelo WebAuthn.
+                auth.requestMatchers(HttpMethod.POST,
+                        "/webauthn/register/options", "/webauthn/register")
+                    .hasRole("OWNER");
+                auth.requestMatchers(HttpMethod.POST,
+                        "/webauthn/authenticate/options", "/login/webauthn")
                     .permitAll();
                 // Area privada do dono (/app): so' com sessao valida, resolvida pelo
                 // OwnerSessionCookieFilter. O businessId vem SEMPRE dessa sessao, nunca
@@ -119,11 +134,61 @@ public class SecurityConfigDefaultDeny {
                 .accessDeniedHandler((request, response, exception) ->
                     response.sendError(HttpServletResponse.SC_FORBIDDEN)));
 
+        if (passkeyProperties.configured()) {
+            http.webAuthn(webAuthn -> webAuthn
+                    .rpName(passkeyProperties.getRpName())
+                    .rpId(passkeyProperties.getRpId())
+                    .allowedOrigins(passkeyProperties.origins())
+                    .disableDefaultRegistrationPage(true)
+                    .withObjectPostProcessor(
+                            new org.springframework.security.config.ObjectPostProcessor<
+                                    org.springframework.security.web.webauthn.authentication.WebAuthnAuthenticationFilter>() {
+                                @Override
+                                public <O extends org.springframework.security.web.webauthn.authentication.WebAuthnAuthenticationFilter>
+                                O postProcess(O filter) {
+                                    filter.setAuthenticationSuccessHandler((request, response, authentication) -> {
+                                        var token = ownerAuthService.emitirSessaoPorOwnerId(authentication.getName());
+                                        if (token.isEmpty()) {
+                                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                                            return;
+                                        }
+                                        response.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE,
+                                                com.troquim_bot.owner.api.OwnerSessionCookie.create(
+                                                        token.get(),
+                                                        com.troquim_bot.owner.api.OwnerSessionCookie.MAX_AGE_SECONDS)
+                                                        .toString());
+                                        response.setStatus(HttpServletResponse.SC_OK);
+                                        response.setContentType("application/json");
+                                        response.getWriter().write("{\"authenticated\":true}");
+                                    });
+                                    filter.setAuthenticationFailureHandler((request, response, exception) ->
+                                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED));
+                                    return filter;
+                                }
+                            }));
+        }
+
         return http.build();
     }
 
     @Bean
     UserDetailsService userDetailsService() {
-        return new InMemoryUserDetailsManager();
+        return username -> {
+            try {
+                var ownerId = com.troquim_bot.owner.domain.OwnerUserId.from(
+                        java.util.UUID.fromString(username));
+                var owner = ownerUserRepository.buscarPorId(ownerId)
+                        .filter(com.troquim_bot.owner.domain.OwnerUser::podeAutenticar)
+                        .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
+                                "owner indisponível"));
+                return org.springframework.security.core.userdetails.User.withUsername(owner.getId().toString())
+                        .password("{noop}passkey-only")
+                        .roles("OWNER")
+                        .build();
+            } catch (IllegalArgumentException invalid) {
+                throw new org.springframework.security.core.userdetails.UsernameNotFoundException(
+                        "owner indisponível");
+            }
+        };
     }
 }

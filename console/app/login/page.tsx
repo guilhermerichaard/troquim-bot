@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { getPasskey, passkeysSupported } from '@/lib/passkeys'
 
 type Mode = 'whatsapp' | 'password'
 
@@ -10,16 +11,38 @@ export default function LoginPage(){
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
   const [otpEnabled,setOtpEnabled]=useState(false)
+  const [passkeyEnabled,setPasskeyEnabled]=useState(false)
   const [mode,setMode]=useState<Mode>('password')
   const [challengeId,setChallengeId]=useState('')
   const [phone,setPhone]=useState('')
 
   useEffect(()=>{
-    fetch('/api/auth/whatsapp/status',{cache:'no-store'})
-      .then(r=>r.json())
-      .then(data=>{ if(data.enabled){setOtpEnabled(true);setMode('whatsapp')} })
-      .catch(()=>{})
+    Promise.all([
+      fetch('/api/auth/whatsapp/status',{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false})),
+      fetch('/api/auth/passkey/status',{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false})),
+    ]).then(([otp,passkey])=>{
+      if(otp.enabled){setOtpEnabled(true);setMode('whatsapp')}
+      if(passkey.enabled&&passkeysSupported()) setPasskeyEnabled(true)
+    })
   },[])
+
+  async function passkeyLogin(){
+    setLoading(true);setError('')
+    try{
+      const optionsResponse=await fetch('/api/auth/passkey/options',{method:'POST'})
+      if(!optionsResponse.ok) throw new Error()
+      const options=await optionsResponse.json()
+      const credential=await getPasskey(options)
+      const verify=await fetch('/api/auth/passkey/verify',{
+        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credential)
+      })
+      if(!verify.ok) throw new Error()
+      router.push('/');router.refresh()
+    }catch{
+      setError('Não foi possível entrar com a entrada rápida. Use WhatsApp ou senha.')
+      setLoading(false)
+    }
+  }
 
   async function passwordLogin(e:FormEvent<HTMLFormElement>){
     e.preventDefault(); setLoading(true); setError('')
@@ -57,6 +80,10 @@ export default function LoginPage(){
       <h1>Seu negócio, em um lugar.</h1>
       <p className="subtitle">Entre com segurança para continuar.</p>
 
+      {passkeyEnabled&&<button type="button" className="primary" disabled={loading} onClick={passkeyLogin} style={{marginBottom:16}}>
+        {loading?'Abrindo entrada rápida…':'Entrar com Face ID / digital'}
+      </button>}
+
       {otpEnabled&&<div className="actionRow" style={{marginBottom:20}}>
         <button type="button" className={mode==='whatsapp'?'touchButton primary':'touchButton secondary'} onClick={()=>{setMode('whatsapp');setError('')}}>WhatsApp</button>
         <button type="button" className={mode==='password'?'touchButton primary':'touchButton secondary'} onClick={()=>{setMode('password');setError('')}}>E-mail e senha</button>
@@ -73,7 +100,7 @@ export default function LoginPage(){
           <button className="primary" disabled={loading}>{loading?'Enviando…':'Receber código'}</button>
         </form>
       ) : <form onSubmit={passwordLogin}>
-        <div className="field"><label htmlFor="email">E-mail</label><input id="email" name="email" type="email" required autoComplete="email"/></div>
+        <div className="field"><label htmlFor="email">E-mail</label><input id="email" name="email" type="email" required autoComplete={passkeyEnabled?'username webauthn':'email'}/></div>
         <div className="field"><label htmlFor="senha">Senha</label><input id="senha" name="senha" type="password" required autoComplete="current-password"/></div>
         <button className="primary" disabled={loading}>{loading?'Entrando…':'Entrar'}</button>
       </form>}
