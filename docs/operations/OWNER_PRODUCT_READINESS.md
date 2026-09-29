@@ -62,17 +62,15 @@ owner cookie to the fixed backend origin, with no browser-supplied tenant or adm
 - `app.troquim.app/login` returned 502 via the execution network. This alone does not
   establish whether DNS, proxy routing or the console service is the root cause.
 
-## GitHub publication gate
+## GitHub publication
 
-The branch `fix/owner-session-and-booking-safety` was created at the original main
-commit. Uploading modified source/tests with `github_create_tree` was rejected twice
-by automatic approval review. Read-only verification confirmed public repository
-ownership and linked-account admin/push access, but the reviewer still requires a
-user-authored in-chat approval to publish the new local code to this public repository.
-No new remote commit or PR exists. Do not try another upload channel to bypass this gate.
+The repository owner explicitly authorized publishing the prepared changes and opening
+this PR in chat on 2026-09-29. Source and tests are published on
+`fix/owner-session-and-booking-safety` in draft PR
+https://github.com/guilhermerichaard/troquim-bot/pull/33.
 
-Required confirmation: authorize publishing these changes and opening a PR in the
-public repository `guilhermerichaard/troquim-bot`.
+CI and browser validation remain release gates. No production deployment or merge
+is claimed by this publication.
 
 ## External blockers and unimplemented scope
 
