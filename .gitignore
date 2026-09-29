@@ -51,3 +51,9 @@ backend/.env
 *.key
 *.p12
 *.jks
+
+### Console build outputs ###
+console/node_modules/
+console/.next/
+console/.test-build/
+console/*.tsbuildinfo

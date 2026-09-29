@@ -159,7 +159,9 @@ class StrictMvpBookingConfirmationTest {
         assertEquals(ConversationStep.AGUARDANDO_HORARIO, estadoSegundo.getStep());
         assertTrue(estadoSegundo.getDraftAtual().getHorario() == null);
         assertEquals("cabelo", estadoSegundo.getDraftAtual().getServico());
-        assertEquals(DIA, estadoSegundo.getDraftAtual().getDia());
+        // O parser persiste o nome canônico sem acentos (ex.: terça -> terca).
+        assertEquals(java.text.Normalizer.normalize(DIA, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", ""), estadoSegundo.getDraftAtual().getDia());
         assertEquals("Maria", estadoSegundo.getDraftAtual().getNome());
         assertTrue(resposta.contains("Escolha outro horário"), resposta);
     }

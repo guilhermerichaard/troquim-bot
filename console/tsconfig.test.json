@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2020", "module": "commonjs", "moduleResolution": "node",
+    "outDir": ".test-build", "strict": true, "skipLibCheck": true,
+    "lib": ["ES2020", "DOM"]
+  },
+  "include": ["lib/request-safety.ts", "lib/booking-request.ts"]
+}
