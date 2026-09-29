@@ -95,7 +95,10 @@ public class SecurityConfigDefaultDeny {
                 // Login/logout do dono sao o proprio ponto de entrada: publicos por
                 // definicao. Autenticacao de verdade acontece dentro do controller.
                 auth.requestMatchers(HttpMethod.POST,
-                        "/api/v1/owner/login", "/api/v1/owner/logout")
+                        "/api/v1/owner/login", "/api/v1/owner/logout",
+                        "/api/v1/owner/otp/request", "/api/v1/owner/otp/verify")
+                    .permitAll();
+                auth.requestMatchers(HttpMethod.GET, "/api/v1/owner/otp/status")
                     .permitAll();
                 // Area privada do dono (/app): so' com sessao valida, resolvida pelo
                 // OwnerSessionCookieFilter. O businessId vem SEMPRE dessa sessao, nunca
