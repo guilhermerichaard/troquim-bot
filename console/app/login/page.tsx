@@ -34,7 +34,7 @@ export default function LoginPage(){
       if(!optionsResponse.ok) throw new Error()
       const options=await optionsResponse.json()
       const credential=await getPasskey(options)
-      const verify=await fetch(consolePath('/api/auth/passkey/verify',{
+      const verify=await fetch(consolePath('/api/auth/passkey/verify'),{
         method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credential)
       })
       if(!verify.ok) throw new Error()
