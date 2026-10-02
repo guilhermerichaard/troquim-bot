@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getPasskey, passkeysSupported } from '@/lib/passkeys'
+import { consolePath } from '@/lib/base-path'
 
 type Mode = 'whatsapp' | 'password'
 
@@ -18,8 +19,8 @@ export default function LoginPage(){
 
   useEffect(()=>{
     Promise.all([
-      fetch('/api/auth/whatsapp/status',{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false})),
-      fetch('/api/auth/passkey/status',{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false})),
+      fetch(consolePath('/api/auth/whatsapp/status'),{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false})),
+      fetch(consolePath('/api/auth/passkey/status'),{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false})),
     ]).then(([otp,passkey])=>{
       if(otp.enabled){setOtpEnabled(true);setMode('whatsapp')}
       if(passkey.enabled&&passkeysSupported()) setPasskeyEnabled(true)
@@ -29,11 +30,11 @@ export default function LoginPage(){
   async function passkeyLogin(){
     setLoading(true);setError('')
     try{
-      const optionsResponse=await fetch('/api/auth/passkey/options',{method:'POST'})
+      const optionsResponse=await fetch(consolePath('/api/auth/passkey/options'),{method:'POST'})
       if(!optionsResponse.ok) throw new Error()
       const options=await optionsResponse.json()
       const credential=await getPasskey(options)
-      const verify=await fetch('/api/auth/passkey/verify',{
+      const verify=await fetch(consolePath('/api/auth/passkey/verify'),{
         method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credential)
       })
       if(!verify.ok) throw new Error()
@@ -47,7 +48,7 @@ export default function LoginPage(){
   async function passwordLogin(e:FormEvent<HTMLFormElement>){
     e.preventDefault(); setLoading(true); setError('')
     const data=new FormData(e.currentTarget)
-    const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:data.get('email'),senha:data.get('senha')})})
+    const response=await fetch(consolePath('/api/auth/login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:data.get('email'),senha:data.get('senha')})})
     const body=await response.json().catch(()=>({}))
     if(!response.ok){setError(body.error||'Não foi possível entrar.');setLoading(false);return}
     router.push('/'); router.refresh()
@@ -57,7 +58,7 @@ export default function LoginPage(){
     e.preventDefault(); setLoading(true); setError('')
     const data=new FormData(e.currentTarget)
     const value=String(data.get('phone')||'')
-    const response=await fetch('/api/auth/whatsapp/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:value})})
+    const response=await fetch(consolePath('/api/auth/whatsapp/request'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:value})})
     const body=await response.json().catch(()=>({}))
     setLoading(false)
     if(!response.ok || !body.challengeId){setError('Não foi possível enviar o código.');return}
@@ -68,7 +69,7 @@ export default function LoginPage(){
     e.preventDefault(); setLoading(true); setError('')
     const data=new FormData(e.currentTarget)
     const code=String(data.get('code')||'')
-    const response=await fetch('/api/auth/whatsapp/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challengeId,code})})
+    const response=await fetch(consolePath('/api/auth/whatsapp/verify'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challengeId,code})})
     const body=await response.json().catch(()=>({}))
     if(!response.ok){setError(body.error||'Código inválido ou expirado.');setLoading(false);return}
     router.push('/'); router.refresh()
