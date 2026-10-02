@@ -1,4 +1,5 @@
 import './globals.css'
+import './dashboard.css'
 
 export const metadata = {
   title: 'Troquim',
