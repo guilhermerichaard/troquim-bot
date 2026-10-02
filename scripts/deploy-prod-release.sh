@@ -64,11 +64,22 @@ CURRENT_DROPLET="/opt/troquim/src/troquim-bot/docker-compose.droplet.yml"
 RELEASE_DROPLET="${RELEASE_DIR}/docker-compose.droplet.yml"
 [[ -f "${CURRENT_DROPLET}" ]] || fail "current droplet compose missing"
 [[ -f "${RELEASE_DROPLET}" ]] || fail "release droplet compose missing"
-cmp -s "${CURRENT_DROPLET}" "${RELEASE_DROPLET}" || fail "droplet compose differs from current production; review required"
+
+# Detect manual production drift against the compose that belongs to the currently
+# running immutable release. A new release is allowed to evolve the compose.
+CURRENT_TAG="${CURRENT_IMAGE#troquim-bot:}"
+[[ "${CURRENT_TAG}" != "${CURRENT_IMAGE}" && -n "${CURRENT_TAG}" ]] \
+  || fail "unexpected current backend image: ${CURRENT_IMAGE}"
+DEPLOYED_RELEASE_DROPLET="/opt/troquim/releases/${CURRENT_TAG}/docker-compose.droplet.yml"
+[[ -f "${DEPLOYED_RELEASE_DROPLET}" ]] \
+  || fail "current release droplet compose missing: ${DEPLOYED_RELEASE_DROPLET}"
+cmp -s "${CURRENT_DROPLET}" "${DEPLOYED_RELEASE_DROPLET}" \
+  || fail "current droplet compose has unversioned production drift; review required"
 
 IFS=',' read -r -a CURRENT_CONFIGS <<< "${CONFIG_CSV}"
 COMPOSE_ARGS=()
 RELEASE_REPLACED=0
+DROPLET_REPLACED=0
 
 for f in "${CURRENT_CONFIGS[@]}"; do
   if [[ "${f}" != /* ]]; then
@@ -78,6 +89,9 @@ for f in "${CURRENT_CONFIGS[@]}"; do
   if [[ "$(basename "${f}")" == "docker-compose.release.yml" ]]; then
     f="${RELEASE_COMPOSE}"
     RELEASE_REPLACED=$((RELEASE_REPLACED + 1))
+  elif [[ "$(basename "${f}")" == "docker-compose.droplet.yml" ]]; then
+    f="${RELEASE_DROPLET}"
+    DROPLET_REPLACED=$((DROPLET_REPLACED + 1))
   fi
 
   [[ -f "${f}" ]] || fail "compose file missing: ${f}"
@@ -85,6 +99,7 @@ for f in "${CURRENT_CONFIGS[@]}"; do
 done
 
 [[ "${RELEASE_REPLACED}" -eq 1 ]] || fail "expected exactly one release compose in current project"
+[[ "${DROPLET_REPLACED}" -eq 1 ]] || fail "expected exactly one droplet compose in current project"
 
 PGADMIN="$(docker exec "${POSTGRES_CONTAINER}" printenv POSTGRES_USER)"
 PGDB="$(docker exec "${POSTGRES_CONTAINER}" sh -lc 'printf "%s" "${POSTGRES_DB:-$POSTGRES_USER}"')"
