@@ -202,6 +202,20 @@ public class StrictMvpMenuService {
             return cancelarAgendamento(numero);
         }
 
+        // Fora das ações de reserva, responda perguntas de recepção com o catálogo do
+        // estabelecimento. Não altere o fluxo nem a agenda nesta consulta.
+        // Restrições: jamais tomar o lugar da confirmação, do cancelamento ou do nome.
+        if (step == ConversationStep.FINALIZADO || step == ConversationStep.INICIO
+                || step == ConversationStep.AGUARDANDO_SERVICO
+                || step == ConversationStep.AGUARDANDO_DIA
+                || step == ConversationStep.AGUARDANDO_HORARIO) {
+            Optional<String> respostaContextual =
+                    RespostaContextualDeServico.responder(mensagem, conversationBookingGateway);
+            if (respostaContextual.isPresent()) {
+                return respostaContextual.get();
+            }
+        }
+
         if (step == ConversationStep.FINALIZADO || step == ConversationStep.INICIO) {
             if (texto.matches("^[123]$")) {
                 return processarEscolhaMenuPrincipal(numero, texto);
