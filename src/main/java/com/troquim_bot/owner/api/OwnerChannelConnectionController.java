@@ -58,12 +58,14 @@ public class OwnerChannelConnectionController {
         if (!properties.isEnabled()) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
-        if (body == null || vazio(body.state()) || vazio(body.code())) {
+        if (body == null || vazio(body.state()) || vazio(body.code())
+                || vazio(body.wabaId()) || vazio(body.phoneNumberId())) {
             return ResponseEntity.badRequest().build();
         }
         var resultado = service.finalizar(identidade.businessId().getValue(),
                 Optional.of(identidade.ownerId().getValue()),
-                body.state().trim(), body.code().trim(), null, null);
+                body.state().trim(), body.code().trim(),
+                body.wabaId().trim(), body.phoneNumberId().trim());
         return ResponseEntity.ok(new FinalizarResponse(
                 resultado.status().name(), resultado.wabaId().orElse(null),
                 resultado.phoneNumberId().orElse(null)));
@@ -93,6 +95,6 @@ public class OwnerChannelConnectionController {
     }
 
     public record IniciarResponse(String state, String appId, String configId, String status) {}
-    public record FinalizarRequest(String state, String code) {}
+    public record FinalizarRequest(String state, String code, String wabaId, String phoneNumberId) {}
     public record FinalizarResponse(String status, String wabaId, String phoneNumberId) {}
 }
