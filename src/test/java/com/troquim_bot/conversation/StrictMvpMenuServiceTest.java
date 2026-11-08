@@ -54,7 +54,7 @@ class StrictMvpMenuServiceTest {
         // Cliente envia "oi": recebe o menu principal, estado permanece em INICIO
         ConversationState estadoInicial = conversationStateService.buscarPorNumero(NUMERO);
         String respostaSaudacao = strictMvpMenuService.processarMenu(NUMERO, "oi", estadoInicial);
-        assertTrue(respostaSaudacao.contains("Escolha uma opção"));
+        assertTrue(respostaSaudacao.contains("pode falar do seu jeito"));
 
         // Cliente envia "1" (Agendar): deve iniciar o fluxo e persistir AGUARDANDO_SERVICO
         ConversationState estadoAntesDoMenu = conversationStateService.buscarPorNumero(NUMERO);

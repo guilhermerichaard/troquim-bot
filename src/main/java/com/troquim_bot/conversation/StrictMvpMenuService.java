@@ -4,6 +4,7 @@ import com.troquim_bot.application.availability.AvailabilityApplicationService;
 import com.troquim_bot.application.booking.AberturaDeAgenda;
 import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.application.booking.BookingResult;
+import com.troquim_bot.application.conversation.BusinessConversationFacts;
 import com.troquim_bot.conversation.state.ConversationState;
 import com.troquim_bot.conversation.state.ConversationStateService;
 import com.troquim_bot.conversation.state.ConversationStep;
@@ -54,6 +55,7 @@ public class StrictMvpMenuService {
     private final ConversationBookingGateway conversationBookingGateway;
     private final SaudacaoDoNegocio saudacaoDoNegocio;
     private final BookingIntentInterpreter bookingIntentInterpreter;
+    private final BusinessConversationFacts businessFacts;
 
     public StrictMvpMenuService(ConversationStateService conversationStateService,
                                 AvailabilityApplicationService availabilityApplicationService,
@@ -73,7 +75,7 @@ public class StrictMvpMenuService {
         this(conversationStateService, availabilityApplicationService, bookingApplicationService,
                 aberturaDeAgenda, conversationMode, conversationBookingGateway,
                 new SaudacaoDoNegocio(new com.troquim_bot.availability.RelogioDoNegocio()),
-                new HeuristicBookingIntentInterpreter());
+                new HeuristicBookingIntentInterpreter(), null);
     }
 
     @Autowired
@@ -84,7 +86,8 @@ public class StrictMvpMenuService {
                                 @Value("${conversation.mode:STRICT_MVP}") String conversationMode,
                                 ConversationBookingGateway conversationBookingGateway,
                                 SaudacaoDoNegocio saudacaoDoNegocio,
-                                BookingIntentInterpreter bookingIntentInterpreter) {
+                                BookingIntentInterpreter bookingIntentInterpreter,
+                                BusinessConversationFacts businessFacts) {
         this.conversationStateService = conversationStateService;
         this.availabilityApplicationService = availabilityApplicationService;
         this.bookingApplicationService = bookingApplicationService;
@@ -95,6 +98,7 @@ public class StrictMvpMenuService {
         this.conversationBookingGateway = conversationBookingGateway;
         this.saudacaoDoNegocio = saudacaoDoNegocio;
         this.bookingIntentInterpreter = bookingIntentInterpreter;
+        this.businessFacts = businessFacts;
     }
 
     public boolean isStrictMvpEnabled() {
@@ -174,6 +178,11 @@ public class StrictMvpMenuService {
             return menuCancelamentos(numero, paginaCancelamentos);
         }
 
+        Optional<String> respostaFactual = responderPerguntaDoNegocio(numero, mensagem, texto, step);
+        if (respostaFactual.isPresent()) {
+            return respostaFactual.get();
+        }
+
         if (podeInterpretarNovaIntencao(step, texto)) {
             Optional<String> turbo = tentarTurbo(numero, mensagem, step);
             if (turbo.isPresent()) {
@@ -206,6 +215,12 @@ public class StrictMvpMenuService {
             if (texto.matches("^[123]$")) {
                 return processarEscolhaMenuPrincipal(numero, texto);
             }
+
+            Optional<String> servicoDireto = tentarIniciarPorServico(numero, mensagem);
+            if (servicoDireto.isPresent()) {
+                return servicoDireto.get();
+            }
+
             return menuPrincipal(numero);
         }
 
@@ -239,6 +254,156 @@ public class StrictMvpMenuService {
         }
 
         return null;
+    }
+
+    private Optional<String> responderPerguntaDoNegocio(String numero,
+                                                         String mensagemOriginal,
+                                                         String texto,
+                                                         ConversationStep step) {
+        if (businessFacts == null || texto == null || texto.isBlank()) {
+            return Optional.empty();
+        }
+
+        if (ehPerguntaServicos(texto)) {
+            prepararEscolhaDeServico(numero);
+            return Optional.of(menuServicos());
+        }
+
+        if (ehPerguntaPreco(texto)) {
+            var servicos = businessFacts.services();
+            Optional<String> nomeCanonico = conversationBookingGateway == null
+                    ? Optional.empty()
+                    : conversationBookingGateway.nomeCanonicoDoServico(mensagemOriginal);
+
+            if (nomeCanonico.isPresent()) {
+                var encontrado = servicos.stream()
+                        .filter(item -> item.name().equalsIgnoreCase(nomeCanonico.get()))
+                        .findFirst();
+                if (encontrado.isPresent()) {
+                    return Optional.of(respostaPreco(encontrado.get()));
+                }
+            }
+
+            var comPreco = servicos.stream().filter(BusinessConversationFacts.ServiceFact::hasPrice).toList();
+            if (comPreco.isEmpty()) {
+                return Optional.of("Os valores ainda não estão publicados por aqui. "
+                        + "Me diga qual serviço você quer e eu sigo com o atendimento.");
+            }
+
+            String resumo = comPreco.stream()
+                    .limit(5)
+                    .map(this::resumoPreco)
+                    .reduce((a, b) -> a + "; " + b)
+                    .orElse("");
+            return Optional.of("Hoje os valores cadastrados são: " + resumo
+                    + ". Se quiser, me diga o serviço e eu já procuro um horário.");
+        }
+
+        if (ehPerguntaEndereco(texto)) {
+            return Optional.of(businessFacts.address()
+                    .map(endereco -> "Ficamos em " + endereco + ".")
+                    .orElse("O endereço ainda não está publicado por aqui."));
+        }
+
+        if (ehPerguntaFuncionamento(texto)) {
+            return Optional.of(businessFacts.openingHoursSummary()
+                    .map(horarios -> "Nosso horário cadastrado é: " + horarios + ".")
+                    .orElse("O horário de funcionamento ainda não está publicado por aqui."));
+        }
+
+        if (ehPerguntaQuemAtende(texto)) {
+            String nome = businessFacts.publicName().orElse("o estabelecimento");
+            return Optional.of("Sou o atendimento do " + nome
+                    + " por aqui. Posso consultar a agenda real, marcar, reagendar e cancelar com você.");
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<String> tentarIniciarPorServico(String numero, String mensagemOriginal) {
+        if (conversationBookingGateway == null || mensagemOriginal == null || mensagemOriginal.isBlank()) {
+            return Optional.empty();
+        }
+
+        Optional<String> servico = conversationBookingGateway.nomeCanonicoDoServico(mensagemOriginal);
+        if (servico.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ConversationState state = reiniciarFluxoPreservandoPerfil(numero);
+        state.criarNovoDraft();
+        state.setStep(ConversationStep.AGUARDANDO_SERVICO);
+        conversationStateService.persistir(state);
+        conversationStateService.atualizarServico(numero, servico.get());
+
+        return Optional.of("Claro — " + servico.get() + ". Para qual dia você quer?");
+    }
+
+    private void prepararEscolhaDeServico(String numero) {
+        ConversationState atual = conversationStateService.buscarPorNumero(numero);
+        if (atual.getStep() == ConversationStep.AGUARDANDO_SERVICO) {
+            return;
+        }
+
+        ConversationState state = reiniciarFluxoPreservandoPerfil(numero);
+        state.criarNovoDraft();
+        state.setStep(ConversationStep.AGUARDANDO_SERVICO);
+        conversationStateService.persistir(state);
+    }
+
+    private boolean ehPerguntaServicos(String texto) {
+        return contemQualquer(texto,
+                "quais servicos", "que servicos", "quais procedimentos",
+                "o que voces fazem", "o que voce faz", "o que tem", "servicos disponiveis");
+    }
+
+    private boolean ehPerguntaPreco(String texto) {
+        return contemQualquer(texto,
+                "quanto custa", "qual valor", "qual o valor", "preco", "precos",
+                "valor da", "valor do", "tabela de preco");
+    }
+
+    private boolean ehPerguntaEndereco(String texto) {
+        return contemQualquer(texto,
+                "onde fica", "qual endereco", "endereco", "localizacao", "como chegar");
+    }
+
+    private boolean ehPerguntaFuncionamento(String texto) {
+        return contemQualquer(texto,
+                "horario de funcionamento", "horario comercial", "que horas abre",
+                "que horas fecha", "funciona que horas", "abre hoje", "fecha hoje");
+    }
+
+    private boolean ehPerguntaQuemAtende(String texto) {
+        return contemQualquer(texto,
+                "quem e voce", "quem e vc", "to falando com quem", "voce e robo", "voce e ia");
+    }
+
+    private boolean contemQualquer(String texto, String... termos) {
+        for (String termo : termos) {
+            if (texto.contains(normalizar(termo))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String respostaPreco(BusinessConversationFacts.ServiceFact service) {
+        if (!service.hasPrice()) {
+            return "O preço de " + service.name()
+                    + " ainda não está publicado. Posso procurar um horário para você.";
+        }
+        return resumoPreco(service)
+                + (service.durationMinutes() > 0
+                    ? " e leva cerca de " + service.durationMinutes() + " min."
+                    : ".")
+                + " Se quiser, já procuro um horário.";
+    }
+
+    private String resumoPreco(BusinessConversationFacts.ServiceFact service) {
+        String currency = "BRL".equalsIgnoreCase(service.currency()) ? "R$" : service.currency();
+        String amount = String.format(java.util.Locale.of("pt", "BR"), "%.2f", service.price());
+        return service.name() + " " + currency + " " + amount;
     }
 
     private String voltarUmaEtapa(String numero, ConversationState state) {
@@ -350,7 +515,7 @@ public class StrictMvpMenuService {
         ConversationBookingGateway.Recomendacao recomendacao =
                 conversationBookingGateway.recomendar(numero, intent);
 
-        if (!recomendacao.ok()) {
+        if (recomendacao == null || !recomendacao.ok()) {
             return Optional.empty();
         }
 
@@ -730,7 +895,8 @@ public class StrictMvpMenuService {
                 ? saudacao + "!"
                 : "Olá " + nomePerfil + ", " + minusculaInicial(saudacao) + "!";
         return abertura
-                + " No momento eu consigo te ajudar com agendamentos. Escolha uma opção:\n\n"
+                + " Me conta o que você precisa — pode falar do seu jeito.\n"
+                + "Se quiser, também posso te mostrar as opções:\n\n"
                 + "1) Agendar\n"
                 + "2) Meus agendamentos\n"
                 + "3) Cancelar";
@@ -905,9 +1071,28 @@ public class StrictMvpMenuService {
     private String processarEscolhaDia(String numero, String texto, String mensagemOriginal) {
         String dia = resolverDia(texto);
         if (dia == null) {
-            return "Não entendi. Escolha um dia disponível:\n\n" + opcoesDias();
+            return "Não entendi o dia. Pode me dizer, por exemplo, sexta ou sábado?\n\n" + opcoesDias();
         }
+
         conversationStateService.atualizarDia(numero, dia);
+
+        if (conversationBookingGateway != null && !texto.matches("^[1-6]$")) {
+            var horarioInformado = timeInputParser.parse(mensagemOriginal);
+            if (horarioInformado.isPresent()) {
+                ConversationState atual = conversationStateService.buscarPorNumero(numero);
+                var draft = atual.getDraftAtual();
+                if (draft != null && draft.getServico() != null) {
+                    String horario = ConversationBookingGateway.formatarHorario(horarioInformado.get());
+                    if (conversationBookingGateway.horarioPertenceAOferta(
+                            draft.getServico(), dia, horario)) {
+                        conversationStateService.atualizarHorario(numero, horario);
+                        return menuNome(numero);
+                    }
+                    return menuAlternativasConflito(numero, mensagemOriginal);
+                }
+            }
+        }
+
         return menuHorarios(numero);
     }
 
@@ -1104,7 +1289,7 @@ public class StrictMvpMenuService {
 
         var alternativas = conversationBookingGateway.alternativasParaConflito(
                 draft.getServico(), draft.getDia(), horarioSolicitado);
-        if (!alternativas.ok() || alternativas.slots().isEmpty()) {
+        if (alternativas == null || !alternativas.ok() || alternativas.slots().isEmpty()) {
             return "Esse horário não está disponível. Veja os horários livres:\n\n"
                     + menuHorarios(numero);
         }
