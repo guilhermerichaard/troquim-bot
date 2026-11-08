@@ -127,7 +127,7 @@ class ConversationServiceCorrectionTest {
     void faqContinuaFuncionando() {
         Fixture fixture = criarFixtureSemNome("5511000000009");
 
-        assertEquals("Estamos na Rua Augusta, 1500, Consolação, São Paulo.",
+        assertEquals("O endereço ainda não está publicado por aqui.",
                 fixture.conversationService.gerarResposta(fixture.numero, "qual o endereço?"));
     }
 
