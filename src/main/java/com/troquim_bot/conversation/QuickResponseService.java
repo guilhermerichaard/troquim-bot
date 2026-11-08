@@ -38,7 +38,7 @@ public class QuickResponseService {
 
     private Optional<String> servicosReais() {
         if (businessFacts == null) {
-            return Optional.empty();
+            return Optional.of("O catálogo ainda não está configurado por aqui.");
         }
         var servicos = businessFacts.services();
         if (servicos.isEmpty()) {
@@ -53,7 +53,7 @@ public class QuickResponseService {
 
     private Optional<String> horarioReal() {
         if (businessFacts == null) {
-            return Optional.empty();
+            return Optional.of("O horário de funcionamento ainda não está publicado por aqui.");
         }
         return businessFacts.openingHoursSummary()
                 .map(value -> "Nosso horário cadastrado é: " + value + ".");
@@ -61,9 +61,11 @@ public class QuickResponseService {
 
     private Optional<String> enderecoReal() {
         if (businessFacts == null) {
-            return Optional.empty();
+            return Optional.of("O endereço ainda não está publicado por aqui.");
         }
-        return businessFacts.address().map(value -> "Ficamos em " + value + ".");
+        return businessFacts.address()
+                .map(value -> "Ficamos em " + value + ".")
+                .or(() -> Optional.of("O endereço ainda não está publicado por aqui."));
     }
 
     private Optional<String> quemSou() {
