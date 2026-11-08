@@ -32,7 +32,7 @@ jobs:
           test -n "${INSTANCE_ID}"
 
           REMOTE_COMMAND="$(cat <<'REMOTE'
-          set -Eeuo pipefail
+          set -eu
           echo "troquim-prod-readonly-ok"
           echo "hostname=$(hostname)"
 
