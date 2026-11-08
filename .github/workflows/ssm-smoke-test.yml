@@ -1,4 +1,4 @@
-name: AWS SSM Smoke Test
+name: AWS Production Read-Only Check
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   id-token: write
 
 jobs:
-  smoke:
+  inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,10 +20,10 @@ jobs:
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          role-session-name: troquim-ssm-smoke-test
+          role-session-name: troquim-prod-readonly-check
           aws-region: sa-east-1
 
-      - name: Run read-only SSM smoke test
+      - name: Inspect production through SSM
         shell: bash
         env:
           INSTANCE_ID: ${{ vars.PROD_EC2_INSTANCE_ID }}
@@ -31,40 +31,52 @@ jobs:
           set -Eeuo pipefail
           test -n "${INSTANCE_ID}"
 
-          COMMAND_ID="$(
-            aws ssm send-command \
-              --region sa-east-1 \
-              --instance-ids "${INSTANCE_ID}" \
-              --document-name "AWS-RunShellScript" \
-              --comment "Troquim read-only SSM smoke test" \
-              --parameters 'commands=["printf '''troquim-ssm-ok\\n'''","hostname","uname -s","date -u +%Y-%m-%dT%H:%M:%SZ"]' \
-              --query 'Command.CommandId' \
-              --output text
+          REMOTE_COMMAND="$(cat <<'REMOTE'
+          set -Eeuo pipefail
+          echo "troquim-prod-readonly-ok"
+          echo "hostname=$(hostname)"
+
+          docker inspect troquim-bot --format 'backend_image={{.Config.Image}} backend_status={{.State.Status}} backend_health={{if .State.Health}}{{.State.Health.Status}}{{end}}'
+          docker inspect troquim-console --format 'console_image={{.Config.Image}} console_status={{.State.Status}}' 2>/dev/null || echo "console_container=missing"
+          docker inspect troquim-postgres --format 'postgres_image={{.Config.Image}} postgres_status={{.State.Status}}'
+
+          printf 'backend_http='
+          curl -fsS http://127.0.0.1:8080/actuator/health || true
+          echo
+
+          if curl -fsS http://127.0.0.1:3001/login >/dev/null 2>&1; then
+            echo "console_http=ok"
+          else
+            echo "console_http=failed"
+          fi
+
+          PGUSER="$(docker exec troquim-postgres printenv POSTGRES_USER)"
+          PGDB="$(docker exec troquim-postgres sh -lc 'printf "%s" "${POSTGRES_DB:-$POSTGRES_USER}"')"
+
+          docker exec troquim-postgres psql -U "${PGUSER}" -d "${PGDB}" -Atc             "select 'flyway=' || version from flyway_schema_history where success=true order by installed_rank desc limit 1;"
+          docker exec troquim-postgres psql -U "${PGUSER}" -d "${PGDB}" -Atc             "select 'flyway_failed=' || count(*) from flyway_schema_history where success=false;"
+
+          echo "containers:"
+          docker ps --format '{{.Names}}|{{.Image}}|{{.Status}}' | grep '^troquim-' || true
+          REMOTE
           )"
 
-          aws ssm wait command-executed \
-            --region sa-east-1 \
-            --command-id "${COMMAND_ID}" \
-            --instance-id "${INSTANCE_ID}"
+          jq -n --arg command "${REMOTE_COMMAND}" '{commands:[$command]}' > /tmp/ssm-parameters.json
+
+          COMMAND_ID="$(
+            aws ssm send-command               --region sa-east-1               --instance-ids "${INSTANCE_ID}"               --document-name "AWS-RunShellScript"               --comment "Troquim production read-only inspection"               --parameters file:///tmp/ssm-parameters.json               --query 'Command.CommandId'               --output text
+          )"
+
+          aws ssm wait command-executed             --region sa-east-1             --command-id "${COMMAND_ID}"             --instance-id "${INSTANCE_ID}"
 
           STATUS="$(
-            aws ssm get-command-invocation \
-              --region sa-east-1 \
-              --command-id "${COMMAND_ID}" \
-              --instance-id "${INSTANCE_ID}" \
-              --query 'Status' \
-              --output text
+            aws ssm get-command-invocation               --region sa-east-1               --command-id "${COMMAND_ID}"               --instance-id "${INSTANCE_ID}"               --query 'Status'               --output text
           )"
 
           OUTPUT="$(
-            aws ssm get-command-invocation \
-              --region sa-east-1 \
-              --command-id "${COMMAND_ID}" \
-              --instance-id "${INSTANCE_ID}" \
-              --query 'StandardOutputContent' \
-              --output text
+            aws ssm get-command-invocation               --region sa-east-1               --command-id "${COMMAND_ID}"               --instance-id "${INSTANCE_ID}"               --query 'StandardOutputContent'               --output text
           )"
 
           printf '%s\n' "${OUTPUT}"
           test "${STATUS}" = "Success"
-          grep -q "troquim-ssm-ok" <<<"${OUTPUT}"
+          grep -q "troquim-prod-readonly-ok" <<<"${OUTPUT}"
