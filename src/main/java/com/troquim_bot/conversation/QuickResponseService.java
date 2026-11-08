@@ -27,7 +27,7 @@ public class QuickResponseService {
             case SAUDACAO -> Optional.of("Oi! Me conta o que você precisa.");
             case AGRADECIMENTO -> Optional.of("Imagina! Qualquer coisa é só chamar.");
             case DESPEDIDA -> Optional.of("Até mais! Quando precisar, é só chamar.");
-            case HUMANO -> Optional.of("Claro. Vou deixar sua mensagem pronta para o atendimento humano continuar daqui.");
+            case HUMANO -> Optional.of("Entendi. Para falar com uma pessoa, alguém do estabelecimento precisa assumir a conversa no WhatsApp. Enquanto isso, posso continuar te ajudando por aqui.");
             case CONSULTAR_SERVICOS -> servicosReais();
             case CONSULTAR_HORARIOS -> horarioReal();
             case CONSULTAR_ENDERECO -> enderecoReal();
