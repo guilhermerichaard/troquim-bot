@@ -84,7 +84,7 @@ jobs:
           }
 
           REMOTE_SCRIPT="https://raw.githubusercontent.com/guilhermerichaard/troquim-bot/${RELEASE_SHA}/scripts/deploy-prod-automatic.sh"
-          REMOTE_COMMAND="set -Eeuo pipefail; curl -fsSL '${REMOTE_SCRIPT}' -o /tmp/troquim-deploy.sh; chmod +x /tmp/troquim-deploy.sh; /tmp/troquim-deploy.sh '${RELEASE_SHA}'"
+          REMOTE_COMMAND="set -eu; curl -fsSL '${REMOTE_SCRIPT}' -o /tmp/troquim-deploy.sh; chmod +x /tmp/troquim-deploy.sh; /tmp/troquim-deploy.sh '${RELEASE_SHA}'"
 
           jq -n --arg command "${REMOTE_COMMAND}" '{commands:[$command]}' > /tmp/ssm-parameters.json
 
