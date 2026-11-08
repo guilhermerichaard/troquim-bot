@@ -221,7 +221,7 @@ class OwnerAppAccessTest {
         // porta inerte): a troca de code falha exatamente como um code invalido falharia.
         mockMvc.perform(post("/api/v1/app/whatsapp/connection/finish").cookie(cookieAna)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"state\":\"" + state + "\",\"code\":\"codigo-qualquer\"}"))
+                        .content("{\"state\":\"" + state + "\",\"code\":\"codigo-qualquer\",\"wabaId\":\"waba-teste\",\"phoneNumberId\":\"phone-teste\"}"))
                 .andExpect(result -> assertEquals(400, result.getResponse().getStatus()));
 
         String pagina = mockMvc.perform(get("/app").cookie(cookieAna))
