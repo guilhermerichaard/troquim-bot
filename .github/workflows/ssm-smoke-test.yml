@@ -1,0 +1,70 @@
+name: AWS SSM Smoke Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ssm-smoke-test.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: troquim-ssm-smoke-test
+          aws-region: sa-east-1
+
+      - name: Run read-only SSM smoke test
+        shell: bash
+        env:
+          INSTANCE_ID: ${{ vars.PROD_EC2_INSTANCE_ID }}
+        run: |
+          set -Eeuo pipefail
+          test -n "${INSTANCE_ID}"
+
+          COMMAND_ID="$(
+            aws ssm send-command \
+              --region sa-east-1 \
+              --instance-ids "${INSTANCE_ID}" \
+              --document-name "AWS-RunShellScript" \
+              --comment "Troquim read-only SSM smoke test" \
+              --parameters 'commands=["printf '''troquim-ssm-ok\\n'''","hostname","uname -s","date -u +%Y-%m-%dT%H:%M:%SZ"]' \
+              --query 'Command.CommandId' \
+              --output text
+          )"
+
+          aws ssm wait command-executed \
+            --region sa-east-1 \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${INSTANCE_ID}"
+
+          STATUS="$(
+            aws ssm get-command-invocation \
+              --region sa-east-1 \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --query 'Status' \
+              --output text
+          )"
+
+          OUTPUT="$(
+            aws ssm get-command-invocation \
+              --region sa-east-1 \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --query 'StandardOutputContent' \
+              --output text
+          )"
+
+          printf '%s\n' "${OUTPUT}"
+          test "${STATUS}" = "Success"
+          grep -q "troquim-ssm-ok" <<<"${OUTPUT}"
