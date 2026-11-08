@@ -67,16 +67,29 @@ jobs:
             aws ssm send-command               --region sa-east-1               --instance-ids "${INSTANCE_ID}"               --document-name "AWS-RunShellScript"               --comment "Troquim production read-only inspection"               --parameters file:///tmp/ssm-parameters.json               --query 'Command.CommandId'               --output text
           )"
 
-          aws ssm wait command-executed             --region sa-east-1             --command-id "${COMMAND_ID}"             --instance-id "${INSTANCE_ID}"
-
-          STATUS="$(
-            aws ssm get-command-invocation               --region sa-east-1               --command-id "${COMMAND_ID}"               --instance-id "${INSTANCE_ID}"               --query 'Status'               --output text
-          )"
+          STATUS="Pending"
+          for _ in $(seq 1 30); do
+            STATUS="$(
+              aws ssm get-command-invocation                 --region sa-east-1                 --command-id "${COMMAND_ID}"                 --instance-id "${INSTANCE_ID}"                 --query 'Status'                 --output text 2>/dev/null || echo Pending
+            )"
+            case "${STATUS}" in
+              Success|Failed|Cancelled|TimedOut|Cancelling) break ;;
+            esac
+            sleep 2
+          done
 
           OUTPUT="$(
-            aws ssm get-command-invocation               --region sa-east-1               --command-id "${COMMAND_ID}"               --instance-id "${INSTANCE_ID}"               --query 'StandardOutputContent'               --output text
+            aws ssm get-command-invocation               --region sa-east-1               --command-id "${COMMAND_ID}"               --instance-id "${INSTANCE_ID}"               --query 'StandardOutputContent'               --output text 2>/dev/null || true
+          )"
+          ERROR_OUTPUT="$(
+            aws ssm get-command-invocation               --region sa-east-1               --command-id "${COMMAND_ID}"               --instance-id "${INSTANCE_ID}"               --query 'StandardErrorContent'               --output text 2>/dev/null || true
           )"
 
+          echo "status=${STATUS}"
+          echo "----- stdout -----"
           printf '%s\n' "${OUTPUT}"
+          echo "----- stderr -----"
+          printf '%s\n' "${ERROR_OUTPUT}"
+
           test "${STATUS}" = "Success"
           grep -q "troquim-prod-readonly-ok" <<<"${OUTPUT}"
