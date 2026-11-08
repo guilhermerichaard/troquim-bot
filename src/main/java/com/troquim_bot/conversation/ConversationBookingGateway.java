@@ -194,6 +194,20 @@ public class ConversationBookingGateway {
         this.timeInputParser = new TimeInputParser();
     }
 
+    /** Dados de serviços do tenant corrente, sem catálogo hardcoded de salão. */
+    public record ServicoDetalhado(String nome,
+                                   java.util.Optional<com.troquim_bot.common.valueobject.Money> preco,
+                                   long duracaoMinutos) {
+    }
+
+    public List<ServicoDetalhado> listarServicosDetalhados() {
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        return consultarCatalogo.consultar(businessId).itens().stream()
+                .map(item -> new ServicoDetalhado(
+                        item.nome(), item.preco(), item.duracao().toMinutes()))
+                .toList();
+    }
+
     public List<Servico> listarServicos() {
         BusinessId businessId = tenantProvider.currentBusinessId();
         return consultarCatalogo.consultar(businessId).itens().stream()
