@@ -515,7 +515,7 @@ public class StrictMvpMenuService {
         ConversationBookingGateway.Recomendacao recomendacao =
                 conversationBookingGateway.recomendar(numero, intent);
 
-        if (!recomendacao.ok()) {
+        if (recomendacao == null || !recomendacao.ok()) {
             return Optional.empty();
         }
 
@@ -1076,7 +1076,7 @@ public class StrictMvpMenuService {
 
         conversationStateService.atualizarDia(numero, dia);
 
-        if (conversationBookingGateway != null) {
+        if (conversationBookingGateway != null && !texto.matches("^[1-6]$")) {
             var horarioInformado = timeInputParser.parse(mensagemOriginal);
             if (horarioInformado.isPresent()) {
                 ConversationState atual = conversationStateService.buscarPorNumero(numero);
@@ -1289,7 +1289,7 @@ public class StrictMvpMenuService {
 
         var alternativas = conversationBookingGateway.alternativasParaConflito(
                 draft.getServico(), draft.getDia(), horarioSolicitado);
-        if (!alternativas.ok() || alternativas.slots().isEmpty()) {
+        if (alternativas == null || !alternativas.ok() || alternativas.slots().isEmpty()) {
             return "Esse horário não está disponível. Veja os horários livres:\n\n"
                     + menuHorarios(numero);
         }
