@@ -79,16 +79,11 @@ class StrictMvpNaturalConversationTest {
                 .thenReturn(new ConversationBookingGateway.Recomendacao(
                         ConversationBookingGateway.Status.OK, "Escova", slots, false));
 
-        String resposta = fixture.menu.processarMenu(
-                NUMERO, "voltar", fixture.states.buscarPorNumero(NUMERO));
-        // voltar de horário vai para dia; restauramos a etapa para exercitar a apresentação.
-        state = fixture.states.buscarPorNumero(NUMERO);
-        state.getDraftAtual().setDia("quinta");
-        state.setStep(ConversationStep.AGUARDANDO_HORARIO);
+        state.setStep(ConversationStep.AGUARDANDO_DIA);
         fixture.states.persistir(state);
 
-        resposta = fixture.menu.processarMenu(
-                NUMERO, "horarios_pagina_0", fixture.states.buscarPorNumero(NUMERO));
+        String resposta = fixture.menu.processarMenu(
+                NUMERO, "quinta", fixture.states.buscarPorNumero(NUMERO));
 
         assertTrue(resposta.contains("15:30"), resposta);
         assertTrue(resposta.contains("17h"), resposta);
