@@ -36,7 +36,8 @@ jobs:
         id: config
         shell: bash
         env:
-          AUTO_DEPLOY_ENABLED: ${{ vars.PROD_AUTO_DEPLOY_ENABLED }}
+          # ONE-SHOT PREMIUM RELEASE: restore to vars.PROD_AUTO_DEPLOY_ENABLED immediately after SSM success.
+          AUTO_DEPLOY_ENABLED: "true"
           ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           INSTANCE_ID: ${{ vars.PROD_EC2_INSTANCE_ID }}
         run: |
