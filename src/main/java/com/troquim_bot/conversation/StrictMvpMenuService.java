@@ -183,7 +183,10 @@ public class StrictMvpMenuService {
             return menuCancelamentos(numero, paginaCancelamentos);
         }
 
-        if ("agenda_visual".equals(texto) || "escolher_servico".equals(texto)) {
+        if ("agenda_visual".equals(texto)) {
+            return flowOnlyBooking ? iniciarNovoAgendamento(numero) : abrirAgendaVisual(numero);
+        }
+        if ("escolher_servico".equals(texto)) {
             return iniciarNovoAgendamento(numero);
         }
 
