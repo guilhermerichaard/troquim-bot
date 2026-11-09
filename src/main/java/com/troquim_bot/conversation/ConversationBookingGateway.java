@@ -560,7 +560,7 @@ public class ConversationBookingGateway {
                                  String horarioInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
 
-        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        ServicoIdentificado servico = identificarServico(nomeInterpretado);
         if (!servico.ok()) {
             return new Confirmacao(servico.status(), null, nomeInterpretado, diaInformado, horarioInformado);
         }
@@ -577,11 +577,13 @@ public class ConversationBookingGateway {
                     servico.item().nome(), diaInformado, horarioInformado);
         }
 
-        // A leitura anterior serve somente para UX. A confirmacao oficial revalida o mesmo
-        // slot dentro da secao critica antes de qualquer escrita.
-        boolean livre = availabilityApplicationService.estaLivre(
-                businessId, servico.item().id(), servico.profissional(), data.get(), horario.get());
-        if (!livre) {
+        // "Qualquer profissional" e uma policy explicita: entre profissionais capazes e
+        // realmente livres para o slot escolhido, preferimos o menor buraco adjacente e
+        // usamos o id como desempate estavel. A confirmacao oficial ainda revalida dentro
+        // da secao critica antes de qualquer escrita.
+        Optional<ProfessionalId> profissional = profissionalParaSlot(
+                businessId, servico.item(), data.get(), horario.get());
+        if (profissional.isEmpty()) {
             return new Confirmacao(Status.HORARIO_INDISPONIVEL, null,
                     servico.item().nome(), diaInformado, horarioInformado);
         }
@@ -591,7 +593,7 @@ public class ConversationBookingGateway {
                 businessId.getValue(),
                 telefone,
                 servico.item().id(),
-                servico.profissional(),
+                profissional.get(),
                 data.get(),
                 horario.get());
 
@@ -600,7 +602,7 @@ public class ConversationBookingGateway {
                     new ConfirmarAgendamentoDoCatalogo.Pedido(
                             businessId,
                             servico.item().id(),
-                            servico.profissional(),
+                            profissional.get(),
                             telefone,
                             nomeCliente,
                             data.get(),
