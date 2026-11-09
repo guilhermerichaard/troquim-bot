@@ -60,6 +60,7 @@ docker image inspect "${NEW_IMAGE}" >/dev/null || fail "image ${NEW_IMAGE} not f
 [[ -d "${RELEASE_DIR}" ]] || fail "release directory missing: ${RELEASE_DIR}"
 [[ -f "${RELEASE_COMPOSE}" ]] || fail "release compose missing: ${RELEASE_COMPOSE}"
 
+CANONICAL_DROPLET="/opt/troquim/src/troquim-bot/docker-compose.droplet.yml"
 RELEASE_DROPLET="${RELEASE_DIR}/docker-compose.droplet.yml"
 [[ -f "${RELEASE_DROPLET}" ]] || fail "release droplet compose missing"
 
@@ -225,7 +226,7 @@ echo "=== 8/8 FINAL STATE ==="
 # sincroniza a cópia canônica da árvore de produção com a release realmente implantada.
 # Isso preserva a detecção de drift no próximo deploy sem confundir evolução versionada
 # do compose com alteração manual.
-install -m 0644 "${RELEASE_DROPLET}" "${CURRENT_DROPLET}"
+install -m 0644 "${RELEASE_DROPLET}" "${CANONICAL_DROPLET}"
 
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | grep -E 'NAMES|troquim'
 echo
