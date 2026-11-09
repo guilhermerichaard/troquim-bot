@@ -988,7 +988,8 @@ public class StrictMvpMenuService {
         if (!resultado.abriu()) {
             return "Não consegui abrir a agenda agora. Tente novamente em instantes.";
         }
-        return "Enviei a agenda. Toque em Abrir agenda para escolher serviço, data e horário.";
+        // O próprio Flow já é a mensagem interativa. Não enviamos um segundo texto redundante.
+        return "";
     }
 
     private ConversationState reiniciarFluxoPreservandoPerfil(String numero) {
