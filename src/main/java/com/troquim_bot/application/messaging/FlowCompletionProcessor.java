@@ -117,6 +117,9 @@ public class FlowCompletionProcessor {
         // O Flow terminou: o formulario textual antigo nao pode continuar preso em
         // AGUARDANDO_SERVICO/AGUARDANDO_DIA etc.
         conversationStateService.limparEstado(completion.fromPhone());
+        var conversationState = conversationStateService.buscarPorNumero(completion.fromPhone());
+        conversationState.setStep(com.troquim_bot.conversation.state.ConversationStep.FINALIZADO);
+        conversationStateService.persistir(conversationState);
 
         String response = mensagemConfirmacao(outcome.get());
         receiptStore.completeProcessing(

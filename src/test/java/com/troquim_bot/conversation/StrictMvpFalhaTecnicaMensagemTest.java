@@ -63,7 +63,7 @@ class StrictMvpFalhaTecnicaMensagemTest {
                 AvailabilityDeTeste.legado(),
                 booking,
                 OptionalBeans.ausente(),
-                "STRICT_MVP");
+                "STRICT_MVP_LEGACY");
     }
 
     @Test

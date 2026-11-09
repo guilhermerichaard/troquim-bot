@@ -189,22 +189,24 @@ class FlowJsonEstruturaTest {
     }
 
     @Test
-    @DisplayName("data e horário usam Dropdown data-driven, não componente com estado próprio")
-    void dataEHorarioSaoDropdown() {
-        // O contrato canônico usa Dropdown alimentado pelo backend (habilitação
-        // progressiva via on-select), como o exemplo oficial book-appointment. Não há
-        // CalendarPicker — a elegibilidade de datas é decidida pelo domínio, não pelo
-        // componente.
-        List<JsonNode> dropdowns = new ArrayList<>();
-        coletarPorTipo(flow.path("screens"), "Dropdown", dropdowns);
+    @DisplayName("data usa calendário visual e horários só aparecem após escolher o dia")
+    void calendarioVisualComHorarioDoDiaSelecionado() {
         List<JsonNode> calendars = new ArrayList<>();
+        List<JsonNode> dropdowns = new ArrayList<>();
         coletarPorTipo(flow.path("screens"), "CalendarPicker", calendars);
+        coletarPorTipo(flow.path("screens"), "Dropdown", dropdowns);
 
-        assertTrue(calendars.isEmpty(), "O contrato canônico não usa CalendarPicker");
-        assertTrue(dropdowns.stream().anyMatch(d -> "data".equals(d.path("name").asText())),
-                "Deve existir um Dropdown 'data'");
-        assertTrue(dropdowns.stream().anyMatch(d -> "horario".equals(d.path("name").asText())),
-                "Deve existir um Dropdown 'horario'");
+        assertEquals(1, calendars.size(), "Uma única seleção visual de data");
+        JsonNode calendario = calendars.get(0);
+        assertEquals("data", calendario.path("name").asText());
+        assertEquals("single", calendario.path("mode").asText());
+        assertEquals("${data.min_date}", calendario.path("min-date").asText());
+        assertEquals("${data.max_date}", calendario.path("max-date").asText());
+        assertEquals("${data.unavailable_dates}", calendario.path("unavailable-dates").asText());
+        assertEquals("DATA_SELECIONADA", calendario.path("on-select-action")
+                .path("payload").path("flow_action").asText());
+        assertTrue(dropdowns.stream().noneMatch(d -> "data".equals(d.path("name").asText())));
+        assertTrue(dropdowns.stream().anyMatch(d -> "horario".equals(d.path("name").asText())));
     }
 
     @Test

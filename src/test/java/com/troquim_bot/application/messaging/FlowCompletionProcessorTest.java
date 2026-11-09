@@ -34,6 +34,8 @@ class FlowCompletionProcessorTest {
         FlowSessionStore sessions = mock(FlowSessionStore.class);
         BookingIdempotencyStore bookings = mock(BookingIdempotencyStore.class);
         ConversationStateService states = mock(ConversationStateService.class);
+        when(states.buscarPorNumero(PHONE))
+                .thenReturn(new com.troquim_bot.conversation.state.ConversationState(PHONE));
 
         FlowSession session = FlowSession.persistida(
                 TOKEN, PHONE, UUID.randomUUID(), FlowSessionStatus.CONCLUIDA,

@@ -2,9 +2,15 @@
   "version": "7.3",
   "data_api_version": "3.0",
   "routing_model": {
-    "SERVICO": ["AGENDA"],
-    "AGENDA": ["CLIENTE"],
-    "CLIENTE": ["CONFIRMACAO"],
+    "SERVICO": [
+      "AGENDA"
+    ],
+    "AGENDA": [
+      "CLIENTE"
+    ],
+    "CLIENTE": [
+      "CONFIRMACAO"
+    ],
     "CONFIRMACAO": []
   },
   "screens": [
@@ -13,22 +19,45 @@
       "title": "Agendamento",
       "terminal": false,
       "data": {
-        "error_message": { "type": "string", "__example__": "" },
-        "tem_erro": { "type": "boolean", "__example__": false },
-        "profissional_habilitado": { "type": "boolean", "__example__": false },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        },
+        "tem_erro": {
+          "type": "boolean",
+          "__example__": false
+        },
+        "profissional_habilitado": {
+          "type": "boolean",
+          "__example__": false
+        },
         "servicos": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" },
-              "description": { "type": "string" }
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
             }
           },
           "__example__": [
-            { "id": "unha", "title": "Unhas", "description": "1h" },
-            { "id": "cabelo", "title": "Cabelo", "description": "1h" }
+            {
+              "id": "unha",
+              "title": "Unhas",
+              "description": "1h"
+            },
+            {
+              "id": "cabelo",
+              "title": "Cabelo",
+              "description": "1h"
+            }
           ]
         },
         "profissionais": {
@@ -36,11 +65,20 @@
           "items": {
             "type": "object",
             "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" }
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
             }
           },
-          "__example__": [{ "id": "qualquer", "title": "Qualquer profissional" }]
+          "__example__": [
+            {
+              "id": "qualquer",
+              "title": "Qualquer profissional"
+            }
+          ]
         }
       },
       "layout": {
@@ -50,7 +88,10 @@
             "type": "Form",
             "name": "form",
             "children": [
-              { "type": "TextHeading", "text": "O que você quer cuidar hoje? ✨" },
+              {
+                "type": "TextHeading",
+                "text": "O que você quer cuidar hoje? ✨"
+              },
               {
                 "type": "TextBody",
                 "text": "${data.error_message}",
@@ -100,39 +141,80 @@
       "title": "Data e horário",
       "terminal": false,
       "data": {
-        "error_message": { "type": "string", "__example__": "" },
-        "tem_erro": { "type": "boolean", "__example__": false },
-        "servico_id": { "type": "string", "__example__": "unha" },
-        "servico_nome": { "type": "string", "__example__": "Unhas" },
-        "servico_profissional": { "type": "string", "__example__": "Unhas · Qualquer profissional" },
-        "profissional_id": { "type": "string", "__example__": "qualquer" },
-        "profissional_nome": { "type": "string", "__example__": "Qualquer profissional" },
-        "horarios_habilitado": { "type": "boolean", "__example__": false },
-        "datas": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" },
-              "enabled": { "type": "boolean" }
-            }
-          },
-          "__example__": [{ "id": "2026-07-29", "title": "Quarta-feira, 29/07" }]
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        },
+        "tem_erro": {
+          "type": "boolean",
+          "__example__": false
+        },
+        "servico_id": {
+          "type": "string",
+          "__example__": "unha"
+        },
+        "servico_nome": {
+          "type": "string",
+          "__example__": "Unhas"
+        },
+        "servico_profissional": {
+          "type": "string",
+          "__example__": "Unhas · Qualquer profissional"
+        },
+        "profissional_id": {
+          "type": "string",
+          "__example__": "qualquer"
+        },
+        "profissional_nome": {
+          "type": "string",
+          "__example__": "Qualquer profissional"
+        },
+        "horarios_habilitado": {
+          "type": "boolean",
+          "__example__": false
         },
         "horarios": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" },
-              "enabled": { "type": "boolean" }
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              }
             }
           },
           "__example__": [
-            { "id": "09:00", "title": "09:00" },
-            { "id": "10:00", "title": "10:00" }
+            {
+              "id": "09:00",
+              "title": "09:00"
+            },
+            {
+              "id": "10:00",
+              "title": "10:00"
+            }
+          ]
+        },
+        "min_date": {
+          "type": "string",
+          "__example__": "2026-11-09"
+        },
+        "max_date": {
+          "type": "string",
+          "__example__": "2026-12-09"
+        },
+        "unavailable_dates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "__example__": [
+            "2026-11-15"
           ]
         }
       },
@@ -143,19 +225,28 @@
             "type": "Form",
             "name": "form",
             "children": [
-              { "type": "TextHeading", "text": "Escolha data e horário" },
-              { "type": "TextCaption", "text": "${data.servico_profissional}" },
+              {
+                "type": "TextHeading",
+                "text": "Escolha data e horário"
+              },
+              {
+                "type": "TextCaption",
+                "text": "${data.servico_profissional}"
+              },
               {
                 "type": "TextBody",
                 "text": "${data.error_message}",
                 "visible": "${data.tem_erro}"
               },
               {
-                "type": "Dropdown",
+                "type": "CalendarPicker",
                 "name": "data",
-                "label": "Data",
+                "label": "Escolha o dia",
+                "mode": "single",
                 "required": true,
-                "data-source": "${data.datas}",
+                "min-date": "${data.min_date}",
+                "max-date": "${data.max_date}",
+                "unavailable-dates": "${data.unavailable_dates}",
                 "on-select-action": {
                   "name": "data_exchange",
                   "payload": {
@@ -198,13 +289,34 @@
       "title": "Seus dados",
       "terminal": false,
       "data": {
-        "error_message": { "type": "string", "__example__": "" },
-        "tem_erro": { "type": "boolean", "__example__": false },
-        "servico_id": { "type": "string", "__example__": "unha" },
-        "profissional_id": { "type": "string", "__example__": "qualquer" },
-        "data": { "type": "string", "__example__": "2026-07-29" },
-        "horario": { "type": "string", "__example__": "09:00" },
-        "nome_prefill": { "type": "string", "__example__": "Ana" }
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        },
+        "tem_erro": {
+          "type": "boolean",
+          "__example__": false
+        },
+        "servico_id": {
+          "type": "string",
+          "__example__": "unha"
+        },
+        "profissional_id": {
+          "type": "string",
+          "__example__": "qualquer"
+        },
+        "data": {
+          "type": "string",
+          "__example__": "2026-07-29"
+        },
+        "horario": {
+          "type": "string",
+          "__example__": "09:00"
+        },
+        "nome_prefill": {
+          "type": "string",
+          "__example__": "Ana"
+        }
       },
       "layout": {
         "type": "SingleColumnLayout",
@@ -213,7 +325,10 @@
             "type": "Form",
             "name": "form",
             "children": [
-              { "type": "TextHeading", "text": "Quase lá" },
+              {
+                "type": "TextHeading",
+                "text": "Quase lá"
+              },
               {
                 "type": "TextBody",
                 "text": "${data.error_message}",
@@ -259,21 +374,66 @@
       "terminal": true,
       "success": true,
       "data": {
-        "error_message": { "type": "string", "__example__": "" },
-        "tem_erro": { "type": "boolean", "__example__": false },
-        "servico_id": { "type": "string", "__example__": "unha" },
-        "profissional_id": { "type": "string", "__example__": "qualquer" },
-        "data": { "type": "string", "__example__": "2026-07-29" },
-        "horario": { "type": "string", "__example__": "09:00" },
-        "nome": { "type": "string", "__example__": "Ana" },
-        "observacoes": { "type": "string", "__example__": "" },
-        "resumo_servico": { "type": "string", "__example__": "Unhas" },
-        "resumo_profissional": { "type": "string", "__example__": "Qualquer profissional" },
-        "resumo_data": { "type": "string", "__example__": "Quarta-feira, 29/07" },
-        "resumo_horario": { "type": "string", "__example__": "09:00" },
-        "resumo_duracao": { "type": "string", "__example__": "1h" },
-        "resumo_quando": { "type": "string", "__example__": "Quarta-feira, 29/07 às 09:00" },
-        "resumo_detalhe": { "type": "string", "__example__": "Qualquer profissional · duração de 1h" }
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        },
+        "tem_erro": {
+          "type": "boolean",
+          "__example__": false
+        },
+        "servico_id": {
+          "type": "string",
+          "__example__": "unha"
+        },
+        "profissional_id": {
+          "type": "string",
+          "__example__": "qualquer"
+        },
+        "data": {
+          "type": "string",
+          "__example__": "2026-07-29"
+        },
+        "horario": {
+          "type": "string",
+          "__example__": "09:00"
+        },
+        "nome": {
+          "type": "string",
+          "__example__": "Ana"
+        },
+        "observacoes": {
+          "type": "string",
+          "__example__": ""
+        },
+        "resumo_servico": {
+          "type": "string",
+          "__example__": "Unhas"
+        },
+        "resumo_profissional": {
+          "type": "string",
+          "__example__": "Qualquer profissional"
+        },
+        "resumo_data": {
+          "type": "string",
+          "__example__": "Quarta-feira, 29/07"
+        },
+        "resumo_horario": {
+          "type": "string",
+          "__example__": "09:00"
+        },
+        "resumo_duracao": {
+          "type": "string",
+          "__example__": "1h"
+        },
+        "resumo_quando": {
+          "type": "string",
+          "__example__": "Quarta-feira, 29/07 às 09:00"
+        },
+        "resumo_detalhe": {
+          "type": "string",
+          "__example__": "Qualquer profissional · duração de 1h"
+        }
       },
       "layout": {
         "type": "SingleColumnLayout",
@@ -282,15 +442,27 @@
             "type": "Form",
             "name": "form",
             "children": [
-              { "type": "TextHeading", "text": "Confere pra mim?" },
+              {
+                "type": "TextHeading",
+                "text": "Confere pra mim?"
+              },
               {
                 "type": "TextBody",
                 "text": "${data.error_message}",
                 "visible": "${data.tem_erro}"
               },
-              { "type": "TextSubheading", "text": "${data.resumo_servico}" },
-              { "type": "TextBody", "text": "${data.resumo_quando}" },
-              { "type": "TextCaption", "text": "${data.resumo_detalhe}" },
+              {
+                "type": "TextSubheading",
+                "text": "${data.resumo_servico}"
+              },
+              {
+                "type": "TextBody",
+                "text": "${data.resumo_quando}"
+              },
+              {
+                "type": "TextCaption",
+                "text": "${data.resumo_detalhe}"
+              },
               {
                 "type": "Footer",
                 "label": "Confirmar agendamento",

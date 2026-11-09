@@ -118,14 +118,18 @@ public class FlowScreenPresenter {
         LocalDate hoje = LocalDate.now();
         LocalDate limite = hoje.plusDays(Math.max(1, properties.getJanelaDias()));
 
-        List<Map<String, Object>> datas = new ArrayList<>();
-        for (LocalDate dia : disponibilidade.datasDisponiveis(ctx.businessId(),
-                ctx.servico().servicoId(), hoje, limite, ctx.profissional().professionalId())) {
-            datas.add(opcao(dia.toString(), dataPorExtenso(dia), null));
-        }
-        if (datas.isEmpty()) {
-            // Sem nenhuma data com vaga na janela: data-source nunca vai vazio.
-            datas.add(opcaoInerte("Sem datas disponíveis"));
+        // A interface mostra um calendário, não uma lista potencialmente enorme.
+        // Datas indisponíveis são derivadas da consulta canônica de disponibilidade,
+        // inclusive dias sem expediente ou já preenchidos.
+        List<LocalDate> disponiveis = disponibilidade.datasDisponiveis(
+                ctx.businessId(), ctx.servico().servicoId(), hoje, limite,
+                ctx.profissional().professionalId());
+        java.util.Set<LocalDate> elegiveis = new java.util.HashSet<>(disponiveis);
+        List<String> indisponiveis = new ArrayList<>();
+        for (LocalDate dia = hoje; !dia.isAfter(limite); dia = dia.plusDays(1)) {
+            if (!elegiveis.contains(dia)) {
+                indisponiveis.add(dia.toString());
+            }
         }
 
         boolean temData = ctx.data() != null;
@@ -143,7 +147,9 @@ public class FlowScreenPresenter {
 
         Map<String, Object> data = base(erro);
         data.putAll(selecao(ctx));
-        data.put("datas", datas);
+        data.put("min_date", hoje.toString());
+        data.put("max_date", limite.toString());
+        data.put("unavailable_dates", indisponiveis);
         data.put("horarios", horarios);
         data.put("horarios_habilitado", temHorarios);
         // Rótulo composto no SERVIDOR: o Flow JSON só aceita binding de valor inteiro

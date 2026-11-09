@@ -233,7 +233,7 @@ class WhatsAppFlowEndpointTest {
     }
 
     @Test
-    @DisplayName("10. dia útil devolve horários; o dropdown de datas exclui domingos")
+    @DisplayName("10. calendário desabilita dias sem vaga; horários aparecem só após data")
     void consultaDisponibilidade() throws Exception {
         LocalDate util = proximo(java.time.DayOfWeek.WEDNESDAY);
         JsonNode horarios = trocar(dataExchange("AGENDA", """
@@ -243,15 +243,19 @@ class WhatsAppFlowEndpointTest {
         assertTrue(horarios.path("data").path("horarios_habilitado").asBoolean());
         assertTrue(horarios.path("data").path("horarios").size() > 0);
 
-        // BUSCAR_DATAS monta o dropdown de datas ELEGÍVEIS — domingos não entram.
         JsonNode agenda = trocar(dataExchange("SERVICO", """
                 "flow_action":"BUSCAR_DATAS","servico_id":"%s","profissional_id":"%s" """
                 .formatted(unhas, profissional)));
+        assertFalse(agenda.path("data").path("horarios_habilitado").asBoolean());
+        assertTrue(agenda.path("data").path("min_date").isTextual());
+        assertTrue(agenda.path("data").path("max_date").isTextual());
+
         LocalDate domingo = proximo(java.time.DayOfWeek.SUNDAY);
-        List<String> ids = new ArrayList<>();
-        agenda.path("data").path("datas").forEach(d -> ids.add(d.path("id").asText()));
-        assertFalse(ids.contains(domingo.toString()),
-                "O próximo domingo não pode aparecer entre as datas elegíveis");
+        List<String> indisponiveis = new ArrayList<>();
+        agenda.path("data").path("unavailable_dates")
+                .forEach(d -> indisponiveis.add(d.asText()));
+        assertTrue(indisponiveis.contains(domingo.toString()),
+                "Domingo sem expediente deve estar desabilitado no calendário");
     }
 
     // ==================== 11-14. Confirmação ====================
