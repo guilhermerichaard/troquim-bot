@@ -101,7 +101,7 @@ class StrictMvpNaturalConversationTest {
     }
 
     @Test
-    void consultaDeServicosPodeExibirCatalogoRealMasNaoIniciaBookingTextual() {
+    void perguntaSobreServicosDirecionaParaAgendaSemListagemTextual() {
         var fixture = fixture();
         when(fixture.gateway.listarServicos()).thenReturn(List.of(
                 new ConversationBookingGateway.Servico("Escova", "", 45, 80.0, "BRL"),
@@ -110,8 +110,10 @@ class StrictMvpNaturalConversationTest {
         String resposta = fixture.menu.processarMenu(
                 NUMERO, "quais serviços vocês fazem?", fixture.states.buscarPorNumero(NUMERO));
 
-        assertTrue(resposta.contains("Escova"), resposta);
-        assertTrue(resposta.contains("Manicure"), resposta);
+        assertTrue(resposta.contains("Abrir agenda"), resposta);
+        assertFalse(resposta.contains("Escova"), resposta);
+        assertFalse(resposta.contains("Manicure"), resposta);
+        assertEquals(ConversationStep.INICIO, fixture.states.buscarPorNumero(NUMERO).getStep());
     }
 
     @Test
