@@ -460,8 +460,10 @@ public class ConversationBookingGateway {
                 .sorted()
                 .toList();
 
+        // Consulta bem-sucedida pode legitimamente devolver zero horários; isso não é
+        // falha técnica. A camada de conversa decide como oferecer outro dia/waitlist.
         return new ConsultaHorarios(
-                horarios.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
+                Status.OK,
                 servico.item().nome(),
                 diaInformado,
                 horarios);
