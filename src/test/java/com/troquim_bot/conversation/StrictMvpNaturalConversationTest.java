@@ -40,6 +40,52 @@ class StrictMvpNaturalConversationTest {
     }
 
     @Test
+    void pedidoNaturalDeAgendamentoAbreCatalogoPremiumEConsultaDeServicosMantemContexto() {
+        var fixture = fixture();
+        when(fixture.gateway.listarServicos()).thenReturn(List.of(
+                new ConversationBookingGateway.Servico("Escova", "", 45, 80.0, "BRL"),
+                new ConversationBookingGateway.Servico("Manicure", "", 40, 55.0, "BRL")));
+
+        String pedido = fixture.menu.processarMenu(
+                NUMERO, "gostaria de agendar", fixture.states.buscarPorNumero(NUMERO));
+
+        assertTrue(pedido.contains("O que você quer fazer?"), pedido);
+        assertTrue(pedido.contains("45 min · R$ 80,00"), pedido);
+        assertFalse(pedido.contains("Qual serviço você gostaria de agendar?"), pedido);
+        assertEquals(ConversationStep.AGUARDANDO_SERVICO,
+                fixture.states.buscarPorNumero(NUMERO).getStep());
+
+        String consulta = fixture.menu.processarMenu(
+                NUMERO, "qual serviço tem", fixture.states.buscarPorNumero(NUMERO));
+
+        assertTrue(consulta.contains("Escova"), consulta);
+        assertTrue(consulta.contains("Manicure"), consulta);
+        assertTrue(consulta.contains("45 min · R$ 80,00"), consulta);
+        assertFalse(consulta.contains("Não consegui entender completamente"), consulta);
+        assertEquals(ConversationStep.AGUARDANDO_SERVICO,
+                fixture.states.buscarPorNumero(NUMERO).getStep());
+    }
+
+    @Test
+    void variacoesDePerguntaSobreCatalogoNaoCaemNoFallbackGenerico() {
+        var fixture = fixture();
+        when(fixture.gateway.listarServicos()).thenReturn(List.of(
+                new ConversationBookingGateway.Servico("Escova", "", 45, 80.0, "BRL")));
+
+        for (String mensagem : List.of(
+                "quais serviços tem",
+                "tem quais serviços?",
+                "que serviços vocês tem?",
+                "qual serviço vocês oferecem?")) {
+            String resposta = fixture.menu.processarMenu(
+                    NUMERO, mensagem, fixture.states.buscarPorNumero(NUMERO));
+
+            assertTrue(resposta.contains("Escova"), mensagem + " -> " + resposta);
+            assertFalse(resposta.contains("reformular"), mensagem + " -> " + resposta);
+        }
+    }
+
+    @Test
     void agendarVaiDiretoParaServicoSemAbrirAgendaVisual() {
         var fixture = fixture();
         when(fixture.gateway.listarServicos()).thenReturn(List.of(
