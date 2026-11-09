@@ -34,7 +34,7 @@ class StrictMvpNaturalConversationTest {
         String inesperada = fixture.menu.processarMenu(
                 NUMERO, "oxe", fixture.states.buscarPorNumero(NUMERO));
 
-        assertEquals(null, saudacao);
+        assertEquals("Como posso ajudar?", saudacao);
         assertEquals(null, inesperada);
         assertEquals(ConversationStep.INICIO, fixture.states.buscarPorNumero(NUMERO).getStep());
     }
