@@ -308,8 +308,7 @@ public class StrictMvpMenuService {
         }
 
         if (ehPerguntaServicos(texto)) {
-            prepararEscolhaDeServico(numero);
-            return Optional.of(menuServicos());
+            return Optional.of(conviteAgendamentoSeguro());
         }
 
         if (ehPerguntaPreco(texto)) {
