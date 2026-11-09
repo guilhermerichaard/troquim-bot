@@ -184,8 +184,20 @@ public class StrictMvpMenuService {
             return respostaFactual.get();
         }
 
-        if (podeInterpretarNovaIntencao(step, texto)) {
-            Optional<String> turbo = tentarTurbo(numero, mensagem, step);
+        Optional<BookingIntent> bookingIntent = Optional.empty();
+        if (podeInterpretarNovaIntencao(step, texto) && bookingIntentInterpreter != null) {
+            bookingIntent = bookingIntentInterpreter.interpretar(mensagem);
+            if ((step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO)
+                    && bookingIntent.isPresent()
+                    && bookingIntent.get().explicitBookingRequest()
+                    && !bookingIntent.get().hasDayPreference()
+                    && !bookingIntent.get().hasTimePreference()
+                    && conversationBookingGateway != null
+                    && conversationBookingGateway.nomeCanonicoDoServico(mensagem).isEmpty()) {
+                return iniciarNovoAgendamento(numero);
+            }
+
+            Optional<String> turbo = tentarTurbo(numero, mensagem, step, bookingIntent);
             if (turbo.isPresent()) {
                 return turbo.get();
             }
@@ -194,7 +206,9 @@ public class StrictMvpMenuService {
         // Intencoes globais nao podem ficar presas na etapa atual do formulario textual.
         // "ver agendamento" durante AGUARDANDO_SERVICO continua sendo consulta, nao nome
         // de servico. O mesmo vale para iniciar um novo agendamento.
-        if (ehComandoAgendar(texto)) {
+        if (texto.equals("novo agendamento")
+                || ((step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO)
+                    && ehComandoAgendar(texto))) {
             return iniciarNovoAgendamento(numero);
         }
         if (ehConsultaAgendamentos(texto)) {
@@ -356,9 +370,28 @@ public class StrictMvpMenuService {
     }
 
     private boolean ehPerguntaServicos(String texto) {
-        return contemQualquer(texto,
+        if (contemQualquer(texto,
                 "quais servicos", "que servicos", "quais procedimentos",
-                "o que voces fazem", "o que voce faz", "o que tem", "servicos disponiveis");
+                "o que voces fazem", "o que voce faz", "o que tem",
+                "servicos disponiveis", "qual servico tem", "que servico tem",
+                "tem quais servicos", "tem que servicos", "quais servicos tem",
+                "quais servicos voces tem", "que servicos voces tem")) {
+            return true;
+        }
+
+        boolean falaDeServico = texto.contains("servico")
+                || texto.contains("servicos")
+                || texto.contains("procedimento")
+                || texto.contains("procedimentos");
+        boolean estruturaDePergunta = texto.contains("qual")
+                || texto.contains("quais")
+                || texto.contains("que ")
+                || texto.startsWith("que")
+                || texto.contains("tem ")
+                || texto.endsWith(" tem")
+                || texto.contains("oferece")
+                || texto.contains("fazem");
+        return falaDeServico && estruturaDePergunta;
     }
 
     private boolean ehPerguntaPreco(String texto) {
@@ -496,15 +529,14 @@ public class StrictMvpMenuService {
                 || step == ConversationStep.AGUARDANDO_HORARIO;
     }
 
-    private Optional<String> tentarTurbo(String numero, String mensagem, ConversationStep step) {
-        if (conversationBookingGateway == null || bookingIntentInterpreter == null) {
+    private Optional<String> tentarTurbo(String numero,
+                                        String mensagem,
+                                        ConversationStep step,
+                                        Optional<BookingIntent> interpretada) {
+        if (conversationBookingGateway == null || interpretada == null || interpretada.isEmpty()) {
             return Optional.empty();
         }
 
-        Optional<BookingIntent> interpretada = bookingIntentInterpreter.interpretar(mensagem);
-        if (interpretada.isEmpty()) {
-            return Optional.empty();
-        }
         BookingIntent intent = interpretada.get();
 
         boolean fluxoJaEmAndamento = step != ConversationStep.INICIO
@@ -1716,11 +1748,20 @@ public class StrictMvpMenuService {
     }
 
     private boolean ehComandoAgendar(String texto) {
-        return texto.equals("agendar")
+        if (texto == null || texto.isBlank()) {
+            return false;
+        }
+        if (texto.equals("agendar")
                 || texto.equals("marcar")
                 || texto.equals("novo agendamento")
                 || texto.equals("quero agendar")
-                || texto.equals("quero marcar");
+                || texto.equals("quero marcar")) {
+            return true;
+        }
+        return bookingIntentInterpreter != null
+                && bookingIntentInterpreter.interpretar(texto)
+                        .map(BookingIntent::explicitBookingRequest)
+                        .orElse(false);
     }
 
     private boolean ehConsultaAgendamentos(String texto) {

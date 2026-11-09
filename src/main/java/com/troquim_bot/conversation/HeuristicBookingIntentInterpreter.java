@@ -43,13 +43,15 @@ public class HeuristicBookingIntentInterpreter implements BookingIntentInterpret
         String dia = extrairDia(texto);
         TimePreference tempo = extrairHorario(texto);
 
-        boolean sinalDeAgendamento = mesmoDeSempre
-                || texto.contains("agendar")
+        boolean pedidoExplicitoDeAgendamento = texto.contains("agendar")
                 || texto.contains("marcar")
+                || texto.contains("quero fazer")
+                || texto.contains("preciso fazer");
+
+        boolean sinalDeAgendamento = mesmoDeSempre
+                || pedidoExplicitoDeAgendamento
                 || texto.contains("horario")
                 || texto.contains("horário")
-                || texto.contains("quero fazer")
-                || texto.contains("preciso fazer")
                 || !dia.isBlank()
                 || tempo.temPreferencia();
 
@@ -63,7 +65,8 @@ public class HeuristicBookingIntentInterpreter implements BookingIntentInterpret
                 tempo.inicio(),
                 tempo.fim(),
                 tempo.alvo(),
-                mesmoDeSempre));
+                mesmoDeSempre,
+                pedidoExplicitoDeAgendamento));
     }
 
     private static String extrairDia(String texto) {

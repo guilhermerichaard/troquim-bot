@@ -14,11 +14,22 @@ public record BookingIntent(
         LocalTime earliestTime,
         LocalTime latestTime,
         LocalTime targetTime,
-        boolean sameAsUsual) {
+        boolean sameAsUsual,
+        boolean explicitBookingRequest) {
 
     public BookingIntent {
         serviceQuery = serviceQuery == null ? "" : serviceQuery.trim();
         dayQuery = dayQuery == null ? "" : dayQuery.trim();
+    }
+
+    /** Compatibilidade com chamadas existentes que ainda não informam a intenção explícita. */
+    public BookingIntent(String serviceQuery,
+                         String dayQuery,
+                         LocalTime earliestTime,
+                         LocalTime latestTime,
+                         LocalTime targetTime,
+                         boolean sameAsUsual) {
+        this(serviceQuery, dayQuery, earliestTime, latestTime, targetTime, sameAsUsual, false);
     }
 
     public boolean hasDayPreference() {
