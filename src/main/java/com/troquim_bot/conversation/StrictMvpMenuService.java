@@ -539,11 +539,16 @@ public class StrictMvpMenuService {
                     + waitlistTimeToken(intent.earliestTime()) + "_"
                     + waitlistTimeToken(intent.latestTime());
 
-            return Optional.of("Não achei vaga dentro do que você pediu para "
-                    + recomendacao.servico() + ".\n\n"
-                    + "[[choice:" + joinId + "|Entrar na espera]]\n"
-                    + "[[choice:waitlist_other|Ver outros horários]]\n"
-                    + CHOICE_BACK);
+            StringBuilder semVaga = new StringBuilder(
+                    "Não achei vaga dentro do que você pediu para "
+                            + recomendacao.servico() + ".\n\n");
+            if (conversationBookingGateway.esperaRepresentavel(recomendacao.servico())) {
+                semVaga.append("[[choice:").append(joinId)
+                        .append("|Entrar na espera]]\n");
+            }
+            semVaga.append("[[choice:waitlist_other|Ver outros horários]]\n")
+                    .append(CHOICE_BACK);
+            return Optional.of(semVaga.toString());
         }
 
         atual.setStep(ConversationStep.AGUARDANDO_HORARIO);
@@ -1352,13 +1357,15 @@ public class StrictMvpMenuService {
                     .append(rotuloSlotTurbo(slot.data(), slot.horario())).append("]]\n");
         }
 
-        timeInputParser.parse(horarioSolicitado).ifPresent(target -> {
-            String time = String.format("%02d%02d", target.getHour(), target.getMinute());
-            response.append("[[choice:waitlist_join_")
-                    .append(waitlistToken(draft.getDia())).append("_")
-                    .append(time).append("_").append(time)
-                    .append("|Entrar na espera desse horário]]\n");
-        });
+        if (conversationBookingGateway.esperaRepresentavel(draft.getServico())) {
+            timeInputParser.parse(horarioSolicitado).ifPresent(target -> {
+                String time = String.format("%02d%02d", target.getHour(), target.getMinute());
+                response.append("[[choice:waitlist_join_")
+                        .append(waitlistToken(draft.getDia())).append("_")
+                        .append(time).append("_").append(time)
+                        .append("|Entrar na espera desse horário]]\n");
+            });
+        }
         response.append(CHOICE_BACK);
         return response.toString();
     }
