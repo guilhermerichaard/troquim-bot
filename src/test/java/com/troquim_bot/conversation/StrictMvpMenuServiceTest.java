@@ -192,21 +192,23 @@ class StrictMvpMenuServiceTest {
         String primeira = menu.processarMenu(
                 NUMERO, "horarios_pagina_0", states.buscarPorNumero(NUMERO));
         var p1 = ConversationInteractivePresentation.from(primeira).orElseThrow();
-        assertEquals(9, p1.options().size());
+        assertEquals(10, p1.options().size());
         assertEquals("1", p1.options().get(0).id());
         assertEquals("7", p1.options().get(6).id());
         assertEquals("horarios_pagina_1", p1.options().get(7).id());
         assertEquals("nav_voltar", p1.options().get(8).id());
+        assertEquals("agenda_visual", p1.options().get(9).id());
 
         String segunda = menu.processarMenu(
                 NUMERO, "horarios_pagina_1", states.buscarPorNumero(NUMERO));
         var p2 = ConversationInteractivePresentation.from(segunda).orElseThrow();
-        assertEquals(10, p2.options().size());
+        assertEquals(11, p2.options().size());
         assertEquals("8", p2.options().get(0).id());
         assertEquals("14", p2.options().get(6).id());
         assertEquals("horarios_pagina_0", p2.options().get(7).id());
         assertEquals("horarios_pagina_2", p2.options().get(8).id());
         assertEquals("nav_voltar", p2.options().get(9).id());
+        assertEquals("agenda_visual", p2.options().get(10).id());
 
         String terceira = menu.processarMenu(
                 NUMERO, "horarios_pagina_2", states.buscarPorNumero(NUMERO));
