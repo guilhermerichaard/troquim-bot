@@ -175,11 +175,8 @@ public class StrictMvpMenuService {
             return menuCancelamentos(numero, paginaCancelamentos);
         }
 
-        if ("agenda_visual".equals(texto)) {
-            return abrirAgendaVisual(numero);
-        }
-        if ("escolher_servico".equals(texto)) {
-            return iniciarEscolhaDeServico(numero);
+        if ("agenda_visual".equals(texto) || "escolher_servico".equals(texto)) {
+            return iniciarNovoAgendamento(numero);
         }
         if ("encerrar".equals(texto)
                 || (step == ConversationStep.FINALIZADO && ehConfirmacaoNegativa(texto))) {
@@ -190,6 +187,31 @@ public class StrictMvpMenuService {
         Optional<String> respostaFactual = responderPerguntaDoNegocio(numero, mensagem, texto, step);
         if (respostaFactual.isPresent()) {
             return respostaFactual.get();
+        }
+
+        // Na experiência assistida por Flow, o chat nunca assume serviço, dia ou
+        // horário de uma frase livre. A navegação da agenda é exclusivamente visual.
+        if (texto.equals("novo agendamento") || ehComandoAgendar(texto)) {
+            return iniciarNovoAgendamento(numero);
+        }
+        if (ehConsultaAgendamentos(texto)) {
+            return consultarAgendamentos(numero);
+        }
+        if (ehComandoCancelar(texto) && step != ConversationStep.AGUARDANDO_CONFIRMACAO) {
+            return cancelarAgendamento(numero);
+        }
+        if (step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO
+                || step == ConversationStep.AGUARDANDO_SERVICO
+                || step == ConversationStep.AGUARDANDO_DIA
+                || step == ConversationStep.AGUARDANDO_HORARIO
+                || step == ConversationStep.AGUARDANDO_ESCOLHA_NOME
+                || step == ConversationStep.AGUARDANDO_NOME
+                || step == ConversationStep.AGUARDANDO_CONFIRMACAO) {
+            if (texto.matches("^[123]$")
+                    && (step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO)) {
+                return processarEscolhaMenuPrincipal(numero, texto);
+            }
+            return conviteAgendamentoSeguro();
         }
 
         Optional<BookingIntent> bookingIntent = Optional.empty();
@@ -946,52 +968,27 @@ public class StrictMvpMenuService {
     }
 
     private String conviteAgendamentoSeguro() {
-        return "Para evitar erro, escolha uma opção abaixo:\n\n"
-                + "[[choice:agenda_visual|Abrir agenda]]\n"
-                + "[[choice:escolher_servico|Escolher serviço]]\n"
-                + "[[choice:2|Meus agendamentos]]";
+        return "Para agendar, toque na opção abaixo:\n\n"
+                + "[[choice:agenda_visual|Abrir agenda]]";
     }
 
     private String iniciarNovoAgendamento(String numero) {
         ConversationState state = reiniciarFluxoPreservandoPerfil(numero);
-        state.criarNovoDraft();
-        state.setStep(ConversationStep.AGUARDANDO_SERVICO);
-        conversationStateService.atualizarStep(state);
+        state.setStep(ConversationStep.INICIO);
         conversationStateService.persistir(state);
-
-        String abertura = abrirAgendaVisual(numero);
-        if ("Abri a agenda completa para você.".equals(abertura)) {
-            return "Te enviei a agenda. Toque em Abrir agenda e escolha por lá.\n\n"
-                    + "[[choice:escolher_servico|Prefiro escolher o serviço]]\n"
-                    + CHOICE_BACK;
-        }
-
-        return "A agenda completa não está disponível agora. "
-                + "Escolha um serviço abaixo:\n\n" + menuServicos();
-    }
-
-    private String iniciarEscolhaDeServico(String numero) {
-        ConversationState state = conversationStateService.buscarPorNumero(numero);
-        if (state.getStep() != ConversationStep.AGUARDANDO_SERVICO) {
-            state = reiniciarFluxoPreservandoPerfil(numero);
-            state.criarNovoDraft();
-            state.setStep(ConversationStep.AGUARDANDO_SERVICO);
-            conversationStateService.atualizarStep(state);
-            conversationStateService.persistir(state);
-        }
-        return menuServicos();
+        return abrirAgendaVisual(numero);
     }
 
     private String abrirAgendaVisual(String numero) {
         AberturaDeAgenda agenda = aberturaDeAgenda.getIfAvailable();
         if (agenda == null || !agenda.disponivel()) {
-            return "A agenda completa não está disponível agora. Posso continuar por aqui.";
+            return "A agenda está indisponível no momento. Tente novamente em instantes.";
         }
         var resultado = agenda.abrirPara(numero);
         if (!resultado.abriu()) {
-            return "Não consegui abrir a agenda completa agora. Posso continuar por aqui.";
+            return "Não consegui abrir a agenda agora. Tente novamente em instantes.";
         }
-        return "Abri a agenda completa para você.";
+        return "Enviei a agenda. Toque em Abrir agenda para escolher serviço, data e horário.";
     }
 
     private ConversationState reiniciarFluxoPreservandoPerfil(String numero) {
