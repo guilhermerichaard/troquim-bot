@@ -192,32 +192,33 @@ class StrictMvpMenuServiceTest {
         String primeira = menu.processarMenu(
                 NUMERO, "horarios_pagina_0", states.buscarPorNumero(NUMERO));
         var p1 = ConversationInteractivePresentation.from(primeira).orElseThrow();
-        assertEquals(10, p1.options().size());
+        assertEquals(9, p1.options().size());
         assertEquals("1", p1.options().get(0).id());
-        assertEquals("7", p1.options().get(6).id());
-        assertEquals("horarios_pagina_1", p1.options().get(7).id());
-        assertEquals("nav_voltar", p1.options().get(8).id());
-        assertEquals("agenda_visual", p1.options().get(9).id());
+        assertEquals("6", p1.options().get(5).id());
+        assertEquals("horarios_pagina_1", p1.options().get(6).id());
+        assertEquals("nav_voltar", p1.options().get(7).id());
+        assertEquals("agenda_visual", p1.options().get(8).id());
 
         String segunda = menu.processarMenu(
                 NUMERO, "horarios_pagina_1", states.buscarPorNumero(NUMERO));
         var p2 = ConversationInteractivePresentation.from(segunda).orElseThrow();
-        assertEquals(11, p2.options().size());
-        assertEquals("8", p2.options().get(0).id());
-        assertEquals("14", p2.options().get(6).id());
-        assertEquals("horarios_pagina_0", p2.options().get(7).id());
-        assertEquals("horarios_pagina_2", p2.options().get(8).id());
-        assertEquals("nav_voltar", p2.options().get(9).id());
-        assertEquals("agenda_visual", p2.options().get(10).id());
+        assertEquals(10, p2.options().size());
+        assertEquals("7", p2.options().get(0).id());
+        assertEquals("12", p2.options().get(5).id());
+        assertEquals("horarios_pagina_0", p2.options().get(6).id());
+        assertEquals("horarios_pagina_2", p2.options().get(7).id());
+        assertEquals("nav_voltar", p2.options().get(8).id());
+        assertEquals("agenda_visual", p2.options().get(9).id());
 
         String terceira = menu.processarMenu(
                 NUMERO, "horarios_pagina_2", states.buscarPorNumero(NUMERO));
         var p3 = ConversationInteractivePresentation.from(terceira).orElseThrow();
-        assertEquals(5, p3.options().size());
-        assertEquals("15", p3.options().get(0).id());
-        assertEquals("17", p3.options().get(2).id());
-        assertEquals("horarios_pagina_1", p3.options().get(3).id());
-        assertEquals("nav_voltar", p3.options().get(4).id());
+        assertEquals(8, p3.options().size());
+        assertEquals("13", p3.options().get(0).id());
+        assertEquals("17", p3.options().get(4).id());
+        assertEquals("horarios_pagina_1", p3.options().get(5).id());
+        assertEquals("nav_voltar", p3.options().get(6).id());
+        assertEquals("agenda_visual", p3.options().get(7).id());
 
         menu.processarMenu(NUMERO, "12", states.buscarPorNumero(NUMERO));
         assertEquals("11:45", states.buscarPorNumero(NUMERO).getDraftAtual().getHorario());
