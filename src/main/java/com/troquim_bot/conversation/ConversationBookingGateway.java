@@ -356,7 +356,7 @@ public class ConversationBookingGateway {
         }
 
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        ServicoIdentificado servico = identificarServico(nomeInterpretado);
         if (!servico.ok()) {
             return new Recomendacao(servico.status(),
                     servico.item() == null ? "" : servico.item().nome(), List.of(), false);
@@ -367,22 +367,11 @@ public class ConversationBookingGateway {
             return new Recomendacao(Status.DIA_INVALIDO, servico.item().nome(), List.of(), false);
         }
 
-        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
-                availabilityApplicationService.horariosLivres(
-                                businessId, servico.item().id(), servico.profissional(), data.get())
-                        .stream()
-                        .map(time -> new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
-                                data.get(), time, gapAdjacenteMinutos(
-                                        businessId, servico.profissional(), data.get(), time,
-                                        servico.item().duracao())))
-                        .toList();
-
-        List<SlotSugerido> slots = new com.troquim_bot.availability.SlotRecommendationPolicy()
-                .rank(candidatos, null, limite)
-                .stream()
-                .map(candidate -> new SlotSugerido(
-                        servico.item().nome(), candidate.date(), candidate.time()))
-                .toList();
+        List<SlotSugerido> slots = rankearSlotsUnicos(
+                servico.item(),
+                candidatosValidos(businessId, servico.item(), List.of(data.get()), null),
+                null,
+                limite);
 
         return new Recomendacao(
                 slots.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
@@ -395,7 +384,7 @@ public class ConversationBookingGateway {
                                                    String diaInformado,
                                                    String horarioInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        ServicoIdentificado servico = identificarServico(nomeInterpretado);
         if (!servico.ok()) {
             return new Recomendacao(servico.status(),
                     servico.item() == null ? "" : servico.item().nome(), List.of(), false);
@@ -407,24 +396,17 @@ public class ConversationBookingGateway {
             return new Recomendacao(Status.HORARIO_INVALIDO, servico.item().nome(), List.of(), false);
         }
 
-        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
-                availabilityApplicationService.horariosLivres(
-                                businessId, servico.item().id(), servico.profissional(), data.get())
-                        .stream()
-                        .map(time -> new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
-                                data.get(), time, gapAdjacenteMinutos(
-                                        businessId, servico.profissional(), data.get(), time,
-                                        servico.item().duracao())))
-                        .toList();
+        List<SlotSugerido> slots = rankearSlotsUnicos(
+                servico.item(),
+                candidatosValidos(businessId, servico.item(), List.of(data.get()), null),
+                alvo.get(),
+                3);
 
-        List<SlotSugerido> slots = new com.troquim_bot.availability.SlotRecommendationPolicy()
-                .rank(candidatos, alvo.get(), 3)
-                .stream()
-                .map(candidate -> new SlotSugerido(
-                        servico.item().nome(), candidate.date(), candidate.time()))
-                .toList();
-
-        return new Recomendacao(Status.OK, servico.item().nome(), slots, false);
+        return new Recomendacao(
+                slots.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
+                servico.item().nome(),
+                slots,
+                false);
     }
 
     private ServicoIdentificado identificarServicoDoHistorico(BusinessId businessId, String telefone) {
@@ -461,7 +443,7 @@ public class ConversationBookingGateway {
 
     public ConsultaHorarios consultarHorarios(String nomeInterpretado, String diaInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        ServicoIdentificado servico = identificarServico(nomeInterpretado);
         if (!servico.ok()) {
             return ConsultaHorarios.erro(servico.status(), nomeInterpretado, diaInformado);
         }
@@ -471,10 +453,18 @@ public class ConversationBookingGateway {
             return ConsultaHorarios.erro(Status.DIA_INVALIDO, servico.item().nome(), diaInformado);
         }
 
-        List<LocalTime> horarios = availabilityApplicationService.horariosLivres(
-                businessId, servico.item().id(), servico.profissional(), data.get());
+        List<LocalTime> horarios = servico.item().profissionais().stream()
+                .flatMap(profissional -> availabilityApplicationService.horariosLivres(
+                        businessId, servico.item().id(), profissional.id(), data.get()).stream())
+                .distinct()
+                .sorted()
+                .toList();
 
-        return new ConsultaHorarios(Status.OK, servico.item().nome(), diaInformado, horarios);
+        return new ConsultaHorarios(
+                horarios.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
+                servico.item().nome(),
+                diaInformado,
+                horarios);
     }
 
     /**
