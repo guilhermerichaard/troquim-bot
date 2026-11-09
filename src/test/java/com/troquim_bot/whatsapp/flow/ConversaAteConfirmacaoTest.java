@@ -388,7 +388,7 @@ class ConversaAteConfirmacaoTest {
 
         String voltou = menu.processarMenu(
                 TELEFONE, "volta", conversationStateService.buscarPorNumero(TELEFONE));
-        assertTrue(voltou.toLowerCase().contains("serviço"), voltou);
+        assertTrue(voltou.contains("O que você quer fazer?"), voltou);
         assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
                 conversationStateService.buscarPorNumero(TELEFONE).getStep());
 
