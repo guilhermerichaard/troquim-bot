@@ -1167,12 +1167,13 @@ public class StrictMvpMenuService {
 
             if (pagina == 0) {
                 var recomendacao = conversationBookingGateway.recomendarHorariosDoDia(servico, dia, 3);
-                if (recomendacao.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
+                if (recomendacao != null
+                        && recomendacao.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
                     return "Há mais de um profissional disponível para esse serviço.\n\n"
                             + "[[choice:agenda_visual|Ver agenda completa]]\n"
                             + CHOICE_BACK;
                 }
-                if (recomendacao.ok() && !recomendacao.slots().isEmpty()) {
+                if (recomendacao != null && recomendacao.ok() && !recomendacao.slots().isEmpty()) {
                     StringBuilder response = new StringBuilder(
                             "Separei estes horários para " + formatarDiaExibicao(dia) + ":\n\n");
                     for (var slot : recomendacao.slots()) {
