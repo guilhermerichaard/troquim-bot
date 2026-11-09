@@ -19,6 +19,8 @@ import java.util.*;
 public class StrictMvpMenuService {
 
     private static final int INTERACTIVE_PAGE_SIZE = 7;
+    /** Horários reservam espaço para anterior/próximo/voltar/agenda dentro do limite 10 do WhatsApp. */
+    private static final int HORARIO_PAGE_SIZE = 6;
     private static final String CHOICE_BACK = "[[choice:nav_voltar|← Voltar]]";
 
     /**
@@ -1160,6 +1162,29 @@ public class StrictMvpMenuService {
     }
 
     private String menuHorarios(String numero) {
+        ConversationState state = conversationStateService.buscarPorNumero(numero);
+        String dia = state.getDraftAtual().getDia();
+
+        if (conversationBookingGateway != null) {
+            String servico = state.getDraftAtual().getServico();
+            var recomendacao = conversationBookingGateway.recomendarHorariosDoDia(servico, dia, 3);
+            if (recomendacao != null && recomendacao.ok() && !recomendacao.slots().isEmpty()) {
+                StringBuilder response = new StringBuilder(
+                        "Separei estes horários para " + formatarDiaExibicao(dia) + ":\n\n");
+                for (var slot : recomendacao.slots()) {
+                    String id = "turbo_slot_" + slot.data() + "_"
+                            + String.format("%02d%02d", slot.horario().getHour(), slot.horario().getMinute());
+                    response.append("[[choice:").append(id).append("|")
+                            .append(ConversationBookingGateway.formatarHorario(slot.horario()))
+                            .append("]]\n");
+                }
+                response.append("[[choice:horarios_pagina_0|Ver todos os horários]]\n");
+                response.append("[[choice:agenda_visual|Ver agenda completa]]\n");
+                response.append(CHOICE_BACK);
+                return response.toString();
+            }
+        }
+
         return menuHorarios(numero, 0);
     }
 
@@ -1169,31 +1194,6 @@ public class StrictMvpMenuService {
 
         if (conversationBookingGateway != null) {
             String servico = state.getDraftAtual().getServico();
-
-            if (pagina == 0) {
-                var recomendacao = conversationBookingGateway.recomendarHorariosDoDia(servico, dia, 3);
-                if (recomendacao != null
-                        && recomendacao.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
-                    return "Há mais de um profissional disponível para esse serviço.\n\n"
-                            + "[[choice:agenda_visual|Ver agenda completa]]\n"
-                            + CHOICE_BACK;
-                }
-                if (recomendacao != null && recomendacao.ok() && !recomendacao.slots().isEmpty()) {
-                    StringBuilder response = new StringBuilder(
-                            "Separei estes horários para " + formatarDiaExibicao(dia) + ":\n\n");
-                    for (var slot : recomendacao.slots()) {
-                        String id = "turbo_slot_" + slot.data() + "_"
-                                + String.format("%02d%02d", slot.horario().getHour(), slot.horario().getMinute());
-                        response.append("[[choice:").append(id).append("|")
-                                .append(ConversationBookingGateway.formatarHorario(slot.horario()))
-                                .append("]]\n");
-                    }
-                    response.append("[[choice:horarios_pagina_1|Ver todos os horários]]\n");
-                    response.append("[[choice:agenda_visual|Ver agenda completa]]\n");
-                    response.append(CHOICE_BACK);
-                    return response.toString();
-                }
-            }
 
             ConversationBookingGateway.ConsultaHorarios consulta =
                     conversationBookingGateway.consultarHorarios(servico, dia);
@@ -1232,7 +1232,7 @@ public class StrictMvpMenuService {
             List<String> horarios = consulta.horarios().stream()
                     .map(ConversationBookingGateway::formatarHorario)
                     .toList();
-            return montarMenuHorarios(dia, horarios, Math.max(0, pagina - 1));
+            return montarMenuHorarios(dia, horarios, pagina);
         }
 
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
@@ -1244,13 +1244,34 @@ public class StrictMvpMenuService {
         return montarMenuHorarios(dia, horarios, pagina);
     }
 
-    private String montarMenuHorarios(String dia, List<String> horarios, int pagina) {
+    private String montarMenuHorarios(String dia, List<String> horarios, int paginaSolicitada) {
         StringBuilder sb = new StringBuilder(
                 "Horários disponíveis para " + formatarDiaExibicao(dia) + ":\n\n");
-        appendPaginatedOptions(
-                sb, horarios, pagina, "horarios_pagina_",
-                "← Horários anteriores", "Mais horários →");
-        sb.append("\n[[choice:agenda_visual|Ver agenda completa]]");
+
+        if (horarios == null || horarios.isEmpty()) {
+            sb.append(CHOICE_BACK).append("\n[[choice:agenda_visual|Ver agenda completa]]");
+            return sb.toString();
+        }
+
+        int totalPaginas = Math.max(1,
+                (int) Math.ceil(horarios.size() / (double) HORARIO_PAGE_SIZE));
+        int pagina = Math.max(0, Math.min(paginaSolicitada, totalPaginas - 1));
+        int inicio = pagina * HORARIO_PAGE_SIZE;
+        int fim = Math.min(horarios.size(), inicio + HORARIO_PAGE_SIZE);
+
+        for (int i = inicio; i < fim; i++) {
+            sb.append(i + 1).append(") ").append(horarios.get(i)).append("\n");
+        }
+        if (pagina > 0) {
+            sb.append("[[choice:horarios_pagina_").append(pagina - 1)
+                    .append("|← Horários anteriores]]\n");
+        }
+        if (pagina + 1 < totalPaginas) {
+            sb.append("[[choice:horarios_pagina_").append(pagina + 1)
+                    .append("|Mais horários →]]\n");
+        }
+        sb.append(CHOICE_BACK).append("\n");
+        sb.append("[[choice:agenda_visual|Ver agenda completa]]");
         return sb.toString();
     }
 
