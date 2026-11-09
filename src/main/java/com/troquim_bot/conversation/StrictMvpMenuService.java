@@ -187,7 +187,9 @@ public class StrictMvpMenuService {
         Optional<BookingIntent> bookingIntent = Optional.empty();
         if (podeInterpretarNovaIntencao(step, texto) && bookingIntentInterpreter != null) {
             bookingIntent = bookingIntentInterpreter.interpretar(mensagem);
-            if (bookingIntent.isPresent() && bookingIntent.get().explicitBookingRequest()
+            if ((step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO)
+                    && bookingIntent.isPresent()
+                    && bookingIntent.get().explicitBookingRequest()
                     && !bookingIntent.get().hasDayPreference()
                     && !bookingIntent.get().hasTimePreference()
                     && conversationBookingGateway != null
@@ -204,7 +206,9 @@ public class StrictMvpMenuService {
         // Intencoes globais nao podem ficar presas na etapa atual do formulario textual.
         // "ver agendamento" durante AGUARDANDO_SERVICO continua sendo consulta, nao nome
         // de servico. O mesmo vale para iniciar um novo agendamento.
-        if (ehComandoAgendar(texto)) {
+        if (texto.equals("novo agendamento")
+                || ((step == ConversationStep.INICIO || step == ConversationStep.FINALIZADO)
+                    && ehComandoAgendar(texto))) {
             return iniciarNovoAgendamento(numero);
         }
         if (ehConsultaAgendamentos(texto)) {
