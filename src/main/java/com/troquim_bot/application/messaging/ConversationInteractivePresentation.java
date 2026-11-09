@@ -17,7 +17,7 @@ public final class ConversationInteractivePresentation {
 
     private static final Pattern NUMBERED_OPTION = Pattern.compile("^(\\d+)\\)\\s+(.+)$");
     private static final Pattern EXPLICIT_OPTION =
-            Pattern.compile("^\\[\\[choice:([^|]+)\\|(.+)]]$");
+            Pattern.compile("^\\[\\[choice:([^|]+)\\|([^|\\]]+)(?:\\|([^\\]]+))?]]$");
 
     private ConversationInteractivePresentation() {
     }
@@ -142,8 +142,9 @@ public final class ConversationInteractivePresentation {
             if (explicit.matches()) {
                 String id = explicit.group(1).trim();
                 String title = explicit.group(2).trim();
+                String description = explicit.group(3) == null ? "" : explicit.group(3).trim();
                 if (!id.isBlank() && !title.isBlank()) {
-                    options.add(new OutboundInteractiveOption(id, title));
+                    options.add(new OutboundInteractiveOption(id, title, description));
                 }
             }
         }
