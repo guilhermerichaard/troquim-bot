@@ -383,6 +383,7 @@ class StrictMvpMenuServiceTest {
                         "Manicure",
                         List.of(),
                         false));
+        when(gateway.esperaRepresentavel("Manicure")).thenReturn(true);
         when(gateway.entrarNaEspera(
                 eq(NUMERO),
                 eq("Manicure"),
