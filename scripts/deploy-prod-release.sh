@@ -60,23 +60,42 @@ docker image inspect "${NEW_IMAGE}" >/dev/null || fail "image ${NEW_IMAGE} not f
 [[ -d "${RELEASE_DIR}" ]] || fail "release directory missing: ${RELEASE_DIR}"
 [[ -f "${RELEASE_COMPOSE}" ]] || fail "release compose missing: ${RELEASE_COMPOSE}"
 
-CURRENT_DROPLET="/opt/troquim/src/troquim-bot/docker-compose.droplet.yml"
 RELEASE_DROPLET="${RELEASE_DIR}/docker-compose.droplet.yml"
-[[ -f "${CURRENT_DROPLET}" ]] || fail "current droplet compose missing"
 [[ -f "${RELEASE_DROPLET}" ]] || fail "release droplet compose missing"
 
-# Detect manual production drift against the compose that belongs to the currently
-# running immutable release. A new release is allowed to evolve the compose.
+IFS=',' read -r -a CURRENT_CONFIGS <<< "${CONFIG_CSV}"
+
+# Detect drift against the compose file that Docker says is actually active for the
+# running container. Never compare against a checkout path that may be stale.
+ACTIVE_DROPLET=""
+ACTIVE_DROPLET_COUNT=0
+for configured in "${CURRENT_CONFIGS[@]}"; do
+  candidate="${configured}"
+  if [[ "${candidate}" != /* ]]; then
+    candidate="${WORKDIR}/${candidate}"
+  fi
+  if [[ "$(basename "${candidate}")" == "docker-compose.droplet.yml" ]]; then
+    ACTIVE_DROPLET="${candidate}"
+    ACTIVE_DROPLET_COUNT=$((ACTIVE_DROPLET_COUNT + 1))
+  fi
+done
+[[ "${ACTIVE_DROPLET_COUNT}" -eq 1 ]] \
+  || fail "expected exactly one active droplet compose in current project"
+[[ -f "${ACTIVE_DROPLET}" ]] \
+  || fail "active droplet compose missing: ${ACTIVE_DROPLET}"
+
+# Compare the active immutable release overlay with the file registered on the
+# running Compose project. A new release may evolve the overlay, but manual edits
+# to the active release remain blocked.
 CURRENT_TAG="${CURRENT_IMAGE#troquim-bot:}"
 [[ "${CURRENT_TAG}" != "${CURRENT_IMAGE}" && -n "${CURRENT_TAG}" ]] \
   || fail "unexpected current backend image: ${CURRENT_IMAGE}"
 DEPLOYED_RELEASE_DROPLET="/opt/troquim/releases/${CURRENT_TAG}/docker-compose.droplet.yml"
 [[ -f "${DEPLOYED_RELEASE_DROPLET}" ]] \
   || fail "current release droplet compose missing: ${DEPLOYED_RELEASE_DROPLET}"
-cmp -s "${CURRENT_DROPLET}" "${DEPLOYED_RELEASE_DROPLET}" \
-  || fail "current droplet compose has unversioned production drift; review required"
+cmp -s "${ACTIVE_DROPLET}" "${DEPLOYED_RELEASE_DROPLET}" \
+  || fail "active droplet compose has unversioned production drift; review required"
 
-IFS=',' read -r -a CURRENT_CONFIGS <<< "${CONFIG_CSV}"
 COMPOSE_ARGS=()
 RELEASE_REPLACED=0
 DROPLET_REPLACED=0
