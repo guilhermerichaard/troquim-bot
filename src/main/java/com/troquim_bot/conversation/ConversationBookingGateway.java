@@ -989,7 +989,7 @@ public class ConversationBookingGateway {
             LocalTime horario) {
 
         return item.profissionais().stream()
-                .map(ConsultarCatalogo.ProfissionalDoServico::id)
+                .map(ConsultarCatalogo.ProfissionalDoCatalogo::id)
                 .filter(profissional -> availabilityApplicationService.estaLivre(
                         businessId, item.id(), profissional, data, horario))
                 .sorted(java.util.Comparator
