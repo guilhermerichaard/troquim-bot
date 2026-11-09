@@ -93,7 +93,7 @@ class StrictMvpNaturalConversationTest {
         assertTrue(resposta.contains("15:30"), resposta);
         assertTrue(resposta.contains("17h"), resposta);
         assertTrue(resposta.contains("18:30"), resposta);
-        assertTrue(resposta.contains("Ver mais horários"), resposta);
+        assertTrue(resposta.contains("Ver todos os horários"), resposta);
         assertTrue(resposta.contains("Ver agenda completa"), resposta);
     }
 
