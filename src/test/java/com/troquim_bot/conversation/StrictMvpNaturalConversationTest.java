@@ -1,6 +1,8 @@
 package com.troquim_bot.conversation;
 
 import com.troquim_bot.application.availability.AvailabilityApplicationService;
+import com.troquim_bot.application.booking.AberturaDeAgenda;
+import com.troquim_bot.application.booking.AberturaDeAgendaResultado;
 import com.troquim_bot.application.booking.BookingApplicationService;
 import com.troquim_bot.application.conversation.BusinessConversationFacts;
 import com.troquim_bot.conversation.state.ConversationState;
@@ -26,79 +28,85 @@ class StrictMvpNaturalConversationTest {
     private static final String NUMERO = "5511999990000";
 
     @Test
-    void saudacaoEConversaDesconhecidaNaoSaoSequestradasPeloMenu() {
+    void mensagemLivreNoInicioNaoEInterpretadaComoServicoEOfereceCaminhosClicaveis() {
         var fixture = fixture();
 
-        String saudacao = fixture.menu.processarMenu(
-                NUMERO, "oi", fixture.states.buscarPorNumero(NUMERO));
-        String inesperada = fixture.menu.processarMenu(
-                NUMERO, "oxe", fixture.states.buscarPorNumero(NUMERO));
+        String resposta = fixture.menu.processarMenu(
+                NUMERO, "MANI", fixture.states.buscarPorNumero(NUMERO));
 
-        assertEquals("Como posso ajudar?", saudacao);
-        assertEquals(null, inesperada);
+        assertTrue(resposta.contains("Abrir agenda"), resposta);
+        assertTrue(resposta.contains("Escolher serviço"), resposta);
+        assertFalse(resposta.contains("reformular"), resposta);
         assertEquals(ConversationStep.INICIO, fixture.states.buscarPorNumero(NUMERO).getStep());
     }
 
     @Test
-    void pedidoNaturalDeAgendamentoAbreCatalogoPremiumEConsultaDeServicosMantemContexto() {
+    void agendarAbreAgendaComoCaminhoPrincipalEDeixaServicoComoAlternativa() {
+        AberturaDeAgenda agenda = mock(AberturaDeAgenda.class);
+        when(agenda.disponivel()).thenReturn(true);
+        when(agenda.abrirPara(NUMERO)).thenReturn(AberturaDeAgendaResultado.enviado());
+
+        var fixture = fixture(agenda);
+
+        String resposta = fixture.menu.processarMenu(
+                NUMERO, "agendar", fixture.states.buscarPorNumero(NUMERO));
+
+        assertTrue(resposta.contains("Te enviei a agenda"), resposta);
+        assertTrue(resposta.contains("Prefiro escolher o serviço"), resposta);
+        assertFalse(resposta.contains("Para qual dia"), resposta);
+        assertEquals(ConversationStep.AGUARDANDO_SERVICO,
+                fixture.states.buscarPorNumero(NUMERO).getStep());
+    }
+
+    @Test
+    void servicoDigitadoDuranteEscolhaNaoEAdvinhadoEReapresentaBotoes() {
         var fixture = fixture();
         when(fixture.gateway.listarServicos()).thenReturn(List.of(
                 new ConversationBookingGateway.Servico("Escova", "", 45, 80.0, "BRL"),
                 new ConversationBookingGateway.Servico("Manicure", "", 40, 55.0, "BRL")));
 
-        String pedido = fixture.menu.processarMenu(
-                NUMERO, "gostaria de agendar", fixture.states.buscarPorNumero(NUMERO));
+        ConversationState state = fixture.states.buscarPorNumero(NUMERO);
+        state.criarNovoDraft();
+        state.setStep(ConversationStep.AGUARDANDO_SERVICO);
+        fixture.states.persistir(state);
 
-        assertTrue(pedido.contains("O que você quer fazer?"), pedido);
-        assertTrue(pedido.contains("45 min · R$ 80,00"), pedido);
-        assertFalse(pedido.contains("Qual serviço você gostaria de agendar?"), pedido);
-        assertEquals(ConversationStep.AGUARDANDO_SERVICO,
-                fixture.states.buscarPorNumero(NUMERO).getStep());
+        String resposta = fixture.menu.processarMenu(
+                NUMERO, "manicure", fixture.states.buscarPorNumero(NUMERO));
 
-        String consulta = fixture.menu.processarMenu(
-                NUMERO, "qual serviço tem", fixture.states.buscarPorNumero(NUMERO));
-
-        assertTrue(consulta.contains("Escova"), consulta);
-        assertTrue(consulta.contains("Manicure"), consulta);
-        assertTrue(consulta.contains("45 min · R$ 80,00"), consulta);
-        assertFalse(consulta.contains("Não consegui entender completamente"), consulta);
+        assertTrue(resposta.contains("escolha o serviço pelos botões"), resposta);
+        assertTrue(resposta.contains("Abrir agenda"), resposta);
+        assertTrue(resposta.contains("Manicure"), resposta);
         assertEquals(ConversationStep.AGUARDANDO_SERVICO,
                 fixture.states.buscarPorNumero(NUMERO).getStep());
     }
 
     @Test
-    void variacoesDePerguntaSobreCatalogoNaoCaemNoFallbackGenerico() {
+    void naoDepoisDeFinalizadoEncerraSemFallbackGenerico() {
         var fixture = fixture();
-        when(fixture.gateway.listarServicos()).thenReturn(List.of(
-                new ConversationBookingGateway.Servico("Escova", "", 45, 80.0, "BRL")));
+        ConversationState state = fixture.states.buscarPorNumero(NUMERO);
+        state.setStep(ConversationStep.FINALIZADO);
+        fixture.states.persistir(state);
 
-        for (String mensagem : List.of(
-                "quais serviços tem",
-                "tem quais serviços?",
-                "que serviços vocês tem?",
-                "qual serviço vocês oferecem?")) {
-            String resposta = fixture.menu.processarMenu(
-                    NUMERO, mensagem, fixture.states.buscarPorNumero(NUMERO));
+        String resposta = fixture.menu.processarMenu(
+                NUMERO, "Não", fixture.states.buscarPorNumero(NUMERO));
 
-            assertTrue(resposta.contains("Escova"), mensagem + " -> " + resposta);
-            assertFalse(resposta.contains("reformular"), mensagem + " -> " + resposta);
-        }
+        assertEquals("Tudo certo. Até mais!", resposta);
+        assertFalse(resposta.contains("reformular"), resposta);
     }
 
     @Test
-    void agendarVaiDiretoParaServicoSemAbrirAgendaVisual() {
+    void consultaDeServicosContinuaUsandoCatalogoRealEClicavel() {
         var fixture = fixture();
         when(fixture.gateway.listarServicos()).thenReturn(List.of(
                 new ConversationBookingGateway.Servico("Escova", "", 45, 80.0, "BRL"),
                 new ConversationBookingGateway.Servico("Manicure", "", 40, 55.0, "BRL")));
 
         String resposta = fixture.menu.processarMenu(
-                NUMERO, "agendar", fixture.states.buscarPorNumero(NUMERO));
+                NUMERO, "quais serviços vocês fazem?", fixture.states.buscarPorNumero(NUMERO));
 
-        assertTrue(resposta.contains("O que você quer fazer?"), resposta);
-        assertTrue(resposta.contains("45 min · R$ 80,00"), resposta);
-        assertTrue(resposta.contains("40 min · R$ 55,00"), resposta);
-        assertFalse(resposta.contains("Abrir agenda"), resposta);
+        assertTrue(resposta.contains("Escova"), resposta);
+        assertTrue(resposta.contains("Manicure"), resposta);
+        assertTrue(resposta.contains("[[choice:"), resposta);
         assertEquals(ConversationStep.AGUARDANDO_SERVICO,
                 fixture.states.buscarPorNumero(NUMERO).getStep());
     }
@@ -139,22 +147,6 @@ class StrictMvpNaturalConversationTest {
     }
 
     @Test
-    void nomeDoServicoSozinhoJaIniciaOAgendamentoSemMenuIntermediario() {
-        var fixture = fixture();
-        when(fixture.gateway.nomeCanonicoDoServico("manicure"))
-                .thenReturn(Optional.of("Manicure"));
-
-        String resposta = fixture.menu.processarMenu(
-                NUMERO, "manicure", fixture.states.buscarPorNumero(NUMERO));
-
-        assertTrue(resposta.contains("Manicure"), resposta);
-        assertTrue(resposta.contains("Para qual dia"), resposta);
-        ConversationState salvo = fixture.states.buscarPorNumero(NUMERO);
-        assertEquals(ConversationStep.AGUARDANDO_DIA, salvo.getStep());
-        assertEquals("Manicure", salvo.getDraftAtual().getServico());
-    }
-
-    @Test
     void diaEHorarioNaMesmaMensagemSaoAproveitadosNoMesmoTurno() {
         var fixture = fixture();
         ConversationState state = fixture.states.buscarPorNumero(NUMERO);
@@ -174,22 +166,6 @@ class StrictMvpNaturalConversationTest {
         assertEquals("10:30", salvo.getDraftAtual().getHorario());
         assertEquals(ConversationStep.AGUARDANDO_NOME, salvo.getStep());
         assertTrue(resposta.contains("Qual é o seu nome"), resposta);
-    }
-
-    @Test
-    void consultaDeServicosUsaCatalogoRealEJaDeixaOpcoesClicaveis() {
-        var fixture = fixture();
-        when(fixture.gateway.listarServicos()).thenReturn(List.of(
-                new ConversationBookingGateway.Servico("Manicure"),
-                new ConversationBookingGateway.Servico("Escova")));
-
-        String resposta = fixture.menu.processarMenu(
-                NUMERO, "quais serviços vocês fazem?", fixture.states.buscarPorNumero(NUMERO));
-
-        assertTrue(resposta.contains("Manicure"), resposta);
-        assertTrue(resposta.contains("Escova"), resposta);
-        assertEquals(ConversationStep.AGUARDANDO_SERVICO,
-                fixture.states.buscarPorNumero(NUMERO).getStep());
     }
 
     @Test
@@ -227,6 +203,10 @@ class StrictMvpNaturalConversationTest {
     }
 
     private Fixture fixture() {
+        return fixture(null);
+    }
+
+    private Fixture fixture(AberturaDeAgenda agenda) {
         ConversationStateService states =
                 new ConversationStateService(new InMemoryConversationStateRepository());
         ConversationBookingGateway gateway = mock(ConversationBookingGateway.class);
@@ -238,7 +218,7 @@ class StrictMvpNaturalConversationTest {
                 states,
                 mock(AvailabilityApplicationService.class),
                 mock(BookingApplicationService.class),
-                OptionalBeans.ausente(),
+                agenda == null ? OptionalBeans.ausente() : OptionalBeans.de(agenda),
                 "STRICT_MVP",
                 gateway,
                 saudacao,
