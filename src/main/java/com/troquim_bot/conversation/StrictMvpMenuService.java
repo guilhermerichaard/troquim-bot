@@ -1183,7 +1183,7 @@ public class StrictMvpMenuService {
                                 .append(ConversationBookingGateway.formatarHorario(slot.horario()))
                                 .append("]]\n");
                     }
-                    response.append("[[choice:horarios_pagina_1|Ver mais horários]]\n");
+                    response.append("[[choice:horarios_pagina_1|Ver todos os horários]]\n");
                     response.append("[[choice:agenda_visual|Ver agenda completa]]\n");
                     response.append(CHOICE_BACK);
                     return response.toString();
