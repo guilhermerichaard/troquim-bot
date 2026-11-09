@@ -36,11 +36,6 @@ public class StrictMvpMenuService {
                     + "\n\n[[choice:retry_confirmacao|Tentar novamente]]\n"
                     + CHOICE_BACK;
 
-    /** Texto natural: o cliente toca no botao, sem "digite 1". */
-    private static final String MENSAGEM_AGENDA_ABERTA =
-            "Te mandei a agenda aqui em cima. É só tocar em \"Abrir agenda\" e escolher.\n\n"
-                    + "Se preferir continuar pelo chat, escolha o serviço abaixo.";
-
     private static final String MENSAGEM_FALHA_CONSULTA_HORARIOS =
             "Não consegui consultar os horários agora. Tente novamente em instantes "
                     + "ou toque em Voltar para escolher outro dia.";
@@ -178,6 +173,10 @@ public class StrictMvpMenuService {
             return menuCancelamentos(numero, paginaCancelamentos);
         }
 
+        if ("agenda_visual".equals(texto)) {
+            return abrirAgendaVisual(numero);
+        }
+
         Optional<String> respostaFactual = responderPerguntaDoNegocio(numero, mensagem, texto, step);
         if (respostaFactual.isPresent()) {
             return respostaFactual.get();
@@ -221,7 +220,10 @@ public class StrictMvpMenuService {
                 return servicoDireto.get();
             }
 
-            return menuPrincipal(numero);
+            // Premium UX: uma mensagem desconhecida nunca reinicia a conversa nem
+            // reapresenta o menu. Abstemos para que a camada conversacional/fallback
+            // responda usando contexto.
+            return null;
         }
 
         if (step == ConversationStep.AGUARDANDO_SERVICO) {
@@ -890,16 +892,10 @@ public class StrictMvpMenuService {
     private String menuPrincipal(String numero) {
         ConversationState state = conversationStateService.buscarPorNumero(numero);
         String nomePerfil = primeiroNome(state.getNomePerfil());
-        String saudacao = saudacaoDoNegocio.atual();
-        String abertura = nomePerfil == null
-                ? saudacao + "!"
-                : "Olá " + nomePerfil + ", " + minusculaInicial(saudacao) + "!";
-        return abertura
-                + " Me conta o que você precisa — pode falar do seu jeito.\n"
-                + "Se quiser, também posso te mostrar as opções:\n\n"
-                + "1) Agendar\n"
-                + "2) Meus agendamentos\n"
-                + "3) Cancelar";
+        if (nomePerfil == null) {
+            return "Como posso ajudar?";
+        }
+        return "Oi, " + nomePerfil + ". Como posso ajudar?";
     }
 
     private String iniciarNovoAgendamento(String numero) {
@@ -908,18 +904,19 @@ public class StrictMvpMenuService {
         state.setStep(ConversationStep.AGUARDANDO_SERVICO);
         conversationStateService.atualizarStep(state);
         conversationStateService.persistir(state);
-
-        // ÚNICO ponto de integração com a agenda rica. A conversa nao conhece WhatsApp
-        // Flow, Meta nem criptografia: pergunta a uma capacidade opcional se ela existe e
-        // manda abrir. Ausente, desligada ou com falha de envio, o menu textual segue
-        // exatamente como antes — o estado da conversa ja foi preparado acima, entao o
-        // cliente que ignorar o botao continua atendido pelo texto.
-        AberturaDeAgenda agenda = aberturaDeAgenda.getIfAvailable();
-        if (agenda != null && agenda.disponivel() && agenda.abrirPara(numero).abriu()) {
-            return MENSAGEM_AGENDA_ABERTA + "\n\n" + menuServicos();
-        }
-
         return menuServicos();
+    }
+
+    private String abrirAgendaVisual(String numero) {
+        AberturaDeAgenda agenda = aberturaDeAgenda.getIfAvailable();
+        if (agenda == null || !agenda.disponivel()) {
+            return "A agenda completa não está disponível agora. Posso continuar por aqui.";
+        }
+        var resultado = agenda.abrirPara(numero);
+        if (!resultado.abriu()) {
+            return "Não consegui abrir a agenda completa agora. Posso continuar por aqui.";
+        }
+        return "Abri a agenda completa para você.";
     }
 
     private ConversationState reiniciarFluxoPreservandoPerfil(String numero) {
@@ -940,22 +937,46 @@ public class StrictMvpMenuService {
     }
 
     private String menuServicos(int pagina) {
-        List<String> nomes;
         if (conversationBookingGateway == null) {
-            nomes = List.of("Unha", "Cabelo", "Sobrancelha", "Cílios", "Pé e mão");
-        } else {
-            List<ConversationBookingGateway.Servico> servicos =
-                    conversationBookingGateway.listarServicos();
-            if (servicos.isEmpty()) {
-                return "Nenhum serviço disponível no momento.\n\n" + CHOICE_BACK;
-            }
-            nomes = servicos.stream().map(ConversationBookingGateway.Servico::nome).toList();
+            List<String> nomes = List.of("Unha", "Cabelo", "Sobrancelha", "Cílios", "Pé e mão");
+            StringBuilder sb = new StringBuilder("O que você quer fazer?\n\n");
+            appendPaginatedOptions(
+                    sb, nomes, pagina, "servicos_pagina_",
+                    "← Serviços anteriores", "Mais serviços →");
+            return sb.toString();
         }
 
-        StringBuilder sb = new StringBuilder("Qual serviço você gostaria de agendar?\n\n");
-        appendPaginatedOptions(
-                sb, nomes, pagina, "servicos_pagina_",
-                "← Serviços anteriores", "Mais serviços →");
+        List<ConversationBookingGateway.Servico> servicos =
+                conversationBookingGateway.listarServicos();
+        if (servicos.isEmpty()) {
+            return "Nenhum serviço disponível no momento.\n\n" + CHOICE_BACK;
+        }
+
+        int totalPaginas = Math.max(1, (servicos.size() + INTERACTIVE_PAGE_SIZE - 1) / INTERACTIVE_PAGE_SIZE);
+        int paginaValida = Math.max(0, Math.min(pagina, totalPaginas - 1));
+        int inicio = paginaValida * INTERACTIVE_PAGE_SIZE;
+        int fim = Math.min(servicos.size(), inicio + INTERACTIVE_PAGE_SIZE);
+
+        StringBuilder sb = new StringBuilder("O que você quer fazer?\n\n");
+        for (int i = inicio; i < fim; i++) {
+            var servico = servicos.get(i);
+            String detalhes = servico.detalhes();
+            sb.append("[[choice:").append(i + 1).append("|")
+                    .append(servico.nome());
+            if (!detalhes.isBlank()) {
+                sb.append("|").append(detalhes);
+            }
+            sb.append("]]\n");
+        }
+        if (paginaValida > 0) {
+            sb.append("[[choice:servicos_pagina_").append(paginaValida - 1)
+                    .append("|← Serviços anteriores]]\n");
+        }
+        if (fim < servicos.size()) {
+            sb.append("[[choice:servicos_pagina_").append(paginaValida + 1)
+                    .append("|Mais serviços →]]\n");
+        }
+        sb.append(CHOICE_BACK);
         return sb.toString();
     }
 
@@ -1055,7 +1076,7 @@ public class StrictMvpMenuService {
     }
 
     private String menuDias() {
-        return "Perfeito! Para qual dia você gostaria?\n\n" + opcoesDias();
+        return "Qual dia fica melhor?\n\n" + opcoesDias();
     }
 
     private String opcoesDias() {
@@ -1143,6 +1164,31 @@ public class StrictMvpMenuService {
 
         if (conversationBookingGateway != null) {
             String servico = state.getDraftAtual().getServico();
+
+            if (pagina == 0) {
+                var recomendacao = conversationBookingGateway.recomendarHorariosDoDia(servico, dia, 3);
+                if (recomendacao.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
+                    return "Há mais de um profissional disponível para esse serviço.\n\n"
+                            + "[[choice:agenda_visual|Ver agenda completa]]\n"
+                            + CHOICE_BACK;
+                }
+                if (recomendacao.ok() && !recomendacao.slots().isEmpty()) {
+                    StringBuilder response = new StringBuilder(
+                            "Separei estes horários para " + formatarDiaExibicao(dia) + ":\n\n");
+                    for (var slot : recomendacao.slots()) {
+                        String id = "turbo_slot_" + slot.data() + "_"
+                                + String.format("%02d%02d", slot.horario().getHour(), slot.horario().getMinute());
+                        response.append("[[choice:").append(id).append("|")
+                                .append(ConversationBookingGateway.formatarHorario(slot.horario()))
+                                .append("]]\n");
+                    }
+                    response.append("[[choice:horarios_pagina_1|Ver mais horários]]\n");
+                    response.append("[[choice:agenda_visual|Ver agenda completa]]\n");
+                    response.append(CHOICE_BACK);
+                    return response.toString();
+                }
+            }
+
             ConversationBookingGateway.ConsultaHorarios consulta =
                     conversationBookingGateway.consultarHorarios(servico, dia);
 
@@ -1156,8 +1202,8 @@ public class StrictMvpMenuService {
                 return "Esse serviço não está disponível.\n\n" + menuServicos();
             }
             if (consulta.status() == ConversationBookingGateway.Status.PROFISSIONAL_AMBIGUO) {
-                return "Esse serviço tem mais de um profissional disponível. "
-                        + "Abra a agenda visual para escolher o profissional.\n\n"
+                return "Há mais de um profissional disponível para esse serviço.\n\n"
+                        + "[[choice:agenda_visual|Ver agenda completa]]\n"
                         + CHOICE_BACK;
             }
             if (consulta.status() == ConversationBookingGateway.Status.FALHA_TECNICA) {
@@ -1180,7 +1226,7 @@ public class StrictMvpMenuService {
             List<String> horarios = consulta.horarios().stream()
                     .map(ConversationBookingGateway::formatarHorario)
                     .toList();
-            return montarMenuHorarios(dia, horarios, pagina);
+            return montarMenuHorarios(dia, horarios, Math.max(0, pagina - 1));
         }
 
         List<String> horarios = availabilityApplicationService.consultarDisponibilidade(dia);
@@ -1198,6 +1244,7 @@ public class StrictMvpMenuService {
         appendPaginatedOptions(
                 sb, horarios, pagina, "horarios_pagina_",
                 "← Horários anteriores", "Mais horários →");
+        sb.append("\n[[choice:agenda_visual|Ver agenda completa]]");
         return sb.toString();
     }
 
