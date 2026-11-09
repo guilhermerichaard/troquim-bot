@@ -28,56 +28,63 @@ class StrictMvpNaturalConversationTest {
     private static final String NUMERO = "5511999990000";
 
     @Test
-    void mensagemLivreNoInicioNaoEInterpretadaComoServicoEOfereceCaminhosClicaveis() {
+    void digitacaoLivreNaoDisparaInterpretacaoDeServicoNemExibeHorarios() {
         var fixture = fixture();
-
-        String resposta = fixture.menu.processarMenu(
-                NUMERO, "MANI", fixture.states.buscarPorNumero(NUMERO));
-
-        assertTrue(resposta.contains("Abrir agenda"), resposta);
-        assertTrue(resposta.contains("Escolher serviço"), resposta);
-        assertFalse(resposta.contains("reformular"), resposta);
+        for (String entrada : List.of("MANI", "manicure", "quinta 10:30", "AKHA")) {
+            String resposta = fixture.menu.processarMenu(
+                    NUMERO, entrada, fixture.states.buscarPorNumero(NUMERO));
+            assertTrue(resposta.contains("[[choice:agenda_visual|Abrir agenda]]"), resposta);
+            assertFalse(resposta.contains("reformular"), resposta);
+            assertFalse(resposta.contains("15:30"), resposta);
+        }
         assertEquals(ConversationStep.INICIO, fixture.states.buscarPorNumero(NUMERO).getStep());
     }
 
     @Test
-    void agendarAbreAgendaComoCaminhoPrincipalEDeixaServicoComoAlternativa() {
+    void agendarEnviaApenasOFlowSemSegundaMensagemRedundante() {
         AberturaDeAgenda agenda = mock(AberturaDeAgenda.class);
         when(agenda.disponivel()).thenReturn(true);
         when(agenda.abrirPara(NUMERO)).thenReturn(AberturaDeAgendaResultado.enviado());
-
         var fixture = fixture(agenda);
 
         String resposta = fixture.menu.processarMenu(
                 NUMERO, "agendar", fixture.states.buscarPorNumero(NUMERO));
 
-        assertTrue(resposta.contains("Te enviei a agenda"), resposta);
-        assertTrue(resposta.contains("Prefiro escolher o serviço"), resposta);
-        assertFalse(resposta.contains("Para qual dia"), resposta);
-        assertEquals(ConversationStep.AGUARDANDO_SERVICO,
-                fixture.states.buscarPorNumero(NUMERO).getStep());
+        assertEquals("", resposta);
+        org.mockito.Mockito.verify(agenda).abrirPara(NUMERO);
+        assertEquals(ConversationStep.INICIO, fixture.states.buscarPorNumero(NUMERO).getStep());
     }
 
     @Test
-    void servicoDigitadoDuranteEscolhaNaoEAdvinhadoEReapresentaBotoes() {
-        var fixture = fixture();
-        when(fixture.gateway.listarServicos()).thenReturn(List.of(
-                new ConversationBookingGateway.Servico("Escova", "", 45, 80.0, "BRL"),
-                new ConversationBookingGateway.Servico("Manicure", "", 40, 55.0, "BRL")));
-
-        ConversationState state = fixture.states.buscarPorNumero(NUMERO);
-        state.criarNovoDraft();
-        state.setStep(ConversationStep.AGUARDANDO_SERVICO);
-        fixture.states.persistir(state);
+    void falhaNoEnvioNaoMandaClienteDigitarServicoOuHorario() {
+        AberturaDeAgenda agenda = mock(AberturaDeAgenda.class);
+        when(agenda.disponivel()).thenReturn(true);
+        when(agenda.abrirPara(NUMERO))
+                .thenReturn(AberturaDeAgendaResultado.falhaNoEnvio("temporaria"));
+        var fixture = fixture(agenda);
 
         String resposta = fixture.menu.processarMenu(
-                NUMERO, "manicure", fixture.states.buscarPorNumero(NUMERO));
+                NUMERO, "agendar", fixture.states.buscarPorNumero(NUMERO));
 
-        assertTrue(resposta.contains("escolha o serviço pelos botões"), resposta);
-        assertTrue(resposta.contains("Abrir agenda"), resposta);
-        assertTrue(resposta.contains("Manicure"), resposta);
-        assertEquals(ConversationStep.AGUARDANDO_SERVICO,
-                fixture.states.buscarPorNumero(NUMERO).getStep());
+        assertTrue(resposta.contains("Tente novamente"), resposta);
+        assertFalse(resposta.contains("Escolher serviço"), resposta);
+    }
+
+    @Test
+    void estadoLegadoDeServicoOuHorarioNaoReativaFormularioTextual() {
+        var fixture = fixture();
+        for (ConversationStep step : List.of(
+                ConversationStep.AGUARDANDO_SERVICO,
+                ConversationStep.AGUARDANDO_DIA,
+                ConversationStep.AGUARDANDO_HORARIO)) {
+            ConversationState state = fixture.states.buscarPorNumero(NUMERO);
+            state.setStep(step);
+            fixture.states.persistir(state);
+            String resposta = fixture.menu.processarMenu(
+                    NUMERO, "manicure", fixture.states.buscarPorNumero(NUMERO));
+            assertTrue(resposta.contains("Abrir agenda"), resposta);
+            assertFalse(resposta.contains("O que você quer fazer?"), resposta);
+        }
     }
 
     @Test
@@ -91,11 +98,10 @@ class StrictMvpNaturalConversationTest {
                 NUMERO, "Não", fixture.states.buscarPorNumero(NUMERO));
 
         assertEquals("Tudo certo. Até mais!", resposta);
-        assertFalse(resposta.contains("reformular"), resposta);
     }
 
     @Test
-    void consultaDeServicosContinuaUsandoCatalogoRealEClicavel() {
+    void consultaDeServicosPodeExibirCatalogoRealMasNaoIniciaBookingTextual() {
         var fixture = fixture();
         when(fixture.gateway.listarServicos()).thenReturn(List.of(
                 new ConversationBookingGateway.Servico("Escova", "", 45, 80.0, "BRL"),
@@ -106,66 +112,6 @@ class StrictMvpNaturalConversationTest {
 
         assertTrue(resposta.contains("Escova"), resposta);
         assertTrue(resposta.contains("Manicure"), resposta);
-        assertTrue(resposta.contains("[[choice:"), resposta);
-        assertEquals(ConversationStep.AGUARDANDO_SERVICO,
-                fixture.states.buscarPorNumero(NUMERO).getStep());
-    }
-
-    @Test
-    void primeiroBlocoDeHorarioMostraTresRecomendacoesEAgendaComoEscape() {
-        var fixture = fixture();
-        ConversationState state = fixture.states.buscarPorNumero(NUMERO);
-        state.criarNovoDraft();
-        state.getDraftAtual().setServico("Escova");
-        state.getDraftAtual().setDia("quinta");
-        state.setStep(ConversationStep.AGUARDANDO_HORARIO);
-        fixture.states.persistir(state);
-
-        var slots = List.of(
-                new ConversationBookingGateway.SlotSugerido(
-                        "Escova", java.time.LocalDate.of(2026, 11, 12), LocalTime.of(15, 30)),
-                new ConversationBookingGateway.SlotSugerido(
-                        "Escova", java.time.LocalDate.of(2026, 11, 12), LocalTime.of(17, 0)),
-                new ConversationBookingGateway.SlotSugerido(
-                        "Escova", java.time.LocalDate.of(2026, 11, 12), LocalTime.of(18, 30)));
-
-        when(fixture.gateway.recomendarHorariosDoDia("Escova", "quinta", 3))
-                .thenReturn(new ConversationBookingGateway.Recomendacao(
-                        ConversationBookingGateway.Status.OK, "Escova", slots, false));
-
-        state.setStep(ConversationStep.AGUARDANDO_DIA);
-        fixture.states.persistir(state);
-
-        String resposta = fixture.menu.processarMenu(
-                NUMERO, "quinta", fixture.states.buscarPorNumero(NUMERO));
-
-        assertTrue(resposta.contains("15:30"), resposta);
-        assertTrue(resposta.contains("17h"), resposta);
-        assertTrue(resposta.contains("18:30"), resposta);
-        assertTrue(resposta.contains("Ver todos os horários"), resposta);
-        assertTrue(resposta.contains("Ver agenda completa"), resposta);
-    }
-
-    @Test
-    void diaEHorarioNaMesmaMensagemSaoAproveitadosNoMesmoTurno() {
-        var fixture = fixture();
-        ConversationState state = fixture.states.buscarPorNumero(NUMERO);
-        state.criarNovoDraft();
-        state.getDraftAtual().setServico("Manicure");
-        state.setStep(ConversationStep.AGUARDANDO_DIA);
-        fixture.states.persistir(state);
-
-        when(fixture.gateway.horarioPertenceAOferta("Manicure", "quinta", "10:30"))
-                .thenReturn(true);
-
-        String resposta = fixture.menu.processarMenu(
-                NUMERO, "quinta 10:30", fixture.states.buscarPorNumero(NUMERO));
-
-        ConversationState salvo = fixture.states.buscarPorNumero(NUMERO);
-        assertEquals("quinta", salvo.getDraftAtual().getDia());
-        assertEquals("10:30", salvo.getDraftAtual().getHorario());
-        assertEquals(ConversationStep.AGUARDANDO_NOME, salvo.getStep());
-        assertTrue(resposta.contains("Qual é o seu nome"), resposta);
     }
 
     @Test
