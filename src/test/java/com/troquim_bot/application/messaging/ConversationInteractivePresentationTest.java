@@ -100,7 +100,7 @@ class ConversationInteractivePresentationTest {
                 + "[[choice:2|Manicure|40 min · R$ 55,00]]\n"
                 + "[[choice:nav_voltar|← Voltar]]").orElseThrow();
 
-        assertEquals(ConversationInteractivePresentation.Type.BUTTONS, presentation.type());
+        assertEquals(ConversationInteractivePresentation.Type.LIST, presentation.type());
         assertEquals("Escova", presentation.options().get(0).title());
         assertEquals("45 min · R$ 80,00", presentation.options().get(0).description());
         assertEquals("40 min · R$ 55,00", presentation.options().get(1).description());
