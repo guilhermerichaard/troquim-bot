@@ -51,6 +51,11 @@ jobs:
               echo "droplet_match=yes"
             else
               echo "droplet_match=no"
+              echo "droplet_diff_sanitized:"
+              diff -u "${RELEASE_DROPLET}" "${CURRENT_DROPLET}" 2>/dev/null \
+                | sed -E '/^[+-].*(PASSWORD|SECRET|TOKEN|KEY|ACCESS|PEPPER|PRIVATE|CREDENTIAL)/Id' \
+                | sed -E 's#(https?://)[^/@[:space:]]+@#\1<redacted>@#g' \
+                | head -120 || true
             fi
           else
             echo "droplet_hash_check=missing_file"
