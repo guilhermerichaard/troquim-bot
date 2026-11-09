@@ -48,7 +48,7 @@ class StrictMvpMenuServiceTest {
                         new CustomerProfileService(new InMemoryCustomerRepository(), TestTenants.pilot()),
                 new InMemoryBookingIdempotencyStore(), new com.troquim_bot.infrastructure.persistence.InMemoryBookingSlotCriticalSection(), com.troquim_bot.support.TestBookingSupport.consultarDisponibilidadeInerte()),
                 OptionalBeans.ausente(),
-                "STRICT_MVP"
+                "STRICT_MVP_LEGACY"
         );
 
         // Cliente envia "oi": recebe o menu principal, estado permanece em INICIO
@@ -558,7 +558,7 @@ class StrictMvpMenuServiceTest {
                 mock(AvailabilityApplicationService.class),
                 mock(BookingApplicationService.class),
                 OptionalBeans.ausente(),
-                "STRICT_MVP",
+                "STRICT_MVP_LEGACY",
                 gateway);
     }
 

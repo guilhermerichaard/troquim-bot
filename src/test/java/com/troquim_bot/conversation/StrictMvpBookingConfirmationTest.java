@@ -62,7 +62,7 @@ class StrictMvpBookingConfirmationTest {
                 AvailabilityDeTeste.legado(),
                 booking,
                 OptionalBeans.ausente(),
-                "STRICT_MVP");
+                "STRICT_MVP_LEGACY");
     }
 
     /** Envia uma mensagem como o ConversationOrchestrator faz: buscando o estado do repositório. */

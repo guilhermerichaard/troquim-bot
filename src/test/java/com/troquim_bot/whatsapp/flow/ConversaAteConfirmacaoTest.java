@@ -74,7 +74,7 @@ class ConversaAteConfirmacaoTest {
         registry.add("troquim.integrations.whatsapp.flow.enabled", () -> "true");
         registry.add("troquim.integrations.whatsapp.flow.private-key", CRYPTO::privateKeyPem);
         registry.add("troquim.integrations.whatsapp.flow.flow-id", () -> "1234567890");
-        registry.add("conversation.mode", () -> "STRICT_MVP");
+        registry.add("conversation.mode", () -> "STRICT_MVP_LEGACY");
     }
 
     /** Único duplo: não há Meta do outro lado para receber a mensagem. */
