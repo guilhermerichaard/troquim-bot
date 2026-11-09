@@ -93,6 +93,21 @@ class ConversationInteractivePresentationTest {
     }
 
     @Test
+    void servicoPodeLevarDuracaoEPrecoNaDescricaoDaLista() {
+        var presentation = ConversationInteractivePresentation.from(
+                "O que você quer fazer?\n\n"
+                + "[[choice:1|Escova|45 min · R$ 80,00]]\n"
+                + "[[choice:2|Manicure|40 min · R$ 55,00]]\n"
+                + "[[choice:nav_voltar|← Voltar]]").orElseThrow();
+
+        assertEquals(ConversationInteractivePresentation.Type.LIST, presentation.type());
+        assertEquals("Escova", presentation.options().get(0).title());
+        assertEquals("45 min · R$ 80,00", presentation.options().get(0).description());
+        assertEquals("40 min · R$ 55,00", presentation.options().get(1).description());
+        assertFalse(presentation.text().contains("[[choice:"));
+    }
+
+    @Test
     void somenteVoltarAindaRenderizaBotao() {
         var presentation = ConversationInteractivePresentation.from(
                 "Não consegui consultar os horários agora.\n\n"

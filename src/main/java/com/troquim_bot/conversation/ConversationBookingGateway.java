@@ -57,7 +57,33 @@ public class ConversationBookingGateway {
         FALHA_TECNICA
     }
 
-    public record Servico(String nome) {
+    public record Servico(String nome,
+                          String descricao,
+                          long duracaoMinutos,
+                          Double preco,
+                          String moeda) {
+
+        public Servico(String nome) {
+            this(nome, "", 0, null, null);
+        }
+
+        public String detalhes() {
+            java.util.ArrayList<String> partes = new java.util.ArrayList<>();
+            if (duracaoMinutos > 0) {
+                if (duracaoMinutos >= 60 && duracaoMinutos % 60 == 0) {
+                    partes.add((duracaoMinutos / 60) + "h");
+                } else if (duracaoMinutos > 60) {
+                    partes.add((duracaoMinutos / 60) + "h" + (duracaoMinutos % 60));
+                } else {
+                    partes.add(duracaoMinutos + " min");
+                }
+            }
+            if (preco != null) {
+                String simbolo = "BRL".equalsIgnoreCase(moeda) ? "R$" : (moeda == null ? "" : moeda);
+                partes.add(simbolo + " " + String.format(java.util.Locale.of("pt", "BR"), "%.2f", preco));
+            }
+            return String.join(" · ", partes);
+        }
     }
 
     /**
@@ -141,6 +167,13 @@ public class ConversationBookingGateway {
                               LocalTime time) {
     }
 
+    private record ServicoIdentificado(Status status,
+                                       ConsultarCatalogo.ItemDeCatalogo item) {
+        boolean ok() {
+            return status == Status.OK && item != null;
+        }
+    }
+
     private record ServicoResolvido(Status status,
                                     ConsultarCatalogo.ItemDeCatalogo item,
                                     ProfessionalId profissional) {
@@ -197,13 +230,18 @@ public class ConversationBookingGateway {
     public List<Servico> listarServicos() {
         BusinessId businessId = tenantProvider.currentBusinessId();
         return consultarCatalogo.consultar(businessId).itens().stream()
-                .map(item -> new Servico(item.nome()))
+                .map(item -> new Servico(
+                        item.nome(),
+                        item.descricao(),
+                        item.duracao().toMinutes(),
+                        item.preco().map(valor -> valor.getAmount().doubleValue()).orElse(null),
+                        item.preco().map(valor -> valor.getCurrency()).orElse(null)))
                 .toList();
     }
 
     public Optional<String> nomeCanonicoDoServico(String nomeInterpretado) {
-        ServicoResolvido resolvido = resolverServico(nomeInterpretado);
-        return resolvido.ok() ? Optional.of(resolvido.item().nome()) : Optional.empty();
+        ServicoIdentificado identificado = identificarServico(nomeInterpretado);
+        return identificado.ok() ? Optional.of(identificado.item().nome()) : Optional.empty();
     }
 
     /**
@@ -257,7 +295,7 @@ public class ConversationBookingGateway {
     }
 
     public Status statusDoServico(String nomeInterpretado) {
-        return resolverServico(nomeInterpretado).status();
+        return identificarServico(nomeInterpretado).status();
     }
 
     /**
@@ -272,9 +310,9 @@ public class ConversationBookingGateway {
         }
 
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido servico = intent.sameAsUsual()
-                ? resolverServicoDoHistorico(businessId, telefone)
-                : resolverServico(intent.serviceQuery());
+        ServicoIdentificado servico = intent.sameAsUsual()
+                ? identificarServicoDoHistorico(businessId, telefone)
+                : identificarServico(intent.serviceQuery());
 
         if (!servico.ok()) {
             return new Recomendacao(servico.status(),
@@ -292,40 +330,61 @@ public class ConversationBookingGateway {
             datas = List.of(data.get());
         } else {
             LocalDate hoje = relogio.hoje();
-            datas = availabilityApplicationService.datasComVaga(
-                    businessId, servico.item().id(), servico.profissional(), hoje, hoje.plusDays(6));
+            datas = java.util.stream.IntStream.rangeClosed(0, 6)
+                    .mapToObj(hoje::plusDays)
+                    .toList();
         }
 
-        com.troquim_bot.availability.SlotRecommendationPolicy policy =
-                new com.troquim_bot.availability.SlotRecommendationPolicy();
+        List<SlotSugerido> slots = rankearSlotsUnicos(
+                servico.item(),
+                candidatosValidos(businessId, servico.item(), datas, intent),
+                intent.targetTime(),
+                3);
 
-        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
-                new java.util.ArrayList<>();
-        for (LocalDate data : datas) {
-            for (LocalTime horario : availabilityApplicationService.horariosLivres(
-                    businessId, servico.item().id(), servico.profissional(), data)) {
-                if (!intent.accepts(horario)) {
-                    continue;
-                }
-                candidatos.add(new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
-                        data, horario, gapAdjacenteMinutos(
-                                businessId, servico.profissional(), data, horario, servico.item().duracao())));
-            }
+        return new Recomendacao(
+                Status.OK,
+                servico.item().nome(),
+                slots,
+                intent.sameAsUsual());
+    }
+
+    public Recomendacao recomendarHorariosDoDia(String nomeInterpretado,
+                                               String diaInformado,
+                                               int limite) {
+        if (limite <= 0) {
+            return new Recomendacao(Status.HORARIO_INVALIDO, "", List.of(), false);
         }
 
-        List<SlotSugerido> slots = policy.rank(candidatos, intent.targetTime(), 3).stream()
-                .map(candidato -> new SlotSugerido(
-                        servico.item().nome(), candidato.date(), candidato.time()))
-                .toList();
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        ServicoIdentificado servico = identificarServico(nomeInterpretado);
+        if (!servico.ok()) {
+            return new Recomendacao(servico.status(),
+                    servico.item() == null ? "" : servico.item().nome(), List.of(), false);
+        }
 
-        return new Recomendacao(Status.OK, servico.item().nome(), slots, intent.sameAsUsual());
+        Optional<LocalDate> data = resolverData(diaInformado);
+        if (data.isEmpty()) {
+            return new Recomendacao(Status.DIA_INVALIDO, servico.item().nome(), List.of(), false);
+        }
+
+        List<SlotSugerido> slots = rankearSlotsUnicos(
+                servico.item(),
+                candidatosValidos(businessId, servico.item(), List.of(data.get()), null),
+                null,
+                limite);
+
+        return new Recomendacao(
+                Status.OK,
+                servico.item().nome(),
+                slots,
+                false);
     }
 
     public Recomendacao alternativasParaConflito(String nomeInterpretado,
                                                    String diaInformado,
                                                    String horarioInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        ServicoIdentificado servico = identificarServico(nomeInterpretado);
         if (!servico.ok()) {
             return new Recomendacao(servico.status(),
                     servico.item() == null ? "" : servico.item().nome(), List.of(), false);
@@ -337,35 +396,28 @@ public class ConversationBookingGateway {
             return new Recomendacao(Status.HORARIO_INVALIDO, servico.item().nome(), List.of(), false);
         }
 
-        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
-                availabilityApplicationService.horariosLivres(
-                                businessId, servico.item().id(), servico.profissional(), data.get())
-                        .stream()
-                        .map(time -> new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
-                                data.get(), time, gapAdjacenteMinutos(
-                                        businessId, servico.profissional(), data.get(), time,
-                                        servico.item().duracao())))
-                        .toList();
+        List<SlotSugerido> slots = rankearSlotsUnicos(
+                servico.item(),
+                candidatosValidos(businessId, servico.item(), List.of(data.get()), null),
+                alvo.get(),
+                3);
 
-        List<SlotSugerido> slots = new com.troquim_bot.availability.SlotRecommendationPolicy()
-                .rank(candidatos, alvo.get(), 3)
-                .stream()
-                .map(candidate -> new SlotSugerido(
-                        servico.item().nome(), candidate.date(), candidate.time()))
-                .toList();
-
-        return new Recomendacao(Status.OK, servico.item().nome(), slots, false);
+        return new Recomendacao(
+                Status.OK,
+                servico.item().nome(),
+                slots,
+                false);
     }
 
-    private ServicoResolvido resolverServicoDoHistorico(BusinessId businessId, String telefone) {
+    private ServicoIdentificado identificarServicoDoHistorico(BusinessId businessId, String telefone) {
         return customerProfileService.localizarIdOficial(businessId, telefone)
                 .flatMap(customerId -> appointmentApplicationService
                         .listarHistoricoPorCliente(customerId).stream()
                         .filter(appointment -> appointment.pertenceAoTenant(businessId))
                         .findFirst())
-                .flatMap(appointment -> serviceApplicationService.buscarPorId(appointment.getServiceId()))
-                .map(servico -> resolverServico(servico.getNome()))
-                .orElseGet(() -> new ServicoResolvido(Status.SERVICO_INDISPONIVEL, null, null));
+                .flatMap(appointment -> consultarCatalogo.porServico(businessId, appointment.getServiceId()))
+                .map(item -> new ServicoIdentificado(Status.OK, item))
+                .orElseGet(() -> new ServicoIdentificado(Status.SERVICO_INDISPONIVEL, null));
     }
 
     private int gapAdjacenteMinutos(BusinessId businessId,
@@ -391,7 +443,7 @@ public class ConversationBookingGateway {
 
     public ConsultaHorarios consultarHorarios(String nomeInterpretado, String diaInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        ServicoIdentificado servico = identificarServico(nomeInterpretado);
         if (!servico.ok()) {
             return ConsultaHorarios.erro(servico.status(), nomeInterpretado, diaInformado);
         }
@@ -401,10 +453,25 @@ public class ConversationBookingGateway {
             return ConsultaHorarios.erro(Status.DIA_INVALIDO, servico.item().nome(), diaInformado);
         }
 
-        List<LocalTime> horarios = availabilityApplicationService.horariosLivres(
-                businessId, servico.item().id(), servico.profissional(), data.get());
+        List<LocalTime> horarios = servico.item().profissionais().stream()
+                .flatMap(profissional -> availabilityApplicationService.horariosLivres(
+                        businessId, servico.item().id(), profissional.id(), data.get()).stream())
+                .distinct()
+                .sorted()
+                .toList();
 
-        return new ConsultaHorarios(Status.OK, servico.item().nome(), diaInformado, horarios);
+        // Consulta bem-sucedida pode legitimamente devolver zero horários; isso não é
+        // falha técnica. A camada de conversa decide como oferecer outro dia/waitlist.
+        return new ConsultaHorarios(
+                Status.OK,
+                servico.item().nome(),
+                diaInformado,
+                horarios);
+    }
+
+    public boolean esperaRepresentavel(String nomeServico) {
+        ServicoIdentificado servico = identificarServico(nomeServico);
+        return servico.ok() && servico.item().profissionais().size() == 1;
     }
 
     /**
@@ -500,7 +567,7 @@ public class ConversationBookingGateway {
                                  String horarioInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
 
-        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        ServicoIdentificado servico = identificarServico(nomeInterpretado);
         if (!servico.ok()) {
             return new Confirmacao(servico.status(), null, nomeInterpretado, diaInformado, horarioInformado);
         }
@@ -517,11 +584,13 @@ public class ConversationBookingGateway {
                     servico.item().nome(), diaInformado, horarioInformado);
         }
 
-        // A leitura anterior serve somente para UX. A confirmacao oficial revalida o mesmo
-        // slot dentro da secao critica antes de qualquer escrita.
-        boolean livre = availabilityApplicationService.estaLivre(
-                businessId, servico.item().id(), servico.profissional(), data.get(), horario.get());
-        if (!livre) {
+        // "Qualquer profissional" e uma policy explicita: entre profissionais capazes e
+        // realmente livres para o slot escolhido, preferimos o menor buraco adjacente e
+        // usamos o id como desempate estavel. A confirmacao oficial ainda revalida dentro
+        // da secao critica antes de qualquer escrita.
+        Optional<ProfessionalId> profissional = profissionalParaSlot(
+                businessId, servico.item(), data.get(), horario.get());
+        if (profissional.isEmpty()) {
             return new Confirmacao(Status.HORARIO_INDISPONIVEL, null,
                     servico.item().nome(), diaInformado, horarioInformado);
         }
@@ -531,7 +600,7 @@ public class ConversationBookingGateway {
                 businessId.getValue(),
                 telefone,
                 servico.item().id(),
-                servico.profissional(),
+                profissional.get(),
                 data.get(),
                 horario.get());
 
@@ -540,7 +609,7 @@ public class ConversationBookingGateway {
                     new ConfirmarAgendamentoDoCatalogo.Pedido(
                             businessId,
                             servico.item().id(),
-                            servico.profissional(),
+                            profissional.get(),
                             telefone,
                             nomeCliente,
                             data.get(),
@@ -642,21 +711,33 @@ public class ConversationBookingGateway {
                 appointment.getStatus() == AppointmentStatus.CONFIRMADO);
     }
 
-    public Optional<UpsellOffer> recomendarUpsell(String nomeServicoBase,
+    public Optional<UpsellOffer> recomendarUpsell(String telefone,
+                                                      String nomeServicoBase,
                                                       String diaInformado,
                                                       String horarioInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido base = resolverServico(nomeServicoBase);
+        ServicoIdentificado base = identificarServico(nomeServicoBase);
         Optional<LocalDate> data = resolverData(diaInformado);
         Optional<LocalTime> horario = timeInputParser.parse(horarioInformado);
         if (!base.ok() || data.isEmpty() || horario.isEmpty()) {
             return Optional.empty();
         }
 
+        // Depois do commit do booking, Appointment é a única fonte correta para descobrir
+        // quem realmente atenderá. Não recalculamos profissional a partir do catálogo.
+        Optional<Appointment> appointment = agendamentosAtivosDoCliente(businessId, telefone).stream()
+                .filter(a -> a.getServiceId().equals(base.item().id()))
+                .filter(a -> a.getDate().equals(data.get()))
+                .filter(a -> a.getStartTime().equals(horario.get()))
+                .findFirst();
+        if (appointment.isEmpty()) {
+            return Optional.empty();
+        }
+
         return upsells.recommend(
                         businessId,
                         base.item().id(),
-                        base.profissional(),
+                        appointment.get().getProfessionalId(),
                         data.get(),
                         horario.get())
                 .map(offer -> new UpsellOffer(
@@ -858,11 +939,11 @@ public class ConversationBookingGateway {
         return horario.getHour() + ":" + String.format("%02d", horario.getMinute());
     }
 
-    private ServicoResolvido resolverServico(String nomeInterpretado) {
+    private ServicoIdentificado identificarServico(String nomeInterpretado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
         ConsultarCatalogo.Catalogo catalogo = consultarCatalogo.consultar(businessId);
         if (catalogo.naoConfigurado()) {
-            return new ServicoResolvido(Status.CATALOGO_NAO_CONFIGURADO, null, null);
+            return new ServicoIdentificado(Status.CATALOGO_NAO_CONFIGURADO, null);
         }
 
         Optional<ServiceId> aprendido = buscarAprendido(businessId, nomeInterpretado);
@@ -871,7 +952,7 @@ public class ConversationBookingGateway {
                     .filter(item -> item.id().equals(aprendido.get()))
                     .findFirst();
             if (itemAprendido.isPresent()) {
-                return resolverProfissional(itemAprendido.get());
+                return new ServicoIdentificado(Status.OK, itemAprendido.get());
             }
         }
 
@@ -879,19 +960,98 @@ public class ConversationBookingGateway {
                 .filter(item -> mesmoServico(item.nome(), nomeInterpretado))
                 .toList();
         if (candidatos.size() != 1) {
-            return new ServicoResolvido(Status.SERVICO_INDISPONIVEL, null, null);
+            return new ServicoIdentificado(Status.SERVICO_INDISPONIVEL, null);
         }
 
-        return resolverProfissional(candidatos.get(0));
+        return new ServicoIdentificado(Status.OK, candidatos.get(0));
     }
 
-    private ServicoResolvido resolverProfissional(ConsultarCatalogo.ItemDeCatalogo item) {
-        if (item.profissionais().size() != 1) {
-            // A conversa textual ainda nao coleta profissional. Nunca escolhemos o primeiro
-            // silenciosamente: isso seria uma decisao de negocio fabricada pelo canal.
-            return new ServicoResolvido(Status.PROFISSIONAL_AMBIGUO, item, null);
+    /**
+     * Adapter para casos que, por contrato, exigem um profissional já determinado.
+     * Booking conversacional premium não usa este método para escolher silenciosamente.
+     */
+    private ServicoResolvido resolverServico(String nomeInterpretado) {
+        ServicoIdentificado identificado = identificarServico(nomeInterpretado);
+        if (!identificado.ok()) {
+            return new ServicoResolvido(identificado.status(), identificado.item(), null);
         }
-        return new ServicoResolvido(Status.OK, item, item.profissionais().get(0).id());
+        if (identificado.item().profissionais().size() != 1) {
+            return new ServicoResolvido(Status.PROFISSIONAL_AMBIGUO, identificado.item(), null);
+        }
+        return new ServicoResolvido(
+                Status.OK, identificado.item(), identificado.item().profissionais().get(0).id());
+    }
+
+    private Optional<ProfessionalId> profissionalParaSlot(
+            BusinessId businessId,
+            ConsultarCatalogo.ItemDeCatalogo item,
+            LocalDate data,
+            LocalTime horario) {
+
+        return item.profissionais().stream()
+                .map(ConsultarCatalogo.ProfissionalDoCatalogo::id)
+                .filter(profissional -> availabilityApplicationService.estaLivre(
+                        businessId, item.id(), profissional, data, horario))
+                .sorted(java.util.Comparator
+                        .comparingInt((ProfessionalId profissional) -> gapAdjacenteMinutos(
+                                businessId, profissional, data, horario, item.duracao()))
+                        .thenComparing(profissional -> profissional.getValue().toString()))
+                .findFirst();
+    }
+
+    private List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatosValidos(
+            BusinessId businessId,
+            ConsultarCatalogo.ItemDeCatalogo item,
+            List<LocalDate> datas,
+            BookingIntent intent) {
+
+        java.util.ArrayList<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
+                new java.util.ArrayList<>();
+
+        for (var profissionalCatalogo : item.profissionais()) {
+            ProfessionalId profissional = profissionalCatalogo.id();
+            for (LocalDate data : datas) {
+                for (LocalTime horario : availabilityApplicationService.horariosLivres(
+                        businessId, item.id(), profissional, data)) {
+                    if (intent != null && !intent.accepts(horario)) {
+                        continue;
+                    }
+                    candidatos.add(new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
+                            data,
+                            horario,
+                            gapAdjacenteMinutos(
+                                    businessId, profissional, data, horario, item.duracao()),
+                            profissional.getValue().toString()));
+                }
+            }
+        }
+        return candidatos;
+    }
+
+    private List<SlotSugerido> rankearSlotsUnicos(
+            ConsultarCatalogo.ItemDeCatalogo item,
+            List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos,
+            LocalTime alvo,
+            int limite) {
+
+        if (candidatos.isEmpty() || limite <= 0) {
+            return List.of();
+        }
+
+        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> ordenados =
+                new com.troquim_bot.availability.SlotRecommendationPolicy()
+                        .rank(candidatos, alvo, candidatos.size());
+
+        java.util.LinkedHashMap<String, SlotSugerido> unicos = new java.util.LinkedHashMap<>();
+        for (var candidato : ordenados) {
+            String key = candidato.date() + "|" + candidato.time();
+            unicos.putIfAbsent(key, new SlotSugerido(
+                    item.nome(), candidato.date(), candidato.time()));
+            if (unicos.size() >= limite) {
+                break;
+            }
+        }
+        return List.copyOf(unicos.values());
     }
 
     private Optional<LocalDate> resolverData(String diaInformado) {

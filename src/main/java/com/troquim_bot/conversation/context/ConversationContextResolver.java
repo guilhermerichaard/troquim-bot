@@ -59,8 +59,17 @@ public class ConversationContextResolver {
 
     public String montarSaudacao(CustomerProfile customerProfile) {
         return customerProfileService.nomePreferido(customerProfile)
-                .map(nome -> "Boa tarde, " + nome + "! Como posso ajudar?")
-                .orElse("Boa tarde! Como posso ajudar?");
+                .map(nome -> "Oi, " + primeiroNome(nome) + ". Como posso ajudar?")
+                .orElse("Oi. Como posso ajudar?");
+    }
+
+    private String primeiroNome(String nome) {
+        if (nome == null || nome.isBlank()) {
+            return "";
+        }
+        String trimmed = nome.trim();
+        int espaco = trimmed.indexOf(' ');
+        return espaco > 0 ? trimmed.substring(0, espaco) : trimmed;
     }
 
     public String montarRespostaNome(CustomerProfile customerProfile) {

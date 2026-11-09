@@ -143,10 +143,18 @@ class ConversaAteConfirmacaoTest {
         ConversationState estado = conversationStateService.buscarPorNumero(TELEFONE);
         String resposta = menu.processarMenu(TELEFONE, "1", estado);
 
-        // A conversa oferece o botão, com texto natural — sem "digite 1" para a agenda.
-        assertTrue(resposta.contains("Abrir agenda"),
-                "A conversa deveria anunciar o botão: " + resposta);
-        assertEquals(1, GatewayDeTeste.ENVIADAS.size(), "Uma mensagem de Flow deveria ter saído");
+        // Premium UX: Agendar começa pelo serviço. O Flow é uma expansão explícita.
+        assertTrue(resposta.contains("O que você quer fazer?"),
+                "A conversa deveria começar pelo serviço: " + resposta);
+        assertEquals(0, GatewayDeTeste.ENVIADAS.size(),
+                "O Flow não deve competir com a escolha de serviço.");
+
+        String abriuAgenda = menu.processarMenu(
+                TELEFONE, "agenda_visual",
+                conversationStateService.buscarPorNumero(TELEFONE));
+        assertTrue(abriuAgenda.contains("agenda completa"), abriuAgenda);
+        assertEquals(1, GatewayDeTeste.ENVIADAS.size(),
+                "A agenda visual explícita deve enviar exatamente um Flow.");
 
         // 2. O token veio do servidor, nunca do cliente.
         FlowMessage enviada = GatewayDeTeste.ENVIADAS.get(0);
@@ -380,7 +388,7 @@ class ConversaAteConfirmacaoTest {
 
         String voltou = menu.processarMenu(
                 TELEFONE, "volta", conversationStateService.buscarPorNumero(TELEFONE));
-        assertTrue(voltou.toLowerCase().contains("serviço"), voltou);
+        assertTrue(voltou.contains("O que você quer fazer?"), voltou);
         assertEquals(com.troquim_bot.conversation.state.ConversationStep.AGUARDANDO_SERVICO,
                 conversationStateService.buscarPorNumero(TELEFONE).getStep());
 
@@ -389,7 +397,7 @@ class ConversaAteConfirmacaoTest {
         String principal = menu.processarMenu(
                 TELEFONE, "menu principal", conversationStateService.buscarPorNumero(TELEFONE));
 
-        assertTrue(principal.contains("1) Agendar"), principal);
+        assertTrue(principal.contains("Como posso ajudar?"), principal);
         assertEquals(com.troquim_bot.conversation.state.ConversationStep.INICIO,
                 conversationStateService.buscarPorNumero(TELEFONE).getStep());
     }

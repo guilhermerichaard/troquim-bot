@@ -50,11 +50,11 @@ class ConversationServiceCustomerProfileTest {
 
         String numero = "5511999999999";
 
-        assertEquals("Boa tarde! Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
+        assertEquals("Oi. Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
         conversationService.gerarResposta(numero, "Meu nome é Guilherme.");
 
         assertEquals("Guilherme", customerProfileService.localizarPorTelefone(numero).orElseThrow().getNome());
-        assertEquals("Boa tarde, Guilherme! Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
+        assertEquals("Oi, Guilherme. Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
         assertEquals("Seu nome está salvo como Guilherme.", conversationService.gerarResposta(numero, "Qual meu nome?"));
     }
 
@@ -255,7 +255,7 @@ class ConversationServiceCustomerProfileTest {
         conversationService.gerarResposta(numero, DIA);
         conversationService.gerarResposta(numero, "15h");
 
-        assertEquals("Boa tarde, Guilherme! Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
+        assertEquals("Oi, Guilherme. Como posso ajudar?", conversationService.gerarResposta(numero, "Oi"));
         assertEquals("Seu nome está salvo como Guilherme.", conversationService.gerarResposta(numero, "Qual meu nome?"));
         assertEquals("Lembro sim, Guilherme. Como posso ajudar?", conversationService.gerarResposta(numero, "Lembra de mim?"));
         assertEquals("Você tem um agendamento para unha na " + DIA + " às 15h.",

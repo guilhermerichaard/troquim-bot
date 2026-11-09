@@ -15,12 +15,20 @@ import java.util.List;
  */
 public final class SlotRecommendationPolicy {
 
-    public record Candidate(LocalDate date, LocalTime time, int adjacencyGapMinutes) {
+    public record Candidate(LocalDate date,
+                            LocalTime time,
+                            int adjacencyGapMinutes,
+                            String stableTieBreaker) {
         public Candidate {
             if (date == null || time == null) {
                 throw new IllegalArgumentException("Data e horário são obrigatórios");
             }
             adjacencyGapMinutes = Math.max(0, adjacencyGapMinutes);
+            stableTieBreaker = stableTieBreaker == null ? "" : stableTieBreaker;
+        }
+
+        public Candidate(LocalDate date, LocalTime time, int adjacencyGapMinutes) {
+            this(date, time, adjacencyGapMinutes, "");
         }
     }
 
@@ -37,11 +45,13 @@ public final class SlotRecommendationPolicy {
             comparator = comparator
                     .thenComparingLong(c -> distanceMinutes(c.time(), targetTime))
                     .thenComparingInt(Candidate::adjacencyGapMinutes)
-                    .thenComparing(Candidate::time);
+                    .thenComparing(Candidate::time)
+                    .thenComparing(Candidate::stableTieBreaker);
         } else {
             comparator = comparator
                     .thenComparingInt(Candidate::adjacencyGapMinutes)
-                    .thenComparing(Candidate::time);
+                    .thenComparing(Candidate::time)
+                    .thenComparing(Candidate::stableTieBreaker);
         }
 
         return candidates.stream()

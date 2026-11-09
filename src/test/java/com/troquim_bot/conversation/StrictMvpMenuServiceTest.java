@@ -54,12 +54,12 @@ class StrictMvpMenuServiceTest {
         // Cliente envia "oi": recebe o menu principal, estado permanece em INICIO
         ConversationState estadoInicial = conversationStateService.buscarPorNumero(NUMERO);
         String respostaSaudacao = strictMvpMenuService.processarMenu(NUMERO, "oi", estadoInicial);
-        assertTrue(respostaSaudacao.contains("pode falar do seu jeito"));
+        assertEquals("Como posso ajudar?", respostaSaudacao);
 
         // Cliente envia "1" (Agendar): deve iniciar o fluxo e persistir AGUARDANDO_SERVICO
         ConversationState estadoAntesDoMenu = conversationStateService.buscarPorNumero(NUMERO);
         String respostaMenuServicos = strictMvpMenuService.processarMenu(NUMERO, "1", estadoAntesDoMenu);
-        assertTrue(respostaMenuServicos.contains("Qual serviço"));
+        assertTrue(respostaMenuServicos.contains("O que você quer fazer?"));
 
         // Reproduz exatamente o que o ConversationOrchestrator faz na próxima mensagem:
         // busca o estado do zero no repositório (não reaproveita o objeto em memória).
@@ -70,7 +70,7 @@ class StrictMvpMenuServiceTest {
         // Cliente envia o serviço por nome: deve ser tratado como escolha de serviço
         // (avançando para o menu de dias), e não cair de volta no menu principal.
         String respostaServico = strictMvpMenuService.processarMenu(NUMERO, "cabelo", estadoPersistido);
-        assertTrue(respostaServico.contains("Para qual dia"),
+        assertTrue(respostaServico.contains("Qual dia"),
                 "Esperava avançar para o menu de dias, mas recebeu: " + respostaServico);
         assertFalseContemMenuPrincipal(respostaServico);
     }
@@ -194,28 +194,31 @@ class StrictMvpMenuServiceTest {
         var p1 = ConversationInteractivePresentation.from(primeira).orElseThrow();
         assertEquals(9, p1.options().size());
         assertEquals("1", p1.options().get(0).id());
-        assertEquals("7", p1.options().get(6).id());
-        assertEquals("horarios_pagina_1", p1.options().get(7).id());
-        assertEquals("nav_voltar", p1.options().get(8).id());
+        assertEquals("6", p1.options().get(5).id());
+        assertEquals("horarios_pagina_1", p1.options().get(6).id());
+        assertEquals("nav_voltar", p1.options().get(7).id());
+        assertEquals("agenda_visual", p1.options().get(8).id());
 
         String segunda = menu.processarMenu(
                 NUMERO, "horarios_pagina_1", states.buscarPorNumero(NUMERO));
         var p2 = ConversationInteractivePresentation.from(segunda).orElseThrow();
         assertEquals(10, p2.options().size());
-        assertEquals("8", p2.options().get(0).id());
-        assertEquals("14", p2.options().get(6).id());
-        assertEquals("horarios_pagina_0", p2.options().get(7).id());
-        assertEquals("horarios_pagina_2", p2.options().get(8).id());
-        assertEquals("nav_voltar", p2.options().get(9).id());
+        assertEquals("7", p2.options().get(0).id());
+        assertEquals("12", p2.options().get(5).id());
+        assertEquals("horarios_pagina_0", p2.options().get(6).id());
+        assertEquals("horarios_pagina_2", p2.options().get(7).id());
+        assertEquals("nav_voltar", p2.options().get(8).id());
+        assertEquals("agenda_visual", p2.options().get(9).id());
 
         String terceira = menu.processarMenu(
                 NUMERO, "horarios_pagina_2", states.buscarPorNumero(NUMERO));
         var p3 = ConversationInteractivePresentation.from(terceira).orElseThrow();
-        assertEquals(5, p3.options().size());
-        assertEquals("15", p3.options().get(0).id());
-        assertEquals("17", p3.options().get(2).id());
-        assertEquals("horarios_pagina_1", p3.options().get(3).id());
-        assertEquals("nav_voltar", p3.options().get(4).id());
+        assertEquals(8, p3.options().size());
+        assertEquals("13", p3.options().get(0).id());
+        assertEquals("17", p3.options().get(4).id());
+        assertEquals("horarios_pagina_1", p3.options().get(5).id());
+        assertEquals("nav_voltar", p3.options().get(6).id());
+        assertEquals("agenda_visual", p3.options().get(7).id());
 
         menu.processarMenu(NUMERO, "12", states.buscarPorNumero(NUMERO));
         assertEquals("11:45", states.buscarPorNumero(NUMERO).getDraftAtual().getHorario());
@@ -383,6 +386,7 @@ class StrictMvpMenuServiceTest {
                         "Manicure",
                         List.of(),
                         false));
+        when(gateway.esperaRepresentavel("Manicure")).thenReturn(true);
         when(gateway.entrarNaEspera(
                 eq(NUMERO),
                 eq("Manicure"),
@@ -489,7 +493,7 @@ class StrictMvpMenuServiceTest {
         states.persistir(state);
 
         String saudacao = menu.processarMenu(NUMERO, "oi", states.buscarPorNumero(NUMERO));
-        assertTrue(saudacao.contains("Olá Gui"), saudacao);
+        assertEquals("Oi, Gui. Como posso ajudar?", saudacao);
 
         state = states.buscarPorNumero(NUMERO);
         state.criarNovoDraft();
