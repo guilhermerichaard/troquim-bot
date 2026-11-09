@@ -57,7 +57,33 @@ public class ConversationBookingGateway {
         FALHA_TECNICA
     }
 
-    public record Servico(String nome) {
+    public record Servico(String nome,
+                          String descricao,
+                          long duracaoMinutos,
+                          Double preco,
+                          String moeda) {
+
+        public Servico(String nome) {
+            this(nome, "", 0, null, null);
+        }
+
+        public String detalhes() {
+            java.util.ArrayList<String> partes = new java.util.ArrayList<>();
+            if (duracaoMinutos > 0) {
+                if (duracaoMinutos >= 60 && duracaoMinutos % 60 == 0) {
+                    partes.add((duracaoMinutos / 60) + "h");
+                } else if (duracaoMinutos > 60) {
+                    partes.add((duracaoMinutos / 60) + "h" + (duracaoMinutos % 60));
+                } else {
+                    partes.add(duracaoMinutos + " min");
+                }
+            }
+            if (preco != null) {
+                String simbolo = "BRL".equalsIgnoreCase(moeda) ? "R$" : (moeda == null ? "" : moeda);
+                partes.add(simbolo + " " + String.format(java.util.Locale.of("pt", "BR"), "%.2f", preco));
+            }
+            return String.join(" · ", partes);
+        }
     }
 
     /**
@@ -197,7 +223,12 @@ public class ConversationBookingGateway {
     public List<Servico> listarServicos() {
         BusinessId businessId = tenantProvider.currentBusinessId();
         return consultarCatalogo.consultar(businessId).itens().stream()
-                .map(item -> new Servico(item.nome()))
+                .map(item -> new Servico(
+                        item.nome(),
+                        item.descricao(),
+                        item.duracao().toMinutes(),
+                        item.preco().map(valor -> valor.getAmount().doubleValue()).orElse(null),
+                        item.preco().map(valor -> valor.getCurrency()).orElse(null)))
                 .toList();
     }
 
@@ -319,6 +350,49 @@ public class ConversationBookingGateway {
                 .toList();
 
         return new Recomendacao(Status.OK, servico.item().nome(), slots, intent.sameAsUsual());
+    }
+
+    public Recomendacao recomendarHorariosDoDia(String nomeInterpretado,
+                                               String diaInformado,
+                                               int limite) {
+        if (limite <= 0) {
+            return new Recomendacao(Status.HORARIO_INVALIDO, "", List.of(), false);
+        }
+
+        BusinessId businessId = tenantProvider.currentBusinessId();
+        ServicoResolvido servico = resolverServico(nomeInterpretado);
+        if (!servico.ok()) {
+            return new Recomendacao(servico.status(),
+                    servico.item() == null ? "" : servico.item().nome(), List.of(), false);
+        }
+
+        Optional<LocalDate> data = resolverData(diaInformado);
+        if (data.isEmpty()) {
+            return new Recomendacao(Status.DIA_INVALIDO, servico.item().nome(), List.of(), false);
+        }
+
+        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
+                availabilityApplicationService.horariosLivres(
+                                businessId, servico.item().id(), servico.profissional(), data.get())
+                        .stream()
+                        .map(time -> new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
+                                data.get(), time, gapAdjacenteMinutos(
+                                        businessId, servico.profissional(), data.get(), time,
+                                        servico.item().duracao())))
+                        .toList();
+
+        List<SlotSugerido> slots = new com.troquim_bot.availability.SlotRecommendationPolicy()
+                .rank(candidatos, null, limite)
+                .stream()
+                .map(candidate -> new SlotSugerido(
+                        servico.item().nome(), candidate.date(), candidate.time()))
+                .toList();
+
+        return new Recomendacao(
+                slots.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
+                servico.item().nome(),
+                slots,
+                false);
     }
 
     public Recomendacao alternativasParaConflito(String nomeInterpretado,
