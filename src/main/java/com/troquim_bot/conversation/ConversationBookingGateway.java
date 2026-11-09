@@ -706,21 +706,33 @@ public class ConversationBookingGateway {
                 appointment.getStatus() == AppointmentStatus.CONFIRMADO);
     }
 
-    public Optional<UpsellOffer> recomendarUpsell(String nomeServicoBase,
+    public Optional<UpsellOffer> recomendarUpsell(String telefone,
+                                                      String nomeServicoBase,
                                                       String diaInformado,
                                                       String horarioInformado) {
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido base = resolverServico(nomeServicoBase);
+        ServicoIdentificado base = identificarServico(nomeServicoBase);
         Optional<LocalDate> data = resolverData(diaInformado);
         Optional<LocalTime> horario = timeInputParser.parse(horarioInformado);
         if (!base.ok() || data.isEmpty() || horario.isEmpty()) {
             return Optional.empty();
         }
 
+        // Depois do commit do booking, Appointment é a única fonte correta para descobrir
+        // quem realmente atenderá. Não recalculamos profissional a partir do catálogo.
+        Optional<Appointment> appointment = agendamentosAtivosDoCliente(businessId, telefone).stream()
+                .filter(a -> a.getServiceId().equals(base.item().id()))
+                .filter(a -> a.getDate().equals(data.get()))
+                .filter(a -> a.getStartTime().equals(horario.get()))
+                .findFirst();
+        if (appointment.isEmpty()) {
+            return Optional.empty();
+        }
+
         return upsells.recommend(
                         businessId,
                         base.item().id(),
-                        base.profissional(),
+                        appointment.get().getProfessionalId(),
                         data.get(),
                         horario.get())
                 .map(offer -> new UpsellOffer(
