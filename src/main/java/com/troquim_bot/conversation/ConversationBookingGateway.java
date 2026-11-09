@@ -342,7 +342,7 @@ public class ConversationBookingGateway {
                 3);
 
         return new Recomendacao(
-                slots.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
+                Status.OK,
                 servico.item().nome(),
                 slots,
                 intent.sameAsUsual());
@@ -374,7 +374,7 @@ public class ConversationBookingGateway {
                 limite);
 
         return new Recomendacao(
-                slots.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
+                Status.OK,
                 servico.item().nome(),
                 slots,
                 false);
@@ -403,7 +403,7 @@ public class ConversationBookingGateway {
                 3);
 
         return new Recomendacao(
-                slots.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
+                Status.OK,
                 servico.item().nome(),
                 slots,
                 false);
