@@ -54,12 +54,12 @@ class StrictMvpMenuServiceTest {
         // Cliente envia "oi": recebe o menu principal, estado permanece em INICIO
         ConversationState estadoInicial = conversationStateService.buscarPorNumero(NUMERO);
         String respostaSaudacao = strictMvpMenuService.processarMenu(NUMERO, "oi", estadoInicial);
-        assertTrue(respostaSaudacao.contains("pode falar do seu jeito"));
+        assertEquals("Como posso ajudar?", respostaSaudacao);
 
         // Cliente envia "1" (Agendar): deve iniciar o fluxo e persistir AGUARDANDO_SERVICO
         ConversationState estadoAntesDoMenu = conversationStateService.buscarPorNumero(NUMERO);
         String respostaMenuServicos = strictMvpMenuService.processarMenu(NUMERO, "1", estadoAntesDoMenu);
-        assertTrue(respostaMenuServicos.contains("Qual serviço"));
+        assertTrue(respostaMenuServicos.contains("O que você quer fazer?"));
 
         // Reproduz exatamente o que o ConversationOrchestrator faz na próxima mensagem:
         // busca o estado do zero no repositório (não reaproveita o objeto em memória).
@@ -70,7 +70,7 @@ class StrictMvpMenuServiceTest {
         // Cliente envia o serviço por nome: deve ser tratado como escolha de serviço
         // (avançando para o menu de dias), e não cair de volta no menu principal.
         String respostaServico = strictMvpMenuService.processarMenu(NUMERO, "cabelo", estadoPersistido);
-        assertTrue(respostaServico.contains("Para qual dia"),
+        assertTrue(respostaServico.contains("Qual dia"),
                 "Esperava avançar para o menu de dias, mas recebeu: " + respostaServico);
         assertFalseContemMenuPrincipal(respostaServico);
     }
@@ -489,7 +489,7 @@ class StrictMvpMenuServiceTest {
         states.persistir(state);
 
         String saudacao = menu.processarMenu(NUMERO, "oi", states.buscarPorNumero(NUMERO));
-        assertTrue(saudacao.contains("Olá Gui"), saudacao);
+        assertEquals("Oi, Gui. Como posso ajudar?", saudacao);
 
         state = states.buscarPorNumero(NUMERO);
         state.criarNovoDraft();
