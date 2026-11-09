@@ -1493,7 +1493,7 @@ public class StrictMvpMenuService {
 
                 Optional<ConversationBookingGateway.UpsellOffer> offer =
                         conversationBookingGateway.recomendarUpsell(
-                                draft.getServico(), draft.getDia(), draft.getHorario());
+                                numero, draft.getServico(), draft.getDia(), draft.getHorario());
 
                 draft.setConfirmado(true);
                 state.setStep(ConversationStep.FINALIZADO);
