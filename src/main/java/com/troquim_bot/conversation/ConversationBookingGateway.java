@@ -310,9 +310,9 @@ public class ConversationBookingGateway {
         }
 
         BusinessId businessId = tenantProvider.currentBusinessId();
-        ServicoResolvido servico = intent.sameAsUsual()
-                ? resolverServicoDoHistorico(businessId, telefone)
-                : resolverServico(intent.serviceQuery());
+        ServicoIdentificado servico = intent.sameAsUsual()
+                ? identificarServicoDoHistorico(businessId, telefone)
+                : identificarServico(intent.serviceQuery());
 
         if (!servico.ok()) {
             return new Recomendacao(servico.status(),
@@ -330,33 +330,22 @@ public class ConversationBookingGateway {
             datas = List.of(data.get());
         } else {
             LocalDate hoje = relogio.hoje();
-            datas = availabilityApplicationService.datasComVaga(
-                    businessId, servico.item().id(), servico.profissional(), hoje, hoje.plusDays(6));
+            datas = java.util.stream.IntStream.rangeClosed(0, 6)
+                    .mapToObj(hoje::plusDays)
+                    .toList();
         }
 
-        com.troquim_bot.availability.SlotRecommendationPolicy policy =
-                new com.troquim_bot.availability.SlotRecommendationPolicy();
+        List<SlotSugerido> slots = rankearSlotsUnicos(
+                servico.item(),
+                candidatosValidos(businessId, servico.item(), datas, intent),
+                intent.targetTime(),
+                3);
 
-        List<com.troquim_bot.availability.SlotRecommendationPolicy.Candidate> candidatos =
-                new java.util.ArrayList<>();
-        for (LocalDate data : datas) {
-            for (LocalTime horario : availabilityApplicationService.horariosLivres(
-                    businessId, servico.item().id(), servico.profissional(), data)) {
-                if (!intent.accepts(horario)) {
-                    continue;
-                }
-                candidatos.add(new com.troquim_bot.availability.SlotRecommendationPolicy.Candidate(
-                        data, horario, gapAdjacenteMinutos(
-                                businessId, servico.profissional(), data, horario, servico.item().duracao())));
-            }
-        }
-
-        List<SlotSugerido> slots = policy.rank(candidatos, intent.targetTime(), 3).stream()
-                .map(candidato -> new SlotSugerido(
-                        servico.item().nome(), candidato.date(), candidato.time()))
-                .toList();
-
-        return new Recomendacao(Status.OK, servico.item().nome(), slots, intent.sameAsUsual());
+        return new Recomendacao(
+                slots.isEmpty() ? Status.HORARIO_INDISPONIVEL : Status.OK,
+                servico.item().nome(),
+                slots,
+                intent.sameAsUsual());
     }
 
     public Recomendacao recomendarHorariosDoDia(String nomeInterpretado,
@@ -438,15 +427,15 @@ public class ConversationBookingGateway {
         return new Recomendacao(Status.OK, servico.item().nome(), slots, false);
     }
 
-    private ServicoResolvido resolverServicoDoHistorico(BusinessId businessId, String telefone) {
+    private ServicoIdentificado identificarServicoDoHistorico(BusinessId businessId, String telefone) {
         return customerProfileService.localizarIdOficial(businessId, telefone)
                 .flatMap(customerId -> appointmentApplicationService
                         .listarHistoricoPorCliente(customerId).stream()
                         .filter(appointment -> appointment.pertenceAoTenant(businessId))
                         .findFirst())
-                .flatMap(appointment -> serviceApplicationService.buscarPorId(appointment.getServiceId()))
-                .map(servico -> resolverServico(servico.getNome()))
-                .orElseGet(() -> new ServicoResolvido(Status.SERVICO_INDISPONIVEL, null, null));
+                .flatMap(appointment -> consultarCatalogo.porServico(businessId, appointment.getServiceId()))
+                .map(item -> new ServicoIdentificado(Status.OK, item))
+                .orElseGet(() -> new ServicoIdentificado(Status.SERVICO_INDISPONIVEL, null));
     }
 
     private int gapAdjacenteMinutos(BusinessId businessId,
