@@ -165,6 +165,9 @@ public class InboundMessageIngestionService {
     private boolean sendReply(String provider, String externalMessageId,
                               String fromPhone, String responseText) {
         if (responseText == null || responseText.isBlank()) {
+            // O envio do Flow já ocorreu no caso de uso de abertura. Não há texto
+            // complementar, mas o inbound precisa ficar SENT para evitar PENDING eterno.
+            receiptProcessor.markSent(provider, externalMessageId, null);
             return true;
         }
         try {
