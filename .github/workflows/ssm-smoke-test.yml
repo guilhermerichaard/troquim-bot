@@ -40,6 +40,22 @@ jobs:
           docker inspect troquim-console --format 'console_image={{.Config.Image}} console_status={{.State.Status}}' 2>/dev/null || echo "console_container=missing"
           docker inspect troquim-postgres --format 'postgres_image={{.Config.Image}} postgres_status={{.State.Status}}'
 
+          CURRENT_IMAGE="$(docker inspect troquim-bot --format '{{.Config.Image}}')"
+          CURRENT_TAG="${CURRENT_IMAGE#troquim-bot:}"
+          CURRENT_DROPLET="/opt/troquim/src/troquim-bot/docker-compose.droplet.yml"
+          RELEASE_DROPLET="/opt/troquim/releases/${CURRENT_TAG}/docker-compose.droplet.yml"
+          if [ -f "${CURRENT_DROPLET}" ] && [ -f "${RELEASE_DROPLET}" ]; then
+            echo "current_droplet_sha256=$(sha256sum "${CURRENT_DROPLET}" | awk '{print $1}')"
+            echo "release_droplet_sha256=$(sha256sum "${RELEASE_DROPLET}" | awk '{print $1}')"
+            if cmp -s "${CURRENT_DROPLET}" "${RELEASE_DROPLET}"; then
+              echo "droplet_match=yes"
+            else
+              echo "droplet_match=no"
+            fi
+          else
+            echo "droplet_hash_check=missing_file"
+          fi
+
           printf 'backend_http='
           curl -fsS http://127.0.0.1:8080/actuator/health || true
           echo
