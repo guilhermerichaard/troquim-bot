@@ -469,6 +469,11 @@ public class ConversationBookingGateway {
                 horarios);
     }
 
+    public boolean esperaRepresentavel(String nomeServico) {
+        ServicoIdentificado servico = identificarServico(nomeServico);
+        return servico.ok() && servico.item().profissionais().size() == 1;
+    }
+
     /**
      * Registra interesse em um slot futuro. A waitlist não reserva nada e nunca pula a
      * confirmação canônica quando o horário reaparece.
