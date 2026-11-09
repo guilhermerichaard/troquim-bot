@@ -221,6 +221,12 @@ echo
 echo
 echo "=== 8/8 FINAL STATE ==="
 
+# O deploy usa o compose imutável da release. Após todas as verificações de saúde,
+# sincroniza a cópia canônica da árvore de produção com a release realmente implantada.
+# Isso preserva a detecção de drift no próximo deploy sem confundir evolução versionada
+# do compose com alteração manual.
+install -m 0644 "${RELEASE_DROPLET}" "${CURRENT_DROPLET}"
+
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | grep -E 'NAMES|troquim'
 echo
 echo "========================================="
