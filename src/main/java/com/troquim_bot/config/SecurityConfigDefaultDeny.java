@@ -86,6 +86,12 @@ public class SecurityConfigDefaultDeny {
                 // aplicada dentro do Controller/Application, não no Security.
                 auth.requestMatchers(HttpMethod.POST, "/api/v1/public/businesses/*/appointments")
                     .permitAll();
+                // Marketplace público: leitura de oportunidades e candidatura a uma vaga.
+                // Nenhuma rota de decisão/aceite fica pública; aceite continua em /api/v1/app/**.
+                auth.requestMatchers(HttpMethod.GET, "/api/v1/marketplace/opportunities")
+                    .permitAll();
+                auth.requestMatchers(HttpMethod.POST, "/api/v1/marketplace/opportunities/*/roles/*/apply")
+                    .permitAll();
                 if (devProfile) {
                     auth.requestMatchers("/dev/**").permitAll();
                 }
