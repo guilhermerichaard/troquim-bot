@@ -3,13 +3,13 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
-import { CalendarDays, Home, Scissors, Users, LogOut, Settings } from 'lucide-react'
+import { CalendarDays, Home, Search, Users, LogOut, Settings } from 'lucide-react'
 
 const items = [
   { href: '/', label: 'Hoje', icon: Home },
-  { href: '/agenda', label: 'Agenda', icon: CalendarDays },
-  { href: '/clientes', label: 'Clientes', icon: Users },
-  { href: '/servicos', label: 'Serviços', icon: Scissors },
+  { href: '/eventos', label: 'Eventos', icon: CalendarDays },
+  { href: '/oportunidades', label: 'Oportunidades', icon: Search },
+  { href: '/talentos', label: 'Talentos', icon: Users },
   { href: '/mais', label: 'Mais', icon: Settings },
 ]
 
